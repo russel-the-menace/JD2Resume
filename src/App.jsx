@@ -119,6 +119,13 @@ const templateOptions = [
 ];
 
 const accentOptions = ['#167c65', '#2e5aac', '#a34636', '#5f4b8b', '#2f3438'];
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2.5;
+const ZOOM_STEP = 0.1;
+const DEFAULT_EDITOR_WIDTH = 540;
+const MIN_EDITOR_WIDTH = 340;
+const MAX_EDITOR_WIDTH = 720;
+const EDITOR_WIDTH_STORAGE_KEY = 'draftline-editor-width';
 
 const sectionSuggestions = [
   { id: 'projects', label: 'Projects', icon: LayoutGrid },
@@ -163,6 +170,14 @@ function App() {
   const [template, setTemplate] = useState('modern');
   const [accent, setAccent] = useState(accentOptions[0]);
   const [zoom, setZoom] = useState(1);
+  const [editorWidth, setEditorWidth] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_EDITOR_WIDTH;
+    const storedWidth = window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY);
+    if (storedWidth === null) return DEFAULT_EDITOR_WIDTH;
+    const savedWidth = Number(storedWidth);
+    if (!Number.isFinite(savedWidth)) return DEFAULT_EDITOR_WIDTH;
+    return Math.min(MAX_EDITOR_WIDTH, Math.max(MIN_EDITOR_WIDTH, savedWidth));
+  });
   const [mobileMode, setMobileMode] = useState('edit');
   const [templateMenu, setTemplateMenu] = useState(false);
   const [sectionMenu, setSectionMenu] = useState(false);
@@ -350,7 +365,11 @@ function App() {
 
       <MobileTabs value={mobileMode} onChange={setMobileMode} />
 
-      <main className="workspace" data-mobile-mode={mobileMode}>
+      <main
+        className="workspace"
+        data-mobile-mode={mobileMode}
+        style={{ '--editor-width': `${editorWidth}px` }}
+      >
         <OutlineSidebar
           sections={sections}
           activeSection={activeSection}
@@ -380,6 +399,14 @@ function App() {
           setCustomContent={setCustomContent}
           onAi={() => setAiPanel(true)}
           onPreview={() => setMobileMode('preview')}
+        />
+
+        <ColumnResizer
+          value={editorWidth}
+          onChange={setEditorWidth}
+          onCommit={(width) =>
+            window.localStorage.setItem(EDITOR_WIDTH_STORAGE_KEY, String(Math.round(width)))
+          }
         />
 
         <PreviewPanel
@@ -412,6 +439,118 @@ function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function ColumnResizer({ value, onChange, onCommit }) {
+  const dragRef = useRef(null);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const getBounds = (element) => {
+    const workspace = element.parentElement;
+    const editor = workspace?.querySelector('.editor-panel');
+    const sidebar = workspace?.querySelector('.outline-sidebar');
+    if (!workspace || !editor || !sidebar) return null;
+
+    const styles = window.getComputedStyle(workspace);
+    const minimum = Number.parseFloat(styles.getPropertyValue('--editor-min')) || MIN_EDITOR_WIDTH;
+    const previewMinimum = Number.parseFloat(styles.getPropertyValue('--preview-min')) || 320;
+    const dividerWidth = Number.parseFloat(styles.getPropertyValue('--divider-width')) || 1;
+    const maximum = Math.min(
+      MAX_EDITOR_WIDTH,
+      workspace.clientWidth - sidebar.getBoundingClientRect().width - dividerWidth - previewMinimum,
+    );
+
+    return {
+      current: editor.getBoundingClientRect().width,
+      minimum: Math.min(minimum, maximum),
+      maximum: Math.max(minimum, maximum),
+    };
+  };
+
+  const startResize = (event) => {
+    if (event.button !== 0) return;
+    const bounds = getBounds(event.currentTarget);
+    if (!bounds) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: bounds.current,
+      width: bounds.current,
+      minimum: bounds.minimum,
+      maximum: bounds.maximum,
+    };
+    setIsResizing(true);
+  };
+
+  const resize = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const width = Math.min(
+      drag.maximum,
+      Math.max(drag.minimum, drag.startWidth + event.clientX - drag.startX),
+    );
+    drag.width = width;
+    onChange(Math.round(width));
+  };
+
+  const stopResize = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    onCommit(drag.width);
+    dragRef.current = null;
+    setIsResizing(false);
+  };
+
+  const resizeWithKeyboard = (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const bounds = getBounds(event.currentTarget);
+    if (!bounds) return;
+    event.preventDefault();
+
+    const step = event.shiftKey ? 32 : 16;
+    let nextWidth = bounds.current;
+    if (event.key === 'ArrowLeft') nextWidth -= step;
+    if (event.key === 'ArrowRight') nextWidth += step;
+    if (event.key === 'Home') nextWidth = bounds.minimum;
+    if (event.key === 'End') nextWidth = bounds.maximum;
+    nextWidth = Math.min(bounds.maximum, Math.max(bounds.minimum, nextWidth));
+    onChange(Math.round(nextWidth));
+    onCommit(nextWidth);
+  };
+
+  const resetWidth = (event) => {
+    const bounds = getBounds(event.currentTarget);
+    if (!bounds) return;
+    const nextWidth = Math.min(bounds.maximum, Math.max(bounds.minimum, DEFAULT_EDITOR_WIDTH));
+    onChange(Math.round(nextWidth));
+    onCommit(nextWidth);
+  };
+
+  return (
+    <div
+      className={cx('column-resizer', isResizing && 'is-resizing')}
+      role="separator"
+      aria-label="Resize editor and preview panels"
+      aria-orientation="vertical"
+      aria-valuemin={MIN_EDITOR_WIDTH}
+      aria-valuemax={MAX_EDITOR_WIDTH}
+      aria-valuenow={Math.round(value)}
+      tabIndex={0}
+      title="Resize editor and preview panels"
+      onPointerDown={startResize}
+      onPointerMove={resize}
+      onPointerUp={stopResize}
+      onPointerCancel={stopResize}
+      onDoubleClick={resetWidth}
+      onKeyDown={resizeWithKeyboard}
+    />
   );
 }
 
@@ -734,6 +873,10 @@ function ExperienceEditor({
   addExperience,
   removeExperience,
 }) {
+  const toggleExperience = (id) => {
+    setOpenExperience((current) => (current === id ? null : id));
+  };
+
   const addBullet = (id) => {
     updateData((current) => ({
       ...current,
@@ -760,9 +903,17 @@ function ExperienceEditor({
     <div className="experience-list">
       {items.map((item) => {
         const isOpen = openExperience === item.id;
+        const panelId = `experience-panel-${item.id}`;
         return (
           <article className={cx('experience-card', isOpen && 'open')} key={item.id}>
-            <button className="experience-card-header" onClick={() => setOpenExperience(isOpen ? null : item.id)}>
+            <button
+              type="button"
+              className="experience-card-header"
+              onClick={() => toggleExperience(item.id)}
+              aria-expanded={isOpen}
+              aria-controls={panelId}
+              aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${item.role || 'experience'}`}
+            >
               <span className="reorder-handle"><GripVertical size={17} /></span>
               <span className="experience-card-title">
                 <strong>{item.role || 'Untitled role'}</strong>
@@ -772,7 +923,7 @@ function ExperienceEditor({
             </button>
 
             {isOpen && (
-              <div className="experience-card-body">
+              <div className="experience-card-body" id={panelId}>
                 <div className="form-grid two-columns">
                   <Field label="Job title" value={item.role} onChange={(value) => updateExperience(item.id, 'role', value)} />
                   <Field label="Company" value={item.company} onChange={(value) => updateExperience(item.id, 'company', value)} />
@@ -923,6 +1074,11 @@ function PreviewPanel({
 }) {
   const [colorMenu, setColorMenu] = useState(false);
   const zoomPercent = Math.round(zoom * 100);
+  const changeZoom = (delta) => {
+    setZoom((current) =>
+      Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +(current + delta).toFixed(2))),
+    );
+  };
   return (
     <section className="preview-panel">
       <div className="preview-toolbar">
@@ -975,13 +1131,28 @@ function PreviewPanel({
             )}
           </div>
           <div className="zoom-control">
-            <button onClick={() => setZoom(Math.max(0.75, +(zoom - 0.1).toFixed(2)))} aria-label="Zoom out" title="Zoom out"><ZoomOut size={15} /></button>
-            <span>{zoomPercent}%</span>
-            <button onClick={() => setZoom(Math.min(1.35, +(zoom + 0.1).toFixed(2)))} aria-label="Zoom in" title="Zoom in"><ZoomIn size={15} /></button>
+            <button
+              onClick={() => changeZoom(-ZOOM_STEP)}
+              disabled={zoom <= MIN_ZOOM}
+              aria-label="Zoom out"
+              title="Zoom out"
+            ><ZoomOut size={15} /></button>
+            <button
+              className="zoom-value"
+              onClick={() => setZoom(1)}
+              aria-label={`Reset zoom, current ${zoomPercent}%`}
+              title="Reset zoom"
+            >{zoomPercent}%</button>
+            <button
+              onClick={() => changeZoom(ZOOM_STEP)}
+              disabled={zoom >= MAX_ZOOM}
+              aria-label="Zoom in"
+              title="Zoom in"
+            ><ZoomIn size={15} /></button>
           </div>
         </div>
       </div>
-      <ResumeStage zoom={zoom}>
+      <ResumeStage zoom={zoom} setZoom={setZoom}>
         <ResumePage
           data={data}
           template={template}
@@ -1030,9 +1201,11 @@ function MiniResume({ variant }) {
   );
 }
 
-function ResumeStage({ zoom, children }) {
+function ResumeStage({ zoom, setZoom, children }) {
   const stageRef = useRef(null);
+  const dragRef = useRef(null);
   const [fitScale, setFitScale] = useState(0.7);
+  const [isDragging, setIsDragging] = useState(false);
   const pageWidth = 720;
   const pageHeight = 932;
 
@@ -1040,19 +1213,82 @@ function ResumeStage({ zoom, children }) {
     const element = stageRef.current;
     if (!element) return undefined;
     const updateScale = () => {
-      const availableWidth = Math.max(element.clientWidth - 56, 280);
-      const availableHeight = Math.max(element.clientHeight - 54, 420);
-      setFitScale(Math.min(availableWidth / pageWidth, availableHeight / pageHeight, 1));
+      const bounds = element.getBoundingClientRect();
+      const styles = window.getComputedStyle(element);
+      const horizontalPadding =
+        Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
+      const verticalPadding =
+        Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
+      const availableWidth = Math.max(bounds.width - horizontalPadding, 280);
+      const availableHeight = Math.max(bounds.height - verticalPadding, 420);
+      const nextScale = Math.min(availableWidth / pageWidth, availableHeight / pageHeight, 1);
+      setFitScale((current) => (Math.abs(current - nextScale) < 0.0005 ? current : nextScale));
     };
     updateScale();
     const observer = new ResizeObserver(updateScale);
-    observer.observe(element);
+    observer.observe(element, { box: 'border-box' });
     return () => observer.disconnect();
   }, []);
 
+  const startDrag = (event) => {
+    const element = stageRef.current;
+    if (!element || event.button !== 0 || event.pointerType !== 'mouse') return;
+    if (
+      element.scrollWidth <= element.clientWidth &&
+      element.scrollHeight <= element.clientHeight
+    ) return;
+
+    event.preventDefault();
+    element.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      scrollLeft: element.scrollLeft,
+      scrollTop: element.scrollTop,
+    };
+    setIsDragging(true);
+  };
+
+  const moveDrag = (event) => {
+    const element = stageRef.current;
+    const drag = dragRef.current;
+    if (!element || !drag || drag.pointerId !== event.pointerId) return;
+    element.scrollLeft = drag.scrollLeft + drag.x - event.clientX;
+    element.scrollTop = drag.scrollTop + drag.y - event.clientY;
+  };
+
+  const stopDrag = (event) => {
+    const element = stageRef.current;
+    const drag = dragRef.current;
+    if (!element || !drag || drag.pointerId !== event.pointerId) return;
+    if (element.hasPointerCapture(event.pointerId)) {
+      element.releasePointerCapture(event.pointerId);
+    }
+    dragRef.current = null;
+    setIsDragging(false);
+  };
+
+  const zoomWithWheel = (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    setZoom((current) =>
+      Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +(current + direction).toFixed(2))),
+    );
+  };
+
   const scale = fitScale * zoom;
   return (
-    <div className="resume-stage" ref={stageRef}>
+    <div
+      className={cx('resume-stage', isDragging && 'is-dragging')}
+      ref={stageRef}
+      onPointerDown={startDrag}
+      onPointerMove={moveDrag}
+      onPointerUp={stopDrag}
+      onPointerCancel={stopDrag}
+      onWheel={zoomWithWheel}
+    >
       <div
         className="resume-scale-wrap"
         style={{ width: pageWidth * scale, height: pageHeight * scale }}

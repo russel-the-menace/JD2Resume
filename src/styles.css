@@ -275,8 +275,20 @@ button:disabled {
 }
 
 .workspace {
+  --outline-width: 240px;
+  --editor-min: 380px;
+  --preview-min: 360px;
+  --divider-width: 1px;
   display: grid;
-  grid-template-columns: 240px minmax(470px, 540px) minmax(430px, 1fr);
+  grid-template-columns:
+    var(--outline-width)
+    clamp(
+      var(--editor-min),
+      var(--editor-width, 540px),
+      calc(100% - var(--outline-width) - var(--divider-width) - var(--preview-min))
+    )
+    var(--divider-width)
+    minmax(var(--preview-min), 1fr);
   width: 100%;
   height: calc(100vh - 64px);
   min-height: 0;
@@ -288,6 +300,40 @@ button:disabled {
 .preview-panel {
   min-width: 0;
   min-height: 0;
+}
+
+.column-resizer {
+  position: relative;
+  z-index: 18;
+  width: 9px;
+  height: 100%;
+  margin-right: -4px;
+  margin-left: -4px;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.column-resizer::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--line-strong);
+  content: '';
+  transform: translateX(-50%);
+  transition: background 120ms ease;
+}
+
+.column-resizer:hover::before,
+.column-resizer:focus-visible::before,
+.column-resizer.is-resizing::before {
+  background: var(--accent);
+}
+
+.column-resizer:focus-visible {
+  outline: none;
 }
 
 .outline-sidebar {
@@ -569,7 +615,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   background: #fff;
-  border-right: 1px solid var(--line-strong);
+  border-right: 0;
   box-shadow: 6px 0 16px rgba(32, 38, 34, 0.035);
 }
 
@@ -1133,8 +1179,9 @@ button:disabled {
   background: #f2f4f1;
 }
 
-.zoom-control span {
-  min-width: 39px;
+.zoom-control .zoom-value {
+  width: auto;
+  min-width: 43px;
   color: #666d68;
   font-size: 9px;
   font-variant-numeric: tabular-nums;
@@ -1314,10 +1361,8 @@ button:disabled {
 }
 
 .resume-stage {
-  display: flex;
+  display: block;
   flex: 1;
-  align-items: flex-start;
-  justify-content: center;
   min-height: 0;
   padding: 28px;
   overflow: auto;
@@ -1326,8 +1371,7 @@ button:disabled {
 
 .resume-scale-wrap {
   position: relative;
-  flex: 0 0 auto;
-  transition: width 180ms ease, height 180ms ease;
+  margin: 0 auto;
 }
 
 .resume-transform {
@@ -1337,7 +1381,21 @@ button:disabled {
   width: 720px;
   height: 932px;
   transform-origin: top left;
-  transition: transform 180ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .resume-stage {
+    cursor: grab;
+  }
+
+  .resume-stage.is-dragging {
+    cursor: grabbing;
+  }
+
+  .resume-stage.is-dragging,
+  .resume-stage.is-dragging * {
+    user-select: none;
+  }
 }
 
 .resume-page {
@@ -1782,7 +1840,9 @@ button:disabled {
   }
 
   .workspace {
-    grid-template-columns: 220px minmax(430px, 480px) minmax(390px, 1fr);
+    --outline-width: 220px;
+    --editor-min: 360px;
+    --preview-min: 340px;
   }
 
   .preview-toolbar {
@@ -1803,7 +1863,9 @@ button:disabled {
   }
 
   .workspace {
-    grid-template-columns: 210px minmax(410px, 470px) minmax(350px, 1fr);
+    --outline-width: 210px;
+    --editor-min: 340px;
+    --preview-min: 320px;
   }
 
   .ai-button span,
@@ -1899,6 +1961,10 @@ button:disabled {
     display: none;
     width: 100%;
     height: 100%;
+  }
+
+  .column-resizer {
+    display: none;
   }
 
   .workspace[data-mobile-mode='outline'] .outline-sidebar {

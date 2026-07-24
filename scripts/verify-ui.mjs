@@ -41,6 +41,51 @@ await attachDiagnostics(desktopPage);
 await desktopPage.goto(baseUrl, { waitUntil: 'networkidle' });
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-desktop.png') });
 
+const editorPanel = desktopPage.locator('.editor-panel');
+const previewPanel = desktopPage.locator('.preview-panel');
+const columnResizer = desktopPage.getByRole('separator', {
+  name: 'Resize editor and preview panels',
+});
+const editorBeforeResize = await editorPanel.boundingBox();
+const previewBeforeResize = await previewPanel.boundingBox();
+const resizerBox = await columnResizer.boundingBox();
+if (resizerBox) {
+  await desktopPage.mouse.move(resizerBox.x + resizerBox.width / 2, resizerBox.y + 300);
+  await desktopPage.mouse.down();
+  await desktopPage.mouse.move(resizerBox.x - 110, resizerBox.y + 300, { steps: 8 });
+  await desktopPage.mouse.up();
+}
+const editorAfterResize = await editorPanel.boundingBox();
+const previewAfterResize = await previewPanel.boundingBox();
+report.checks.desktopColumnResize = Boolean(
+  editorBeforeResize &&
+  previewBeforeResize &&
+  editorAfterResize &&
+  previewAfterResize &&
+  editorAfterResize.width < editorBeforeResize.width - 80 &&
+  previewAfterResize.width > previewBeforeResize.width + 80,
+);
+const savedEditorWidth = Number(
+  await desktopPage.evaluate(() => localStorage.getItem('draftline-editor-width')),
+);
+await desktopPage.reload({ waitUntil: 'networkidle' });
+const editorAfterReload = await desktopPage.locator('.editor-panel').boundingBox();
+report.checks.columnWidthSaved = Boolean(
+  editorAfterResize &&
+  editorAfterReload &&
+  savedEditorWidth > 0 &&
+  Math.abs(editorAfterReload.width - editorAfterResize.width) < 2,
+);
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-desktop-resized.png') });
+
+const firstExperience = desktopPage.locator('.experience-card').first();
+await firstExperience.getByRole('button', { name: /Collapse Senior Product Designer/ }).click();
+report.checks.experienceCollapse =
+  (await firstExperience.locator('.experience-card-body').count()) === 0 &&
+  (await firstExperience.getByRole('button').getAttribute('aria-expanded')) === 'false';
+await firstExperience.getByRole('button', { name: /Expand Senior Product Designer/ }).click();
+report.checks.experienceExpand = await firstExperience.locator('.experience-card-body').isVisible();
+
 await desktopPage.getByLabel('Job title').first().fill('Lead Product Designer');
 report.checks.livePreview = await desktopPage
   .locator('.resume-page')
@@ -58,6 +103,44 @@ report.checks.aiApply = await desktopPage
   .locator('.resume-page')
   .getByText(/Strategic product designer with 7\+ years/)
   .isVisible();
+
+const zoomIn = desktopPage.getByRole('button', { name: 'Zoom in' });
+for (let step = 0; step < 5; step += 1) await zoomIn.click();
+const scaleSamplesAt150 = await desktopPage.locator('.resume-stage').evaluate(async (element) => {
+  const wrapper = element.querySelector('.resume-scale-wrap');
+  const samples = [];
+  for (let sample = 0; sample < 24; sample += 1) {
+    samples.push(wrapper.getBoundingClientRect().width.toFixed(2));
+    await new Promise((resolve) => window.setTimeout(resolve, 40));
+  }
+  return samples;
+});
+report.checks.previewStableAt150 =
+  (await desktopPage.locator('.zoom-value').textContent())?.trim() === '150%' &&
+  new Set(scaleSamplesAt150).size === 1;
+
+for (let step = 0; step < 10; step += 1) await zoomIn.click();
+report.checks.zoomMaximum =
+  (await desktopPage.locator('.zoom-value').textContent())?.trim() === '250%' &&
+  (await zoomIn.isDisabled());
+
+const previewStage = desktopPage.locator('.resume-stage');
+await previewStage.evaluate((element) => element.scrollTo(0, 0));
+const stageBox = await previewStage.boundingBox();
+if (stageBox) {
+  const startX = stageBox.x + stageBox.width * 0.65;
+  const startY = stageBox.y + stageBox.height * 0.65;
+  await desktopPage.mouse.move(startX, startY);
+  await desktopPage.mouse.down();
+  await desktopPage.mouse.move(startX - 120, startY - 90, { steps: 6 });
+  await desktopPage.mouse.up();
+}
+const panPosition = await previewStage.evaluate((element) => ({
+  left: element.scrollLeft,
+  top: element.scrollTop,
+}));
+report.checks.previewMousePan = panPosition.left > 50 && panPosition.top > 50;
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-desktop-pan.png') });
 report.checks.desktopMetrics = await pageMetrics(desktopPage);
 await desktop.close();
 
@@ -72,6 +155,7 @@ await attachDiagnostics(mobilePage);
 await mobilePage.goto(baseUrl, { waitUntil: 'networkidle' });
 report.checks.mobileMetrics = await pageMetrics(mobilePage);
 report.checks.mobileEditVisible = await mobilePage.locator('.editor-panel').isVisible();
+report.checks.mobileResizerHidden = !(await mobilePage.locator('.column-resizer').isVisible());
 await mobilePage.screenshot({ path: join(tmpdir(), 'draftline-playwright-mobile-edit.png') });
 
 await mobilePage.getByRole('button', { name: 'Preview', exact: true }).click();
