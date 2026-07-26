@@ -65,9 +65,10 @@ report.checks.desktopColumnResize = Boolean(
   editorAfterResize.width < editorBeforeResize.width - 80 &&
   previewAfterResize.width > previewBeforeResize.width + 80,
 );
-const savedEditorWidth = Number(
-  await desktopPage.evaluate(() => localStorage.getItem('draftline-editor-width')),
+const savedWorkspaceAfterResize = await desktopPage.evaluate(() =>
+  JSON.parse(localStorage.getItem('draftline-workspace-preferences-v1')),
 );
+const savedEditorWidth = Number(savedWorkspaceAfterResize?.editorWidth);
 await desktopPage.reload({ waitUntil: 'networkidle' });
 const editorAfterReload = await desktopPage.locator('.editor-panel').boundingBox();
 report.checks.columnWidthSaved = Boolean(
@@ -96,6 +97,13 @@ await desktopPage.getByRole('button', { name: /Template/ }).click();
 await desktopPage.getByRole('button', { name: /Classic/ }).click();
 report.checks.templateSwitch = await desktopPage.locator('.resume-page.template-classic').isVisible();
 
+await desktopPage.getByRole('button', { name: 'Choose accent color' }).click();
+await desktopPage.getByRole('button', { name: 'Use color #2e5aac' }).click();
+report.checks.accentSwitch =
+  (await desktopPage.locator('.resume-page').evaluate((element) =>
+    element.style.getPropertyValue('--resume-accent'),
+  )) === '#2e5aac';
+
 await desktopPage.getByRole('button', { name: /Improve with AI/ }).click();
 report.checks.aiDialog = await desktopPage.getByRole('dialog').isVisible();
 await desktopPage.getByRole('button', { name: 'Use suggestion' }).click();
@@ -103,6 +111,11 @@ report.checks.aiApply = await desktopPage
   .locator('.resume-page')
   .getByText(/Strategic product designer with 7\+ years/)
   .isVisible();
+
+await desktopPage.getByLabel('Resume name').fill('Avery Chen - Product Designer');
+await desktopPage.getByRole('button', { name: 'Add section', exact: true }).click();
+await desktopPage.getByRole('button', { name: /Projects/ }).click();
+await desktopPage.getByLabel('Entry title').fill('Persistent portfolio case study');
 
 const zoomIn = desktopPage.getByRole('button', { name: 'Zoom in' });
 for (let step = 0; step < 5; step += 1) await zoomIn.click();
@@ -141,6 +154,38 @@ const panPosition = await previewStage.evaluate((element) => ({
 }));
 report.checks.previewMousePan = panPosition.left > 50 && panPosition.top > 50;
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-desktop-pan.png') });
+
+await desktopPage.waitForTimeout(300);
+const savedWorkspaceBeforeReload = await desktopPage.evaluate(() =>
+  JSON.parse(localStorage.getItem('draftline-workspace-preferences-v1')),
+);
+await desktopPage.reload({ waitUntil: 'networkidle' });
+await desktopPage.waitForTimeout(300);
+const restoredPanPosition = await desktopPage.locator('.resume-stage').evaluate((element) => ({
+  left: element.scrollLeft,
+  top: element.scrollTop,
+}));
+report.checks.resumeContentPersisted = await desktopPage
+  .locator('.resume-page')
+  .getByText('Lead Product Designer', { exact: true })
+  .isVisible();
+report.checks.documentNamePersisted =
+  (await desktopPage.getByLabel('Resume name').inputValue()) === 'Avery Chen - Product Designer';
+report.checks.templatePersisted = await desktopPage.locator('.resume-page.template-classic').isVisible();
+report.checks.accentPersisted =
+  (await desktopPage.locator('.resume-page').evaluate((element) =>
+    element.style.getPropertyValue('--resume-accent'),
+  )) === '#2e5aac';
+report.checks.customSectionPersisted =
+  (await desktopPage.getByLabel('Entry title').inputValue()) === 'Persistent portfolio case study';
+report.checks.zoomPersisted =
+  (await desktopPage.locator('.zoom-value').textContent())?.trim() === '250%';
+report.checks.previewPositionPersisted = Boolean(
+  savedWorkspaceBeforeReload?.previewPosition?.left > 50 &&
+  savedWorkspaceBeforeReload?.previewPosition?.top > 50 &&
+  Math.abs(restoredPanPosition.left - savedWorkspaceBeforeReload.previewPosition.left) < 2 &&
+  Math.abs(restoredPanPosition.top - savedWorkspaceBeforeReload.previewPosition.top) < 2,
+);
 report.checks.desktopMetrics = await pageMetrics(desktopPage);
 await desktop.close();
 
@@ -168,6 +213,19 @@ await mobilePage.getByRole('button', { name: 'Add section' }).click();
 report.checks.addSectionMenu = await mobilePage.getByText('Add to resume').isVisible();
 await mobilePage.screenshot({ path: join(tmpdir(), 'draftline-playwright-mobile-outline.png') });
 await mobile.close();
+
+const recovery = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+await recovery.addInitScript(() => {
+  localStorage.setItem('draftline-resume-state-v1', '{invalid-json');
+  localStorage.setItem('draftline-workspace-preferences-v1', '{invalid-json');
+});
+const recoveryPage = await recovery.newPage();
+await attachDiagnostics(recoveryPage);
+await recoveryPage.goto(baseUrl, { waitUntil: 'networkidle' });
+report.checks.corruptStorageRecovery =
+  (await recoveryPage.getByLabel('Resume name').inputValue()) === 'Jordan Lee - Product Designer' &&
+  (await recoveryPage.locator('.resume-page').getByText('Jordan Lee', { exact: true }).isVisible());
+await recovery.close();
 
 await browser.close();
 

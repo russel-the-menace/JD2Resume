@@ -126,6 +126,10 @@ const DEFAULT_EDITOR_WIDTH = 540;
 const MIN_EDITOR_WIDTH = 340;
 const MAX_EDITOR_WIDTH = 720;
 const EDITOR_WIDTH_STORAGE_KEY = 'draftline-editor-width';
+const RESUME_STORAGE_KEY = 'draftline-resume-state-v1';
+const WORKSPACE_STORAGE_KEY = 'draftline-workspace-preferences-v1';
+const STORAGE_VERSION = 1;
+const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
 
 const sectionSuggestions = [
   { id: 'projects', label: 'Projects', icon: LayoutGrid },
@@ -155,35 +159,193 @@ const emptyCustomSection = {
   },
 };
 
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function storedJson(key) {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = window.localStorage.getItem(key);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function textValue(value, fallback = '') {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function normalizeResumeData(value) {
+  const source = isRecord(value) ? value : {};
+  const basics = isRecord(source.basics) ? source.basics : {};
+  const skills = isRecord(source.skills) ? source.skills : {};
+
+  const experience = Array.isArray(source.experience)
+    ? source.experience.filter(isRecord).map((entry, index) => {
+        const fallback = initialResume.experience[index] || {};
+        return {
+          id: Number.isFinite(Number(entry.id)) ? Number(entry.id) : index + 1,
+          role: textValue(entry.role, fallback.role),
+          company: textValue(entry.company, fallback.company),
+          location: textValue(entry.location, fallback.location),
+          start: textValue(entry.start, fallback.start),
+          end: textValue(entry.end, fallback.end),
+          current: typeof entry.current === 'boolean' ? entry.current : Boolean(fallback.current),
+          bullets: Array.isArray(entry.bullets)
+            ? entry.bullets.map((bullet) => textValue(bullet)).filter(Boolean)
+            : [...(fallback.bullets || [])],
+        };
+      })
+    : initialResume.experience.map((entry) => ({ ...entry, bullets: [...entry.bullets] }));
+
+  const storedEducation = Array.isArray(source.education)
+    ? source.education.filter(isRecord).map((entry, index) => {
+        const fallback = initialResume.education[index] || initialResume.education[0];
+        return {
+          id: Number.isFinite(Number(entry.id)) ? Number(entry.id) : index + 1,
+          school: textValue(entry.school, fallback.school),
+          degree: textValue(entry.degree, fallback.degree),
+          location: textValue(entry.location, fallback.location),
+          start: textValue(entry.start, fallback.start),
+          end: textValue(entry.end, fallback.end),
+        };
+      })
+    : [];
+
+  return {
+    basics: {
+      firstName: textValue(basics.firstName, initialResume.basics.firstName),
+      lastName: textValue(basics.lastName, initialResume.basics.lastName),
+      role: textValue(basics.role, initialResume.basics.role),
+      email: textValue(basics.email, initialResume.basics.email),
+      phone: textValue(basics.phone, initialResume.basics.phone),
+      location: textValue(basics.location, initialResume.basics.location),
+      website: textValue(basics.website, initialResume.basics.website),
+      linkedin: textValue(basics.linkedin, initialResume.basics.linkedin),
+    },
+    summary: textValue(source.summary, initialResume.summary),
+    experience,
+    education: storedEducation.length
+      ? storedEducation
+      : initialResume.education.map((entry) => ({ ...entry })),
+    skills: {
+      expertise: textValue(skills.expertise, initialResume.skills.expertise),
+      tools: textValue(skills.tools, initialResume.skills.tools),
+    },
+  };
+}
+
+function normalizeCustomSections(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id) => Object.hasOwn(emptyCustomSection, id)))];
+}
+
+function normalizeCustomContent(sectionIds, value) {
+  const source = isRecord(value) ? value : {};
+  return sectionIds.reduce((result, id) => {
+    const defaults = emptyCustomSection[id];
+    const section = isRecord(source[id]) ? source[id] : {};
+    result[id] = {
+      title: textValue(section.title, defaults.title),
+      itemTitle: textValue(section.itemTitle, defaults.itemTitle),
+      subtitle: textValue(section.subtitle, defaults.subtitle),
+      description: textValue(section.description, defaults.description),
+    };
+    return result;
+  }, {});
+}
+
+function loadResumeSnapshot() {
+  const stored = storedJson(RESUME_STORAGE_KEY);
+  const source = isRecord(stored) ? stored : {};
+  const customSections = normalizeCustomSections(source.customSections);
+  return {
+    documentName: textValue(source.documentName, DEFAULT_DOCUMENT_NAME),
+    data: normalizeResumeData(source.data),
+    template: templateOptions.some((option) => option.id === source.template)
+      ? source.template
+      : 'modern',
+    accent: accentOptions.includes(source.accent) ? source.accent : accentOptions[0],
+    customSections,
+    customContent: normalizeCustomContent(customSections, source.customContent),
+  };
+}
+
+function loadWorkspacePreferences(resumeSnapshot) {
+  const stored = storedJson(WORKSPACE_STORAGE_KEY);
+  const source = isRecord(stored) ? stored : {};
+  const legacyWidth =
+    typeof window === 'undefined' ? null : window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY);
+  const widthCandidate = source.editorWidth ?? Number(legacyWidth);
+  const zoomCandidate = Number(source.zoom);
+  const editorWidthCandidate = Number(widthCandidate);
+  const availableSections = new Set([
+    ...baseSections.map((section) => section.id),
+    ...resumeSnapshot.customSections,
+  ]);
+  const experienceIds = new Set(resumeSnapshot.data.experience.map((entry) => entry.id));
+  const storedPosition = isRecord(source.previewPosition) ? source.previewPosition : {};
+
+  return {
+    zoom: Number.isFinite(zoomCandidate)
+      ? Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoomCandidate))
+      : 1,
+    editorWidth: Number.isFinite(editorWidthCandidate) && editorWidthCandidate > 0
+      ? Math.min(MAX_EDITOR_WIDTH, Math.max(MIN_EDITOR_WIDTH, editorWidthCandidate))
+      : DEFAULT_EDITOR_WIDTH,
+    activeSection: availableSections.has(source.activeSection)
+      ? source.activeSection
+      : 'experience',
+    openExperience: source.openExperience === null
+      ? null
+      : experienceIds.has(source.openExperience)
+        ? source.openExperience
+        : resumeSnapshot.data.experience[0]?.id ?? null,
+    mobileMode: ['outline', 'edit', 'preview'].includes(source.mobileMode)
+      ? source.mobileMode
+      : 'edit',
+    previewPosition: {
+      left: Number.isFinite(Number(storedPosition.left))
+        ? Math.max(0, Number(storedPosition.left))
+        : 0,
+      top: Number.isFinite(Number(storedPosition.top))
+        ? Math.max(0, Number(storedPosition.top))
+        : 0,
+    },
+  };
+}
+
 function cx(...classes) {
   return classes.filter(Boolean).join(' ');
 }
 
 function App() {
+  const initialResumeState = useMemo(loadResumeSnapshot, []);
+  const initialWorkspaceState = useMemo(
+    () => loadWorkspacePreferences(initialResumeState),
+    [initialResumeState],
+  );
   const [history, setHistory] = useState({
     past: [],
-    present: initialResume,
+    present: initialResumeState.data,
     future: [],
   });
-  const [activeSection, setActiveSection] = useState('experience');
-  const [openExperience, setOpenExperience] = useState(1);
-  const [template, setTemplate] = useState('modern');
-  const [accent, setAccent] = useState(accentOptions[0]);
-  const [zoom, setZoom] = useState(1);
-  const [editorWidth, setEditorWidth] = useState(() => {
-    if (typeof window === 'undefined') return DEFAULT_EDITOR_WIDTH;
-    const storedWidth = window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY);
-    if (storedWidth === null) return DEFAULT_EDITOR_WIDTH;
-    const savedWidth = Number(storedWidth);
-    if (!Number.isFinite(savedWidth)) return DEFAULT_EDITOR_WIDTH;
-    return Math.min(MAX_EDITOR_WIDTH, Math.max(MIN_EDITOR_WIDTH, savedWidth));
-  });
-  const [mobileMode, setMobileMode] = useState('edit');
+  const [activeSection, setActiveSection] = useState(initialWorkspaceState.activeSection);
+  const [openExperience, setOpenExperience] = useState(initialWorkspaceState.openExperience);
+  const [template, setTemplate] = useState(initialResumeState.template);
+  const [accent, setAccent] = useState(initialResumeState.accent);
+  const [zoom, setZoom] = useState(initialWorkspaceState.zoom);
+  const [editorWidth, setEditorWidth] = useState(initialWorkspaceState.editorWidth);
+  const [mobileMode, setMobileMode] = useState(initialWorkspaceState.mobileMode);
   const [templateMenu, setTemplateMenu] = useState(false);
   const [sectionMenu, setSectionMenu] = useState(false);
   const [aiPanel, setAiPanel] = useState(false);
-  const [customSections, setCustomSections] = useState([]);
-  const [customContent, setCustomContent] = useState({});
+  const [customSections, setCustomSections] = useState(initialResumeState.customSections);
+  const [customContent, setCustomContent] = useState(initialResumeState.customContent);
+  const [documentName, setDocumentName] = useState(initialResumeState.documentName);
+  const [previewPosition, setPreviewPosition] = useState(initialWorkspaceState.previewPosition);
   const [saveState, setSaveState] = useState('Saved');
   const [toast, setToast] = useState('');
 
@@ -199,14 +361,49 @@ function App() {
         future: [],
       };
     });
-    setSaveState('Saving...');
   };
 
   useEffect(() => {
-    if (saveState !== 'Saving...') return undefined;
-    const timer = window.setTimeout(() => setSaveState('Saved'), 650);
+    setSaveState('Saving...');
+    try {
+      window.localStorage.setItem(
+        RESUME_STORAGE_KEY,
+        JSON.stringify({
+          version: STORAGE_VERSION,
+          documentName,
+          data,
+          template,
+          accent,
+          customSections,
+          customContent,
+        }),
+      );
+    } catch {
+      setSaveState('Save failed');
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setSaveState('Saved'), 260);
     return () => window.clearTimeout(timer);
-  }, [history.present, saveState]);
+  }, [accent, customContent, customSections, data, documentName, template]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        WORKSPACE_STORAGE_KEY,
+        JSON.stringify({
+          version: STORAGE_VERSION,
+          zoom,
+          editorWidth,
+          activeSection,
+          openExperience,
+          mobileMode,
+          previewPosition,
+        }),
+      );
+    } catch {
+      // Resume content saving remains independent if preferences exceed browser storage.
+    }
+  }, [activeSection, editorWidth, mobileMode, openExperience, previewPosition, zoom]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -344,15 +541,22 @@ function App() {
   };
 
   const resetDemo = () => {
-    setHistory({ past: [], present: initialResume, future: [] });
+    setHistory({ past: [], present: normalizeResumeData(null), future: [] });
     setCustomSections([]);
     setCustomContent({});
+    setDocumentName(DEFAULT_DOCUMENT_NAME);
+    setTemplate('modern');
+    setAccent(accentOptions[0]);
+    setActiveSection('experience');
+    setOpenExperience(initialResume.experience[0].id);
     setToast('Demo content restored');
   };
 
   return (
     <div className="app-shell">
       <TopBar
+        documentName={documentName}
+        onDocumentNameChange={setDocumentName}
         saveState={saveState}
         undo={undo}
         redo={redo}
@@ -404,9 +608,7 @@ function App() {
         <ColumnResizer
           value={editorWidth}
           onChange={setEditorWidth}
-          onCommit={(width) =>
-            window.localStorage.setItem(EDITOR_WIDTH_STORAGE_KEY, String(Math.round(width)))
-          }
+          onCommit={(width) => setEditorWidth(Math.round(width))}
         />
 
         <PreviewPanel
@@ -417,6 +619,8 @@ function App() {
           setAccent={setAccent}
           zoom={zoom}
           setZoom={setZoom}
+          previewPosition={previewPosition}
+          onPreviewPositionChange={setPreviewPosition}
           templateMenu={templateMenu}
           setTemplateMenu={setTemplateMenu}
           customSections={customSections}
@@ -555,6 +759,8 @@ function ColumnResizer({ value, onChange, onCommit }) {
 }
 
 function TopBar({
+  documentName,
+  onDocumentNameChange,
   saveState,
   undo,
   redo,
@@ -578,8 +784,16 @@ function TopBar({
 
       <div className="document-meta">
         <div className="document-title-row">
-          <input aria-label="Resume name" defaultValue="Jordan Lee - Product Designer" />
-          <span className={cx('save-status', saveState === 'Saving...' && 'is-saving')}>
+          <input
+            aria-label="Resume name"
+            value={documentName}
+            onChange={(event) => onDocumentNameChange(event.target.value)}
+          />
+          <span className={cx(
+            'save-status',
+            saveState === 'Saving...' && 'is-saving',
+            saveState === 'Save failed' && 'is-error',
+          )}>
             {saveState === 'Saved' && <Check size={13} />}
             {saveState}
           </span>
@@ -1067,6 +1281,8 @@ function PreviewPanel({
   setAccent,
   zoom,
   setZoom,
+  previewPosition,
+  onPreviewPositionChange,
   templateMenu,
   setTemplateMenu,
   customSections,
@@ -1152,7 +1368,12 @@ function PreviewPanel({
           </div>
         </div>
       </div>
-      <ResumeStage zoom={zoom} setZoom={setZoom}>
+      <ResumeStage
+        zoom={zoom}
+        setZoom={setZoom}
+        initialPosition={previewPosition}
+        onPositionChange={onPreviewPositionChange}
+      >
         <ResumePage
           data={data}
           template={template}
@@ -1201,10 +1422,13 @@ function MiniResume({ variant }) {
   );
 }
 
-function ResumeStage({ zoom, setZoom, children }) {
+function ResumeStage({ zoom, setZoom, initialPosition, onPositionChange, children }) {
   const stageRef = useRef(null);
   const dragRef = useRef(null);
-  const [fitScale, setFitScale] = useState(0.7);
+  const positionTimerRef = useRef(null);
+  const initialPositionRef = useRef(initialPosition);
+  const hasRestoredPositionRef = useRef(false);
+  const [fitScale, setFitScale] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const pageWidth = 720;
   const pageHeight = 932;
@@ -1229,6 +1453,36 @@ function ResumeStage({ zoom, setZoom, children }) {
     observer.observe(element, { box: 'border-box' });
     return () => observer.disconnect();
   }, []);
+
+  useLayoutEffect(() => {
+    const element = stageRef.current;
+    if (!element || fitScale === null || hasRestoredPositionRef.current) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      hasRestoredPositionRef.current = true;
+      element.scrollLeft = initialPositionRef.current.left;
+      element.scrollTop = initialPositionRef.current.top;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [fitScale]);
+
+  useEffect(() => () => {
+    if (positionTimerRef.current) window.clearTimeout(positionTimerRef.current);
+  }, []);
+
+  const publishPosition = () => {
+    const element = stageRef.current;
+    if (!element || !hasRestoredPositionRef.current) return;
+    onPositionChange({
+      left: Math.round(element.scrollLeft),
+      top: Math.round(element.scrollTop),
+    });
+  };
+
+  const savePositionAfterScroll = () => {
+    if (!hasRestoredPositionRef.current) return;
+    if (positionTimerRef.current) window.clearTimeout(positionTimerRef.current);
+    positionTimerRef.current = window.setTimeout(publishPosition, 120);
+  };
 
   const startDrag = (event) => {
     const element = stageRef.current;
@@ -1267,6 +1521,7 @@ function ResumeStage({ zoom, setZoom, children }) {
     }
     dragRef.current = null;
     setIsDragging(false);
+    publishPosition();
   };
 
   const zoomWithWheel = (event) => {
@@ -1278,7 +1533,7 @@ function ResumeStage({ zoom, setZoom, children }) {
     );
   };
 
-  const scale = fitScale * zoom;
+  const scale = (fitScale ?? 0.7) * zoom;
   return (
     <div
       className={cx('resume-stage', isDragging && 'is-dragging')}
@@ -1288,6 +1543,7 @@ function ResumeStage({ zoom, setZoom, children }) {
       onPointerUp={stopDrag}
       onPointerCancel={stopDrag}
       onWheel={zoomWithWheel}
+      onScroll={savePositionAfterScroll}
     >
       <div
         className="resume-scale-wrap"

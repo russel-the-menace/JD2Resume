@@ -170,6 +170,10 @@ button:disabled {
   color: var(--warning);
 }
 
+.save-status.is-error {
+  color: var(--danger);
+}
+
 .topbar-actions {
   justify-content: flex-end;
   gap: 8px;
