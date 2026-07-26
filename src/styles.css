@@ -74,6 +74,453 @@ button:disabled {
   background: var(--surface);
 }
 
+.library-shell {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background: #f4f6f4;
+}
+
+.library-topbar {
+  position: sticky;
+  z-index: 40;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 24px;
+  background: rgba(255, 255, 255, 0.98);
+  border-bottom: 1px solid var(--line);
+}
+
+.library-brand {
+  font-size: 17px;
+}
+
+.library-topbar-actions,
+.library-heading-row,
+.library-toolbar,
+.resume-card-commands,
+.resume-card-edit,
+.library-search,
+.library-toolbar > span:first-child {
+  display: flex;
+  align-items: center;
+}
+
+.library-topbar-actions {
+  gap: 11px;
+}
+
+.library-main {
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 48px 0 70px;
+}
+
+.library-heading-row {
+  justify-content: space-between;
+  gap: 28px;
+  padding-bottom: 30px;
+}
+
+.library-title-block {
+  min-width: 0;
+}
+
+.library-kicker {
+  color: #737b75;
+  font-size: 10px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.library-title-block h1 {
+  margin: 6px 0 4px;
+  color: #202421;
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.library-title-block p {
+  margin: 0;
+  color: #818882;
+  font-size: 12px;
+}
+
+.library-search {
+  flex: 0 1 310px;
+  height: 40px;
+  padding: 0 10px 0 12px;
+  color: #7c847e;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+}
+
+.library-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(22, 124, 101, 0.09);
+}
+
+.library-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 9px;
+  color: #333834;
+  background: transparent;
+  border: 0;
+  outline: none;
+  font-size: 12px;
+}
+
+.library-search button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: #7b837d;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.library-search button:hover {
+  background: var(--surface-soft);
+}
+
+.library-toolbar {
+  justify-content: space-between;
+  min-height: 38px;
+  margin-bottom: 15px;
+  color: #7d857f;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.library-toolbar > span:first-child {
+  gap: 6px;
+  height: 38px;
+  color: #313733;
+  border-bottom: 2px solid var(--accent);
+}
+
+.resume-library-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.resume-library-card {
+  position: relative;
+  min-width: 0;
+  overflow: visible;
+  background: #fff;
+  border: 1px solid #d8ddd8;
+  border-radius: 7px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.resume-library-card:hover {
+  border-color: #b8c0ba;
+  box-shadow: 0 10px 28px rgba(27, 34, 29, 0.09), 0 1px 3px rgba(27, 34, 29, 0.05);
+  transform: translateY(-2px);
+}
+
+.resume-card-preview-button {
+  display: block;
+  width: 100%;
+  height: 244px;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-radius: 7px 7px 0 0;
+  cursor: pointer;
+}
+
+.resume-card-canvas {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding-top: 22px;
+  background: #e8ebe8;
+  border-bottom: 1px solid #d9ddd9;
+}
+
+.resume-card-paper {
+  position: relative;
+  display: block;
+  width: 164px;
+  aspect-ratio: 8.5 / 11;
+  overflow: hidden;
+  color: #282d29;
+  background: #fff;
+  border-top: 4px solid var(--card-accent);
+  box-shadow: 0 8px 20px rgba(30, 37, 32, 0.16), 0 1px 3px rgba(30, 37, 32, 0.08);
+}
+
+.card-paper-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 18px 16px 13px;
+  border-bottom: 1px solid #e4e7e4;
+}
+
+.card-paper-header strong {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.card-paper-header small {
+  color: var(--card-accent);
+  font-size: 5px;
+  font-weight: 700;
+}
+
+.card-paper-body {
+  display: block;
+  padding: 13px 16px;
+}
+
+.card-paper-body i {
+  display: block;
+}
+
+.card-section-label {
+  width: 23px;
+  height: 3px;
+  margin-bottom: 7px;
+  background: var(--card-accent);
+}
+
+.card-section-label.second,
+.card-section-label.third {
+  margin-top: 14px;
+}
+
+.card-copy-line {
+  width: 67%;
+  height: 2px;
+  margin-bottom: 5px;
+  background: #d0d5d1;
+}
+
+.card-copy-line.long {
+  width: 100%;
+}
+
+.card-copy-line.medium {
+  width: 82%;
+}
+
+.card-copy-line.short {
+  width: 48%;
+}
+
+.card-template-classic .resume-card-paper {
+  color: #2e312f;
+  border-top-color: #343936;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.card-template-classic .card-paper-header {
+  align-items: center;
+  text-align: center;
+}
+
+.card-template-classic .card-paper-header small {
+  color: #545a55;
+}
+
+.card-template-compact .resume-card-paper {
+  border-top-width: 18px;
+}
+
+.card-template-compact .card-paper-header {
+  padding-top: 12px;
+}
+
+.resume-card-details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  min-height: 106px;
+  padding: 15px 14px 14px;
+}
+
+.resume-card-copy {
+  min-width: 0;
+}
+
+.resume-card-copy h2 {
+  overflow: hidden;
+  margin: 0 0 5px;
+  color: #292e2b;
+  font-size: 13px;
+  font-weight: 710;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-card-copy p {
+  overflow: hidden;
+  margin: 0 0 10px;
+  color: #646c66;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-card-copy span {
+  color: #959b96;
+  font-size: 9px;
+}
+
+.resume-card-commands {
+  gap: 4px;
+}
+
+.resume-card-edit {
+  gap: 5px;
+  height: 30px;
+  padding: 0 9px;
+  color: #3f4742;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.resume-card-edit:hover {
+  background: var(--surface-soft);
+}
+
+.resume-card-menu-wrap {
+  position: relative;
+}
+
+.resume-card-menu {
+  position: absolute;
+  z-index: 25;
+  right: 0;
+  bottom: 35px;
+  width: 132px;
+  padding: 5px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--shadow-lg);
+}
+
+.resume-card-menu button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.resume-card-menu button:hover {
+  background: var(--surface-soft);
+}
+
+.library-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  color: #8a918b;
+  border-bottom: 1px solid var(--line);
+}
+
+.library-empty h2 {
+  margin: 12px 0 10px;
+  color: #4b524d;
+  font-size: 15px;
+}
+
+.library-empty button {
+  padding: 0;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  font-size: 11px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+@media (max-width: 980px) {
+  .resume-library-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .library-topbar {
+    height: 58px;
+    padding: 0 14px;
+  }
+
+  .library-main {
+    width: calc(100% - 28px);
+    padding: 30px 0 48px;
+  }
+
+  .library-heading-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 20px;
+    padding-bottom: 22px;
+  }
+
+  .library-search {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .resume-library-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .library-create-top {
+    width: 36px;
+    padding: 0;
+  }
+
+  .library-create-top span {
+    display: none;
+  }
+
+  .resume-card-preview-button {
+    height: 232px;
+  }
+}
+
 .topbar {
   position: relative;
   z-index: 40;
@@ -1906,6 +2353,10 @@ button:disabled {
   .brand-mark {
     width: 33px;
     height: 33px;
+  }
+
+  .library-brand > span:last-child {
+    display: inline;
   }
 
   .document-meta {

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -16,9 +17,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  Copy,
   Download,
   Eye,
   FileText,
+  FolderOpen,
   GraduationCap,
   GripVertical,
   LayoutGrid,
@@ -30,10 +33,12 @@ import {
   MoreHorizontal,
   Palette,
   PanelLeft,
+  PencilLine,
   Phone,
   Plus,
   Redo2,
   RotateCcw,
+  Search,
   Settings2,
   Sparkles,
   Trash2,
@@ -128,7 +133,9 @@ const MAX_EDITOR_WIDTH = 720;
 const EDITOR_WIDTH_STORAGE_KEY = 'draftline-editor-width';
 const RESUME_STORAGE_KEY = 'draftline-resume-state-v1';
 const WORKSPACE_STORAGE_KEY = 'draftline-workspace-preferences-v1';
+const LIBRARY_STORAGE_KEY = 'draftline-resume-library-v2';
 const STORAGE_VERSION = 1;
+const LIBRARY_VERSION = 2;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
 
 const sectionSuggestions = [
@@ -273,12 +280,203 @@ function loadResumeSnapshot() {
   };
 }
 
-function loadWorkspacePreferences(resumeSnapshot) {
+function roleResumeSnapshot({ documentName, role, summary, experience, skills, template, accent }) {
+  return {
+    documentName,
+    data: normalizeResumeData({
+      basics: { ...initialResume.basics, role },
+      summary,
+      experience,
+      education: initialResume.education,
+      skills,
+    }),
+    template,
+    accent,
+    customSections: [],
+    customContent: {},
+  };
+}
+
+function productManagerSnapshot() {
+  return roleResumeSnapshot({
+    documentName: 'Jordan Lee - Product Manager',
+    role: 'Senior Product Manager',
+    summary:
+      'Product leader with 8+ years of experience defining strategy and shipping B2B software. Aligns customer insight, market context, and delivery teams to build products that improve adoption and retention.',
+    experience: [
+      {
+        id: 1,
+        role: 'Senior Product Manager',
+        company: 'Meridian Cloud',
+        location: 'San Francisco, CA',
+        start: 'Apr 2021',
+        end: 'Present',
+        current: true,
+        bullets: [
+          'Owned strategy and roadmap for a $24M analytics portfolio serving more than 600 enterprise customers.',
+          'Launched usage-based packaging that increased expansion revenue by 19% within two quarters.',
+          'Built a continuous discovery program across product, design, sales, and customer success.',
+        ],
+      },
+      {
+        id: 2,
+        role: 'Product Manager',
+        company: 'Harbor Systems',
+        location: 'Oakland, CA',
+        start: 'Jul 2018',
+        end: 'Mar 2021',
+        current: false,
+        bullets: [
+          'Shipped workflow automation features that reduced customer setup time by 32%.',
+          'Prioritized a multi-team roadmap using customer evidence and product usage data.',
+        ],
+      },
+    ],
+    skills: {
+      expertise:
+        'Product strategy, Roadmapping, Customer discovery, Go-to-market, Pricing, Analytics, Stakeholder management',
+      tools: 'Amplitude, Looker, SQL, Figma, Jira, Productboard, Notion',
+    },
+    template: 'classic',
+    accent: '#2e5aac',
+  });
+}
+
+function androidDeveloperSnapshot() {
+  return roleResumeSnapshot({
+    documentName: 'Jordan Lee - Android Developer',
+    role: 'Senior Android Developer',
+    summary:
+      'Android engineer with 7+ years of experience building reliable consumer applications with Kotlin and Jetpack Compose. Focused on scalable architecture, performance, accessibility, and thoughtful collaboration.',
+    experience: [
+      {
+        id: 1,
+        role: 'Senior Android Developer',
+        company: 'Atlas Mobility',
+        location: 'San Francisco, CA',
+        start: 'Jan 2022',
+        end: 'Present',
+        current: true,
+        bullets: [
+          'Led a Jetpack Compose migration across 40+ screens while maintaining a 99.8% crash-free rate.',
+          'Reduced cold-start time by 38% through profiling, dependency cleanup, and startup deferral.',
+          'Created modular architecture and CI standards adopted by four mobile feature teams.',
+        ],
+      },
+      {
+        id: 2,
+        role: 'Android Engineer',
+        company: 'Signal Market',
+        location: 'Remote',
+        start: 'Aug 2019',
+        end: 'Dec 2021',
+        current: false,
+        bullets: [
+          'Built checkout and account experiences used by 500K+ monthly active customers.',
+          'Expanded automated test coverage from 42% to 78% and reduced release regressions.',
+        ],
+      },
+    ],
+    skills: {
+      expertise:
+        'Kotlin, Jetpack Compose, Coroutines, Clean Architecture, Modularization, Accessibility, Performance',
+      tools: 'Android Studio, Gradle, Firebase, GitHub Actions, Datadog, Figma',
+    },
+    template: 'compact',
+    accent: '#a34636',
+  });
+}
+
+function normalizeResumeDocument(value, index) {
+  const source = isRecord(value) ? value : {};
+  const snapshot = {
+    documentName: textValue(source.documentName, `Resume ${index + 1}`),
+    data: normalizeResumeData(source.data),
+    template: templateOptions.some((option) => option.id === source.template)
+      ? source.template
+      : 'modern',
+    accent: accentOptions.includes(source.accent) ? source.accent : accentOptions[0],
+    customSections: normalizeCustomSections(source.customSections),
+    customContent: {},
+  };
+  snapshot.customContent = normalizeCustomContent(snapshot.customSections, source.customContent);
+  return {
+    id: textValue(source.id, `resume-${index + 1}`),
+    ...snapshot,
+    updatedAt: Number.isFinite(Number(source.updatedAt)) ? Number(source.updatedAt) : Date.now(),
+  };
+}
+
+function loadResumeLibrary() {
+  const stored = storedJson(LIBRARY_STORAGE_KEY);
+  if (isRecord(stored) && Array.isArray(stored.resumes) && stored.resumes.length) {
+    return {
+      version: LIBRARY_VERSION,
+      resumes: stored.resumes.map(normalizeResumeDocument),
+    };
+  }
+
+  const migratedResume = loadResumeSnapshot();
+  const now = Date.now();
+  return {
+    version: LIBRARY_VERSION,
+    resumes: [
+      { id: 'product-designer', ...migratedResume, updatedAt: now },
+      { id: 'product-manager', ...productManagerSnapshot(), updatedAt: now - 1000 * 60 * 42 },
+      { id: 'android-developer', ...androidDeveloperSnapshot(), updatedAt: now - 1000 * 60 * 60 * 26 },
+    ],
+  };
+}
+
+function blankResumeSnapshot() {
+  return {
+    documentName: 'Untitled resume',
+    data: normalizeResumeData({
+      basics: {
+        firstName: 'Jordan',
+        lastName: 'Lee',
+        role: 'Target role',
+        email: initialResume.basics.email,
+        phone: initialResume.basics.phone,
+        location: initialResume.basics.location,
+        website: initialResume.basics.website,
+        linkedin: initialResume.basics.linkedin,
+      },
+      summary: '',
+      experience: [],
+      education: initialResume.education,
+      skills: { expertise: '', tools: '' },
+    }),
+    template: 'modern',
+    accent: accentOptions[0],
+    customSections: [],
+    customContent: {},
+  };
+}
+
+function resumeId() {
+  return globalThis.crypto?.randomUUID?.() || `resume-${Date.now()}`;
+}
+
+function resumeSnapshotEqual(document, snapshot) {
+  return JSON.stringify({
+    documentName: document.documentName,
+    data: document.data,
+    template: document.template,
+    accent: document.accent,
+    customSections: document.customSections,
+    customContent: document.customContent,
+  }) === JSON.stringify(snapshot);
+}
+
+function loadWorkspacePreferences(resumeSnapshot, resumeId) {
   const stored = storedJson(WORKSPACE_STORAGE_KEY);
-  const source = isRecord(stored) ? stored : {};
+  const root = isRecord(stored) ? stored : {};
+  const savedByResume = isRecord(root.byResume) ? root.byResume : {};
+  const source = isRecord(savedByResume[resumeId]) ? savedByResume[resumeId] : root;
   const legacyWidth =
     typeof window === 'undefined' ? null : window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY);
-  const widthCandidate = source.editorWidth ?? Number(legacyWidth);
+  const widthCandidate = root.editorWidth ?? source.editorWidth ?? Number(legacyWidth);
   const zoomCandidate = Number(source.zoom);
   const editorWidthCandidate = Number(widthCandidate);
   const availableSections = new Set([
@@ -322,10 +520,122 @@ function cx(...classes) {
 }
 
 function App() {
-  const initialResumeState = useMemo(loadResumeSnapshot, []);
+  const initialLibrary = useMemo(loadResumeLibrary, []);
+  const libraryRef = useRef(initialLibrary);
+  const [library, setLibrary] = useState(initialLibrary);
+  const [selectedResumeId, setSelectedResumeId] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    const resume = new URLSearchParams(window.location.search).get('resume');
+    return initialLibrary.resumes.some((document) => document.id === resume) ? resume : null;
+  });
+
+  const persistLibrary = useCallback((nextLibrary) => {
+    try {
+      window.localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(nextLibrary));
+    } catch {
+      return false;
+    }
+    libraryRef.current = nextLibrary;
+    setLibrary(nextLibrary);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    persistLibrary(initialLibrary);
+  }, [initialLibrary, persistLibrary]);
+
+  useEffect(() => {
+    const syncFromLocation = () => {
+      const resume = new URLSearchParams(window.location.search).get('resume');
+      setSelectedResumeId(
+        libraryRef.current.resumes.some((document) => document.id === resume) ? resume : null,
+      );
+    };
+    window.addEventListener('popstate', syncFromLocation);
+    return () => window.removeEventListener('popstate', syncFromLocation);
+  }, []);
+
+  const openResume = useCallback((id) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('resume', id);
+    window.history.pushState({ jd2resume: 'editor' }, '', url);
+    setSelectedResumeId(id);
+  }, []);
+
+  const returnHome = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('resume');
+    window.history.replaceState({ jd2resume: 'home' }, '', url);
+    setSelectedResumeId(null);
+  }, []);
+
+  const saveResume = useCallback((id, snapshot) => {
+    const current = libraryRef.current;
+    const index = current.resumes.findIndex((document) => document.id === id);
+    if (index < 0) return false;
+    const existing = current.resumes[index];
+    if (resumeSnapshotEqual(existing, snapshot)) return true;
+    const resumes = [...current.resumes];
+    resumes[index] = { id, ...snapshot, updatedAt: Date.now() };
+    return persistLibrary({ version: LIBRARY_VERSION, resumes });
+  }, [persistLibrary]);
+
+  const createResume = useCallback(() => {
+    const id = resumeId();
+    const nextDocument = { id, ...blankResumeSnapshot(), updatedAt: Date.now() };
+    const nextLibrary = {
+      version: LIBRARY_VERSION,
+      resumes: [nextDocument, ...libraryRef.current.resumes],
+    };
+    if (persistLibrary(nextLibrary)) openResume(id);
+  }, [openResume, persistLibrary]);
+
+  const duplicateResume = useCallback((id) => {
+    const source = libraryRef.current.resumes.find((document) => document.id === id);
+    if (!source) return;
+    const duplicateId = resumeId();
+    const duplicate = {
+      ...source,
+      id: duplicateId,
+      documentName: `${source.documentName} Copy`,
+      data: normalizeResumeData(source.data),
+      customSections: [...source.customSections],
+      customContent: normalizeCustomContent(source.customSections, source.customContent),
+      updatedAt: Date.now(),
+    };
+    persistLibrary({
+      version: LIBRARY_VERSION,
+      resumes: [duplicate, ...libraryRef.current.resumes],
+    });
+  }, [persistLibrary]);
+
+  const selectedResume = library.resumes.find((document) => document.id === selectedResumeId);
+  if (!selectedResume) {
+    return (
+      <ResumeLibrary
+        resumes={library.resumes}
+        onOpen={openResume}
+        onCreate={createResume}
+        onDuplicate={duplicateResume}
+      />
+    );
+  }
+
+  return (
+    <ResumeEditor
+      key={selectedResume.id}
+      resumeId={selectedResume.id}
+      initialResumeState={selectedResume}
+      onResumeChange={saveResume}
+      onBack={returnHome}
+    />
+  );
+}
+
+function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) {
   const initialWorkspaceState = useMemo(
-    () => loadWorkspacePreferences(initialResumeState),
-    [initialResumeState],
+    () => loadWorkspacePreferences(initialResumeState, resumeId),
+    [initialResumeState, resumeId],
   );
   const [history, setHistory] = useState({
     past: [],
@@ -365,45 +675,48 @@ function App() {
 
   useEffect(() => {
     setSaveState('Saving...');
-    try {
-      window.localStorage.setItem(
-        RESUME_STORAGE_KEY,
-        JSON.stringify({
-          version: STORAGE_VERSION,
-          documentName,
-          data,
-          template,
-          accent,
-          customSections,
-          customContent,
-        }),
-      );
-    } catch {
+    const saved = onResumeChange(resumeId, {
+      documentName,
+      data,
+      template,
+      accent,
+      customSections,
+      customContent,
+    });
+    if (!saved) {
       setSaveState('Save failed');
       return undefined;
     }
     const timer = window.setTimeout(() => setSaveState('Saved'), 260);
     return () => window.clearTimeout(timer);
-  }, [accent, customContent, customSections, data, documentName, template]);
+  }, [accent, customContent, customSections, data, documentName, onResumeChange, resumeId, template]);
 
   useEffect(() => {
     try {
+      const stored = storedJson(WORKSPACE_STORAGE_KEY);
+      const root = isRecord(stored) ? stored : {};
+      const byResume = isRecord(root.byResume) ? root.byResume : {};
       window.localStorage.setItem(
         WORKSPACE_STORAGE_KEY,
         JSON.stringify({
           version: STORAGE_VERSION,
-          zoom,
           editorWidth,
-          activeSection,
-          openExperience,
-          mobileMode,
-          previewPosition,
+          byResume: {
+            ...byResume,
+            [resumeId]: {
+              zoom,
+              activeSection,
+              openExperience,
+              mobileMode,
+              previewPosition,
+            },
+          },
         }),
       );
     } catch {
       // Resume content saving remains independent if preferences exceed browser storage.
     }
-  }, [activeSection, editorWidth, mobileMode, openExperience, previewPosition, zoom]);
+  }, [activeSection, editorWidth, mobileMode, openExperience, previewPosition, resumeId, zoom]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -565,6 +878,7 @@ function App() {
         onExport={() => window.print()}
         onAi={() => setAiPanel(true)}
         onReset={resetDemo}
+        onBack={onBack}
       />
 
       <MobileTabs value={mobileMode} onChange={setMobileMode} />
@@ -643,6 +957,171 @@ function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function formatUpdatedAt(timestamp) {
+  const elapsed = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(elapsed / 60000);
+  if (minutes < 1) return 'Updated just now';
+  if (minutes < 60) return `Updated ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Updated ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `Updated ${days}d ago`;
+  return `Updated ${new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(timestamp))}`;
+}
+
+function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate }) {
+  const [query, setQuery] = useState('');
+  const [openMenu, setOpenMenu] = useState(null);
+  const visibleResumes = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return [...resumes]
+      .sort((first, second) => second.updatedAt - first.updatedAt)
+      .filter((resume) => {
+        if (!normalizedQuery) return true;
+        return `${resume.documentName} ${resume.data.basics.role}`
+          .toLowerCase()
+          .includes(normalizedQuery);
+      });
+  }, [query, resumes]);
+
+  return (
+    <div className="library-shell">
+      <header className="library-topbar">
+        <a className="brand library-brand" href="#" onClick={(event) => event.preventDefault()} aria-label="Draftline home">
+          <span className="brand-mark"><FileText size={18} /></span>
+          <span>Draftline</span>
+        </a>
+        <div className="library-topbar-actions">
+          <button className="primary-button library-create-top" onClick={onCreate} aria-label="New resume" title="New resume">
+            <Plus size={16} />
+            <span>New resume</span>
+          </button>
+          <button className="avatar-button" aria-label="Account menu" title="Account menu">JL</button>
+        </div>
+      </header>
+
+      <main className="library-main">
+        <div className="library-heading-row">
+          <div className="library-title-block">
+            <span className="library-kicker">Resume workspace</span>
+            <h1>My resumes</h1>
+            <p>{resumes.length} {resumes.length === 1 ? 'resume' : 'resumes'}</p>
+          </div>
+          <label className="library-search">
+            <Search size={17} />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search resumes"
+              aria-label="Search resumes"
+            />
+            {query && (
+              <button onClick={() => setQuery('')} aria-label="Clear search" title="Clear search">
+                <X size={15} />
+              </button>
+            )}
+          </label>
+        </div>
+
+        <div className="library-toolbar">
+          <span><FolderOpen size={15} /> All resumes</span>
+          <span>Recently edited</span>
+        </div>
+
+        {visibleResumes.length ? (
+          <div className="resume-library-grid">
+            {visibleResumes.map((resume) => (
+              <ResumeLibraryCard
+                key={resume.id}
+                resume={resume}
+                menuOpen={openMenu === resume.id}
+                onToggleMenu={() => setOpenMenu((current) => current === resume.id ? null : resume.id)}
+                onOpen={() => onOpen(resume.id)}
+                onDuplicate={() => {
+                  onDuplicate(resume.id);
+                  setOpenMenu(null);
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="library-empty">
+            <Search size={22} />
+            <h2>No resumes found</h2>
+            <button onClick={() => setQuery('')}>Clear search</button>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function ResumeLibraryCard({ resume, menuOpen, onToggleMenu, onOpen, onDuplicate }) {
+  return (
+    <article className="resume-library-card">
+      <button
+        className="resume-card-preview-button"
+        onClick={onOpen}
+        aria-label={`Edit ${resume.documentName}`}
+      >
+        <ResumeCardPreview resume={resume} />
+      </button>
+      <div className="resume-card-details">
+        <div className="resume-card-copy">
+          <h2>{resume.documentName}</h2>
+          <p>{resume.data.basics.role}</p>
+          <span>{formatUpdatedAt(resume.updatedAt)}</span>
+        </div>
+        <div className="resume-card-commands">
+          <button className="resume-card-edit" onClick={onOpen}>
+            <PencilLine size={14} /> Edit
+          </button>
+          <div className="resume-card-menu-wrap">
+            <button className="icon-button small" onClick={onToggleMenu} aria-label={`More actions for ${resume.documentName}`} title="More actions">
+              <MoreHorizontal size={17} />
+            </button>
+            {menuOpen && (
+              <div className="resume-card-menu">
+                <button onClick={onDuplicate}><Copy size={15} /> Duplicate</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ResumeCardPreview({ resume }) {
+  const name = `${resume.data.basics.firstName} ${resume.data.basics.lastName}`.trim();
+  return (
+    <span className={cx('resume-card-canvas', `card-template-${resume.template}`)} style={{ '--card-accent': resume.accent }}>
+      <span className="resume-card-paper">
+        <span className="card-paper-header">
+          <strong>{name || 'Your name'}</strong>
+          <small>{resume.data.basics.role || 'Target role'}</small>
+        </span>
+        <span className="card-paper-body">
+          <i className="card-section-label" />
+          <i className="card-copy-line long" />
+          <i className="card-copy-line" />
+          <i className="card-section-label second" />
+          <i className="card-copy-line long" />
+          <i className="card-copy-line medium" />
+          <i className="card-copy-line short" />
+          <i className="card-section-label third" />
+          <i className="card-copy-line long" />
+          <i className="card-copy-line medium" />
+        </span>
+      </span>
+    </span>
   );
 }
 
@@ -769,14 +1248,15 @@ function TopBar({
   onExport,
   onAi,
   onReset,
+  onBack,
 }) {
   return (
     <header className="topbar">
       <div className="brand-block">
-        <button className="icon-button back-button" aria-label="Back to resumes" title="Back to resumes">
+        <button className="icon-button back-button" onClick={onBack} aria-label="Back to resumes" title="Back to resumes">
           <ArrowLeft size={18} />
         </button>
-        <a className="brand" href="#" aria-label="Draftline home">
+        <a className="brand" href="#" aria-label="Draftline home" onClick={(event) => { event.preventDefault(); onBack(); }}>
           <span className="brand-mark"><FileText size={18} /></span>
           <span>Draftline</span>
         </a>

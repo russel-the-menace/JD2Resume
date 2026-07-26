@@ -39,6 +39,18 @@ const desktop = await browser.newContext({ viewport: { width: 1440, height: 960 
 const desktopPage = await desktop.newPage();
 await attachDiagnostics(desktopPage);
 await desktopPage.goto(baseUrl, { waitUntil: 'networkidle' });
+report.checks.libraryHomeVisible =
+  (await desktopPage.getByRole('heading', { name: 'My resumes' }).isVisible()) &&
+  (await desktopPage.locator('.resume-library-card').count()) === 3;
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-library-desktop.png') });
+
+await desktopPage.getByLabel('Search resumes').fill('Android');
+report.checks.librarySearch =
+  (await desktopPage.locator('.resume-library-card').count()) === 1 &&
+  (await desktopPage.getByText('Jordan Lee - Android Developer', { exact: true }).isVisible());
+await desktopPage.getByLabel('Clear search').click();
+await desktopPage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
+report.checks.librarySelection = await desktopPage.locator('.editor-panel').isVisible();
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-desktop.png') });
 
 const editorPanel = desktopPage.locator('.editor-panel');
@@ -181,11 +193,37 @@ report.checks.customSectionPersisted =
 report.checks.zoomPersisted =
   (await desktopPage.locator('.zoom-value').textContent())?.trim() === '250%';
 report.checks.previewPositionPersisted = Boolean(
-  savedWorkspaceBeforeReload?.previewPosition?.left > 50 &&
-  savedWorkspaceBeforeReload?.previewPosition?.top > 50 &&
-  Math.abs(restoredPanPosition.left - savedWorkspaceBeforeReload.previewPosition.left) < 2 &&
-  Math.abs(restoredPanPosition.top - savedWorkspaceBeforeReload.previewPosition.top) < 2,
+  savedWorkspaceBeforeReload?.byResume?.['product-designer']?.previewPosition?.left > 50 &&
+  savedWorkspaceBeforeReload?.byResume?.['product-designer']?.previewPosition?.top > 50 &&
+  Math.abs(
+    restoredPanPosition.left -
+    savedWorkspaceBeforeReload.byResume['product-designer'].previewPosition.left,
+  ) < 2 &&
+  Math.abs(
+    restoredPanPosition.top -
+    savedWorkspaceBeforeReload.byResume['product-designer'].previewPosition.top,
+  ) < 2,
 );
+
+await desktopPage.getByRole('button', { name: 'Back to resumes' }).click();
+report.checks.editorBackToLibrary =
+  (await desktopPage.getByRole('heading', { name: 'My resumes' }).isVisible()) &&
+  (await desktopPage.getByText('Avery Chen - Product Designer', { exact: true }).isVisible());
+const resumeCountBeforeDuplicate = await desktopPage.locator('.resume-library-card').count();
+await desktopPage.getByRole('button', {
+  name: 'More actions for Avery Chen - Product Designer',
+}).click();
+await desktopPage.getByRole('button', { name: 'Duplicate' }).click();
+report.checks.resumeDuplicate =
+  (await desktopPage.locator('.resume-library-card').count()) === resumeCountBeforeDuplicate + 1 &&
+  (await desktopPage.getByText('Avery Chen - Product Designer Copy', { exact: true }).isVisible());
+
+await desktopPage.getByRole('button', { name: 'Edit Jordan Lee - Android Developer' }).click();
+report.checks.resumeIsolation =
+  (await desktopPage.locator('.resume-name-block p').getByText('Senior Android Developer', { exact: true }).isVisible()) &&
+  (await desktopPage.locator('.resume-page.template-compact').isVisible()) &&
+  (await desktopPage.locator('.zoom-value').textContent())?.trim() === '100%';
+await desktopPage.getByRole('button', { name: 'Back to resumes' }).click();
 report.checks.desktopMetrics = await pageMetrics(desktopPage);
 await desktop.close();
 
@@ -198,6 +236,11 @@ const mobile = await browser.newContext({
 const mobilePage = await mobile.newPage();
 await attachDiagnostics(mobilePage);
 await mobilePage.goto(baseUrl, { waitUntil: 'networkidle' });
+report.checks.mobileLibraryVisible = await mobilePage
+  .getByRole('heading', { name: 'My resumes' })
+  .isVisible();
+await mobilePage.screenshot({ path: join(tmpdir(), 'draftline-playwright-library-mobile.png') });
+await mobilePage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
 report.checks.mobileMetrics = await pageMetrics(mobilePage);
 report.checks.mobileEditVisible = await mobilePage.locator('.editor-panel').isVisible();
 report.checks.mobileResizerHidden = !(await mobilePage.locator('.column-resizer').isVisible());
@@ -216,12 +259,14 @@ await mobile.close();
 
 const recovery = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 await recovery.addInitScript(() => {
+  localStorage.setItem('draftline-resume-library-v2', '{invalid-json');
   localStorage.setItem('draftline-resume-state-v1', '{invalid-json');
   localStorage.setItem('draftline-workspace-preferences-v1', '{invalid-json');
 });
 const recoveryPage = await recovery.newPage();
 await attachDiagnostics(recoveryPage);
 await recoveryPage.goto(baseUrl, { waitUntil: 'networkidle' });
+await recoveryPage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
 report.checks.corruptStorageRecovery =
   (await recoveryPage.getByLabel('Resume name').inputValue()) === 'Jordan Lee - Product Designer' &&
   (await recoveryPage.locator('.resume-page').getByText('Jordan Lee', { exact: true }).isVisible());
