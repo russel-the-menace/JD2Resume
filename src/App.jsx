@@ -118,8 +118,8 @@ const baseSections = [
 ];
 
 const templateOptions = [
-  { id: 'modern', name: 'Modern', detail: 'Balanced' },
   { id: 'classic', name: 'Classic', detail: 'Traditional' },
+  { id: 'modern', name: 'Modern', detail: 'Balanced' },
   { id: 'compact', name: 'Compact', detail: 'Space-saving' },
 ];
 
