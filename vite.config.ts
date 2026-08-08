@@ -10,6 +10,7 @@ type Provider = {
   apiKey: string;
   endpoint: string;
   model: string;
+  supportsDirectFileInput: boolean;
 };
 
 type SourceAttachment = {
@@ -177,7 +178,11 @@ async function requestFromProviders(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
   try {
-    for (const provider of providers) {
+    const eligibleProviders = attachment
+      ? providers.filter((provider) => provider.supportsDirectFileInput)
+      : providers;
+    if (!eligibleProviders.length) throw new Error('DIRECT_FILE_PROVIDER_UNAVAILABLE');
+    for (const provider of eligibleProviders) {
       try {
         const result = await requestJsonCompletion(provider, systemPrompt, userPrompt, controller.signal, attachment);
         if (validate(result)) return result;
@@ -260,8 +265,12 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
         source.attachment,
       );
       sendJson(response, 200, generated);
-    } catch {
-      sendJson(response, 502, { error: 'The resume service is unavailable. Please try again.' });
+    } catch (error) {
+      sendJson(response, error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE' ? 503 : 502, {
+        error: error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE'
+          ? 'File imports require a configured ChatGPT-compatible provider.'
+          : 'The resume service is unavailable. Please try again.',
+      });
     }
   };
 
@@ -286,8 +295,12 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
         source.attachment,
       );
       sendJson(response, 200, normalizeProfileImportResponse(imported));
-    } catch {
-      sendJson(response, 502, { error: 'The profile import service is unavailable. Please try again.' });
+    } catch (error) {
+      sendJson(response, error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE' ? 503 : 502, {
+        error: error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE'
+          ? 'File imports require a configured ChatGPT-compatible provider.'
+          : 'The profile import service is unavailable. Please try again.',
+      });
     }
   };
 
@@ -338,6 +351,7 @@ export default defineConfig(({ mode }) => {
       apiKey: env.CLOUD_BRIDGE_API_KEY,
       endpoint: chatCompletionsEndpoint(env.CLOUD_BRIDGE_API_BASE_URL),
       model: env.CLOUD_BRIDGE_MODEL || 'gpt-4.1-mini',
+      supportsDirectFileInput: true,
     });
   }
   if (env.DEEPSEEK_API_KEY) {
@@ -345,6 +359,7 @@ export default defineConfig(({ mode }) => {
       apiKey: env.DEEPSEEK_API_KEY,
       endpoint: 'https://api.deepseek.com/chat/completions',
       model: env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
+      supportsDirectFileInput: false,
     });
   }
   return {
