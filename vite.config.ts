@@ -16,6 +16,7 @@ type Provider = {
 
 type SourceAttachment = {
   sourceType: 'image' | 'pdf';
+  name: string;
   mimeType: string;
   data: string;
 };
@@ -119,6 +120,7 @@ function sourceFromInput(input: Record<string, any>, textField: string) {
     text: '',
     attachment: {
       sourceType: sourceType as SourceAttachment['sourceType'],
+      name: stringValue(input.source.name).trim() || `source.${sourceType === 'pdf' ? 'pdf' : 'png'}`,
       mimeType,
       data: encoded,
     } satisfies SourceAttachment,
@@ -128,12 +130,22 @@ function sourceFromInput(input: Record<string, any>, textField: string) {
 function modelMessageContent(userPrompt: string, attachment: SourceAttachment | null) {
   if (!attachment) return userPrompt;
   const content: Record<string, any>[] = [{ type: 'text', text: userPrompt }];
-  content.push({
-    type: 'image_url',
-    image_url: {
-      url: `data:${attachment.mimeType};base64,${attachment.data}`,
-    },
-  });
+  if (attachment.sourceType === 'image') {
+    content.push({
+      type: 'image_url',
+      image_url: {
+        url: `data:${attachment.mimeType};base64,${attachment.data}`,
+      },
+    });
+  } else {
+    content.push({
+      type: 'file',
+      file: {
+        filename: attachment.name,
+        file_data: `data:application/pdf;base64,${attachment.data}`,
+      },
+    });
+  }
   return content;
 }
 
@@ -350,13 +362,13 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const providers: Provider[] = [];
-  const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://apicn.unifyllm.top';
+  const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://www.yunqiaoai.top';
   if (env.CLOUD_BRIDGE_API_KEY) {
     providers.push({
       apiKey: env.CLOUD_BRIDGE_API_KEY,
       endpoint: chatCompletionsEndpoint(cloudBridgeBaseUrl),
       model: env.CLOUD_BRIDGE_MODEL || 'gpt-5.6-terra',
-      pdfModel: env.CLOUD_BRIDGE_PDF_MODEL || 'gpt-5.6-terra',
+      pdfModel: env.CLOUD_BRIDGE_PDF_MODEL || 'gemini-2.5-flash',
       supportsDirectFileInput: true,
     });
   }
