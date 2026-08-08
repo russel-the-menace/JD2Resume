@@ -28,7 +28,6 @@ import {
   LayoutGrid,
   Link,
   ListChecks,
-  LockKeyhole,
   Mail,
   MapPin,
   Minus,
@@ -1473,7 +1472,7 @@ function ResumeCardPreview({ resume }) {
       style={{ '--card-accent': resume.accent } as CssVariables}
     >
       <span className="resume-card-paper">
-        {resume.template === 'profile' && (
+        {resume.template === 'profile' && resume.data.basics.photoUrl && (
           <ProfileAvatar photoUrl={resume.data.basics.photoUrl} initials={initials} className="card-profile-avatar" />
         )}
         <span className="card-paper-header">
@@ -1760,7 +1759,6 @@ function OutlineSidebar({
               aria-grabbed={isFixed ? undefined : draggedSectionId === id}
               className={cx(
                 'section-nav-item',
-                isFixed && 'is-fixed',
                 activeSection === id && 'active',
                 draggedSectionId === id && 'dragging',
                 dropTargetId === id && draggedSectionId !== id && 'drop-target',
@@ -1796,12 +1794,7 @@ function OutlineSidebar({
               onDragEnd={finishDrag}
             >
               {isFixed ? (
-                <span
-                  className="fixed-section-icon"
-                  title={isChineseResume(language) ? '个人信息位置固定' : 'Personal details position is fixed'}
-                >
-                  <LockKeyhole size={14} aria-hidden="true" />
-                </span>
+                <span aria-hidden="true" />
               ) : (
                 <GripVertical className="drag-icon" size={15} />
               )}
@@ -2619,6 +2612,7 @@ function ResumePage({
   const initials = resumeInitials(basics, language);
   const name = resumeName(basics, language);
   const isProfileTemplate = template === 'profile';
+  const hasProfilePhoto = Boolean(basics.photoUrl);
   const contactItems = [
     { id: 'email', icon: Mail, value: basics.email },
     { id: 'phone', icon: Phone, value: basics.phone },
@@ -2653,12 +2647,12 @@ function ResumePage({
   return (
     <article
       ref={pageRef}
-      className={cx('resume-page', `template-${template}`)}
+      className={cx('resume-page', `template-${template}`, hasProfilePhoto && 'has-profile-photo')}
       style={{ '--resume-accent': accent } as CssVariables}
       lang={isChineseResume(language) ? 'zh-CN' : 'en'}
     >
       <header className="resume-header">
-        {isProfileTemplate && (
+        {isProfileTemplate && hasProfilePhoto && (
           <div className="profile-avatar-slot">
             <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="resume-profile-avatar" />
           </div>

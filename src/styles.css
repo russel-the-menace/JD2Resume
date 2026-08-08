@@ -1043,11 +1043,6 @@ button:disabled {
   opacity: 0;
 }
 
-.fixed-section-icon {
-  justify-self: center;
-  color: #8b948d;
-}
-
 .section-nav-item:hover .drag-icon {
   opacity: 1;
 }
@@ -2429,8 +2424,12 @@ button:disabled {
 .template-profile .resume-header {
   position: relative;
   display: block;
-  padding: 36px 178px 18px 54px;
+  padding: 36px 54px 18px;
   border-bottom: 1px solid #d9ddda;
+}
+
+.resume-page.template-profile.has-profile-photo .resume-header {
+  padding-right: 178px;
 }
 
 .template-profile .resume-name-block h2,
@@ -2496,7 +2495,7 @@ button:disabled {
   flex: 0 0 1px;
   width: 1px;
   height: 13px;
-  margin-left: 6px;
+  margin: 0 6px;
   background: #c0c6c8;
 }
 

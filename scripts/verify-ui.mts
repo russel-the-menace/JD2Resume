@@ -204,22 +204,17 @@ await desktopPage.getByRole('button', { name: /Profile/ }).click();
 await desktopPage.waitForTimeout(100);
 const profileHeadings = await desktopPage.locator('.resume-page.template-profile .resume-section h3').allTextContents();
 report.checks.profileTemplateSwitch =
-  (await desktopPage.locator('.resume-page.template-profile').isVisible()) &&
-  (await desktopPage.locator('.resume-profile-avatar').isVisible());
-report.checks.profileAvatarReduced = await desktopPage.locator('.resume-profile-avatar').evaluate(
+  await desktopPage.locator('.resume-page.template-profile').isVisible();
+report.checks.profileAvatarHiddenWithoutUpload =
+  (await desktopPage.locator('.resume-profile-avatar').count()) === 0 &&
+  (await desktopPage.locator('.profile-avatar-slot').count()) === 0 &&
+  (await desktopPage.locator('.resume-page.template-profile .resume-header').evaluate(
+    (element) => window.getComputedStyle(element).paddingRight,
+  )) === '54px';
+report.checks.profileContactSeparatorSpacing = await desktopPage.locator('.contact-separator').first().evaluate(
   (element) => {
     const style = window.getComputedStyle(element);
-    const slot = document.querySelector('.profile-avatar-slot');
-    if (!slot) return false;
-    const avatarBounds = element.getBoundingClientRect();
-    const slotBounds = slot.getBoundingClientRect();
-    const avatarCenter = avatarBounds.top + avatarBounds.height / 2;
-    const slotCenter = slotBounds.top + slotBounds.height / 2;
-    return (
-      style.width === '80px' &&
-      style.height === '80px' &&
-      Math.abs(avatarCenter - slotCenter) < 1
-    );
+    return style.marginLeft === '6px' && style.marginRight === '6px';
   },
 );
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-profile-template.png') });
@@ -278,7 +273,11 @@ await desktopPage.locator('.resume-profile-avatar img').waitFor({ state: 'visibl
 report.checks.profilePhotoUpload =
   (await desktopPage.locator('.details-avatar img').isVisible()) &&
   (await desktopPage.locator('.resume-profile-avatar img').isVisible()) &&
-  !(await desktopPage.locator('.resume-profile-avatar .profile-avatar-initials').isVisible());
+  !(await desktopPage.locator('.resume-profile-avatar .profile-avatar-initials').isVisible()) &&
+  (await desktopPage.locator('.resume-page.template-profile.has-profile-photo').isVisible()) &&
+  (await desktopPage.locator('.resume-page.template-profile .resume-header').evaluate(
+    (element) => window.getComputedStyle(element).paddingRight,
+  )) === '178px';
 
 await desktopPage.getByLabel('Phone').fill('');
 report.checks.emptyPhoneHidden =
