@@ -509,14 +509,6 @@ button:disabled {
   background: var(--surface-soft);
 }
 
-.resume-card-menu button.danger {
-  color: var(--danger);
-}
-
-.resume-card-menu button.danger:hover {
-  background: #fff1ef;
-}
-
 .library-empty {
   display: flex;
   flex-direction: column;

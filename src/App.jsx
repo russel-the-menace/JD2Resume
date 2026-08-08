@@ -1098,7 +1098,12 @@ function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate, onDelete }) {
   }, [query, resumes]);
 
   return (
-    <div className="library-shell">
+    <div
+      className="library-shell"
+      onMouseDown={(event) => {
+        if (!event.target.closest('.resume-card-menu-wrap')) setOpenMenu(null);
+      }}
+    >
       <header className="library-topbar">
         <a className="brand library-brand" href="#" onClick={(event) => event.preventDefault()} aria-label="Draftline home">
           <span className="brand-mark"><FileText size={18} /></span>
@@ -1220,7 +1225,7 @@ function ResumeLibraryCard({ resume, menuOpen, onToggleMenu, onOpen, onDuplicate
             {menuOpen && (
               <div className="resume-card-menu">
                 <button onClick={onDuplicate}><Copy size={15} /> Duplicate</button>
-                <button className="danger" onClick={onDelete}><Trash2 size={15} /> Delete</button>
+                <button onClick={onDelete}><Trash2 size={15} /> Delete</button>
               </div>
             )}
           </div>

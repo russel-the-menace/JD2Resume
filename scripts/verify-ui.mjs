@@ -320,6 +320,17 @@ report.checks.resumeDuplicate =
 await desktopPage.getByRole('button', {
   name: 'More actions for Avery Chen - Product Designer Copy',
 }).click();
+const resumeActionsMenu = desktopPage.locator('.resume-card-menu');
+const resumeActionColors = await resumeActionsMenu.locator('button').evaluateAll((buttons) =>
+  buttons.map((button) => window.getComputedStyle(button).color),
+);
+await desktopPage.locator('.library-toolbar').click();
+report.checks.resumeActionsCloseOnOutsideClick =
+  !(await resumeActionsMenu.isVisible()) &&
+  resumeActionColors[0] === resumeActionColors[1];
+await desktopPage.getByRole('button', {
+  name: 'More actions for Avery Chen - Product Designer Copy',
+}).click();
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-resume-actions-menu.png') });
 await desktopPage.getByRole('button', { name: 'Delete' }).click();
 const deleteResumeDialog = desktopPage.getByRole('dialog', { name: 'Delete resume?' });
