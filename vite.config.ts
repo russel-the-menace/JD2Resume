@@ -10,12 +10,12 @@ type Provider = {
   apiKey: string;
   endpoint: string;
   model: string;
+  pdfModel?: string;
   supportsDirectFileInput: boolean;
 };
 
 type SourceAttachment = {
   sourceType: 'image' | 'pdf';
-  name: string;
   mimeType: string;
   data: string;
 };
@@ -119,7 +119,6 @@ function sourceFromInput(input: Record<string, any>, textField: string) {
     text: '',
     attachment: {
       sourceType: sourceType as SourceAttachment['sourceType'],
-      name: stringValue(input.source.name).trim() || `source.${sourceType === 'pdf' ? 'pdf' : 'png'}`,
       mimeType,
       data: encoded,
     } satisfies SourceAttachment,
@@ -129,23 +128,12 @@ function sourceFromInput(input: Record<string, any>, textField: string) {
 function modelMessageContent(userPrompt: string, attachment: SourceAttachment | null) {
   if (!attachment) return userPrompt;
   const content: Record<string, any>[] = [{ type: 'text', text: userPrompt }];
-  if (attachment.sourceType === 'image') {
-    content.push({
-      type: 'image_url',
-      image_url: {
-        url: `data:${attachment.mimeType};base64,${attachment.data}`,
-        detail: 'high',
-      },
-    });
-  } else {
-    content.push({
-      type: 'file',
-      file: {
-        filename: attachment.name,
-        file_data: `data:application/pdf;base64,${attachment.data}`,
-      },
-    });
-  }
+  content.push({
+    type: 'image_url',
+    image_url: {
+      url: `data:${attachment.mimeType};base64,${attachment.data}`,
+    },
+  });
   return content;
 }
 
@@ -164,7 +152,9 @@ async function requestJsonCompletion(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: provider.model,
+      model: attachment?.sourceType === 'pdf' && provider.pdfModel
+        ? provider.pdfModel
+        : provider.model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: modelMessageContent(userPrompt, attachment) },
@@ -366,6 +356,7 @@ export default defineConfig(({ mode }) => {
       apiKey: env.CLOUD_BRIDGE_API_KEY,
       endpoint: chatCompletionsEndpoint(cloudBridgeBaseUrl),
       model: env.CLOUD_BRIDGE_MODEL || 'gpt-4.1-mini',
+      pdfModel: env.CLOUD_BRIDGE_PDF_MODEL || 'gemini-2.5-flash',
       supportsDirectFileInput: true,
     });
   }
