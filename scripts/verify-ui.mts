@@ -346,8 +346,18 @@ report.checks.englishGender =
   (await desktopPage.getByLabel('Gender').inputValue()) === 'Male' &&
   (await desktopPage.locator('.resume-page .resume-contact [data-contact="gender"]').getByText('Male', { exact: true }).isVisible());
 report.checks.genderChevronOffset = await desktopPage.locator('.select-chevron').evaluate(
-  (element) => window.getComputedStyle(element).right === '15px',
+  (element) => window.getComputedStyle(element).right === '14px',
 );
+report.checks.profileAvatarInline = await desktopPage.locator('.basics-identity-row').evaluate((element) => {
+  const avatar = element.querySelector('.details-avatar');
+  const input = element.querySelector('.field input');
+  if (!avatar || !input) return false;
+  const avatarBox = avatar.getBoundingClientRect();
+  const inputBox = input.getBoundingClientRect();
+  return Math.abs(avatarBox.height - inputBox.height) < 1 &&
+    Math.abs(avatarBox.bottom - inputBox.bottom) < 1 &&
+    Boolean(element.querySelector('.avatar-upload .details-avatar'));
+});
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-markdown-website-link.png') });
 await desktopPage.emulateMedia({ media: 'print' });
 report.checks.printWebsiteLink = await websiteLink.isVisible();

@@ -2512,34 +2512,35 @@ function BasicsEditor({ basics, onChange, language }) {
 
   return (
     <div className="form-content">
-      {chinese ? (
-        <Field label="姓名" value={basics.fullName} onChange={(value) => onChange('fullName', value)} />
-      ) : (
-        <div className="form-grid two-columns">
+      <div className={cx('basics-identity-row', chinese && 'is-chinese')}>
+        <div className="profile-photo-field">
+          <div className="profile-photo-controls">
+            <label className="avatar-upload" title={chinese ? '上传头像' : 'Upload profile photo'}>
+              <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="details-avatar" />
+              <span className="avatar-upload-overlay" aria-hidden="true"><Upload size={15} /></span>
+              <input type="file" accept="image/*" onChange={uploadPhoto} aria-label={chinese ? '上传头像' : 'Upload profile photo'} />
+            </label>
+            {basics.photoUrl && (
+              <button
+                type="button"
+                className="avatar-remove-button"
+                onClick={() => onChange('photoUrl', '')}
+                aria-label={chinese ? '移除头像' : 'Remove profile photo'}
+                title={chinese ? '移除头像' : 'Remove profile photo'}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+        {chinese ? (
+          <Field label="姓名" value={basics.fullName} onChange={(value) => onChange('fullName', value)} />
+        ) : (
+          <>
           <Field label="First name" value={basics.firstName} onChange={(value) => onChange('firstName', value)} />
           <Field label="Last name" value={basics.lastName} onChange={(value) => onChange('lastName', value)} />
-        </div>
-      )}
-      <div className="profile-photo-field">
-        <span>{chinese ? '个人头像' : 'Profile photo'}</span>
-        <div className="profile-photo-controls">
-          <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="details-avatar" />
-          <label className="avatar-upload" title={chinese ? '上传头像' : 'Upload profile photo'}>
-            <Upload size={16} />
-            <input type="file" accept="image/*" onChange={uploadPhoto} aria-label={chinese ? '上传头像' : 'Upload profile photo'} />
-          </label>
-          {basics.photoUrl && (
-            <button
-              type="button"
-              className="icon-button small"
-              onClick={() => onChange('photoUrl', '')}
-              aria-label={chinese ? '移除头像' : 'Remove profile photo'}
-              title={chinese ? '移除头像' : 'Remove profile photo'}
-            >
-              <X size={15} />
-            </button>
-          )}
-        </div>
+          </>
+        )}
       </div>
       <Field label={chinese ? '职业标题' : 'Professional title'} value={basics.role} onChange={(value) => onChange('role', value)} />
       <div className="form-grid two-columns">
