@@ -2412,7 +2412,9 @@ function ResumePage({
     >
       <header className="resume-header">
         {isProfileTemplate && (
-          <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="resume-profile-avatar" />
+          <div className="profile-avatar-slot">
+            <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="resume-profile-avatar" />
+          </div>
         )}
         <div className="resume-name-block">
           <h2>{basics.firstName} {basics.lastName}</h2>

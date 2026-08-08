@@ -155,7 +155,17 @@ report.checks.profileTemplateSwitch =
 report.checks.profileAvatarReduced = await desktopPage.locator('.resume-profile-avatar').evaluate(
   (element) => {
     const style = window.getComputedStyle(element);
-    return style.width === '70px' && style.height === '70px';
+    const slot = document.querySelector('.profile-avatar-slot');
+    if (!slot) return false;
+    const avatarBounds = element.getBoundingClientRect();
+    const slotBounds = slot.getBoundingClientRect();
+    const avatarCenter = avatarBounds.top + avatarBounds.height / 2;
+    const slotCenter = slotBounds.top + slotBounds.height / 2;
+    return (
+      style.width === '80px' &&
+      style.height === '80px' &&
+      Math.abs(avatarCenter - slotCenter) < 1
+    );
   },
 );
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-profile-template.png') });
