@@ -807,6 +807,10 @@ button:disabled {
   background: var(--surface);
 }
 
+.workspace.editor-transitioning {
+  transition: grid-template-columns 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+
 @media (min-width: 901px) {
   .workspace.editor-collapsed {
     grid-template-columns: var(--outline-width) 0 0 minmax(var(--preview-min), 1fr);
@@ -844,6 +848,12 @@ button:disabled {
     border: 1px solid #d5dad5;
     border-radius: 6px;
     box-shadow: var(--shadow-sm);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace.editor-transitioning {
+    transition: none;
   }
 }
 
@@ -1304,6 +1314,25 @@ button:disabled {
   height: 41px;
   padding: 0 30px 0 11px;
   appearance: auto;
+}
+
+.select-control {
+  position: relative;
+  display: block;
+}
+
+.field .select-control select {
+  padding-right: 42px;
+  appearance: none;
+}
+
+.select-chevron {
+  position: absolute;
+  top: 50%;
+  right: 15px;
+  color: #4b524d;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .field textarea,

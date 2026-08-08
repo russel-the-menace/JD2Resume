@@ -158,6 +158,10 @@ report.checks.desktopColumnResize = Boolean(
 );
 const collapseEditor = desktopPage.getByRole('button', { name: 'Collapse editor' });
 await collapseEditor.click();
+report.checks.editorCollapseAnimation = await desktopPage.locator('.workspace').evaluate(
+  (element) => window.getComputedStyle(element).transitionDuration === '0.24s',
+);
+await desktopPage.waitForTimeout(280);
 const collapsedEditorBox = await editorPanel.boundingBox();
 const expandedPreviewBox = await previewPanel.boundingBox();
 report.checks.editorColumnCollapse = Boolean(
@@ -171,6 +175,7 @@ await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-deskto
 await desktopPage.reload({ waitUntil: 'networkidle' });
 report.checks.editorCollapseRestored = await desktopPage.locator('.workspace.editor-collapsed').isVisible();
 await desktopPage.getByRole('button', { name: 'Expand editor' }).click();
+await desktopPage.waitForTimeout(280);
 const savedWorkspaceAfterResize = await desktopPage.evaluate(() =>
   JSON.parse(localStorage.getItem('draftline-workspace-preferences-v1')),
 );
@@ -251,6 +256,9 @@ report.checks.markdownWebsiteLink =
 report.checks.englishGender =
   (await desktopPage.getByLabel('Gender').inputValue()) === 'Male' &&
   (await desktopPage.locator('.resume-page .resume-contact [data-contact="gender"]').getByText('Male', { exact: true }).isVisible());
+report.checks.genderChevronOffset = await desktopPage.locator('.select-chevron').evaluate(
+  (element) => window.getComputedStyle(element).right === '15px',
+);
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-markdown-website-link.png') });
 await desktopPage.emulateMedia({ media: 'print' });
 report.checks.printWebsiteLink = await websiteLink.isVisible();

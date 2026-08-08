@@ -848,6 +848,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
   const [zoom, setZoom] = useState(initialWorkspaceState.zoom);
   const [editorWidth, setEditorWidth] = useState(initialWorkspaceState.editorWidth);
   const [editorCollapsed, setEditorCollapsed] = useState(initialWorkspaceState.editorCollapsed);
+  const [editorTransitioning, setEditorTransitioning] = useState(false);
   const [mobileMode, setMobileMode] = useState(initialWorkspaceState.mobileMode);
   const [templateMenu, setTemplateMenu] = useState(false);
   const [sectionMenu, setSectionMenu] = useState(false);
@@ -862,8 +863,29 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
   const [previewPosition, setPreviewPosition] = useState(initialWorkspaceState.previewPosition);
   const [saveState, setSaveState] = useState('Saved');
   const [toast, setToast] = useState('');
+  const editorTransitionTimerRef = useRef(null);
 
   const data = history.present;
+
+  useEffect(() => () => {
+    if (editorTransitionTimerRef.current) {
+      window.clearTimeout(editorTransitionTimerRef.current);
+    }
+  }, []);
+
+  const toggleEditorCollapsed = () => {
+    if (editorTransitionTimerRef.current) {
+      window.clearTimeout(editorTransitionTimerRef.current);
+    }
+    setEditorTransitioning(true);
+    window.requestAnimationFrame(() => {
+      setEditorCollapsed((current) => !current);
+      editorTransitionTimerRef.current = window.setTimeout(() => {
+        setEditorTransitioning(false);
+        editorTransitionTimerRef.current = null;
+      }, 260);
+    });
+  };
 
   const updateData = (updater) => {
     setHistory((current) => {
@@ -1134,7 +1156,11 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
       <MobileTabs value={mobileMode} onChange={setMobileMode} />
 
       <main
-        className={cx('workspace', editorCollapsed && 'editor-collapsed')}
+        className={cx(
+          'workspace',
+          editorCollapsed && 'editor-collapsed',
+          editorTransitioning && 'editor-transitioning',
+        )}
         data-mobile-mode={mobileMode}
         style={{ '--editor-width': `${editorWidth}px` } as CssVariables}
       >
@@ -1170,7 +1196,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
           onAi={() => setAiPanel(true)}
           onPreview={() => setMobileMode('preview')}
           editorCollapsed={editorCollapsed}
-          onToggleCollapsed={() => setEditorCollapsed((current) => !current)}
+          onToggleCollapsed={toggleEditorCollapsed}
           language={language}
         />
 
@@ -2272,11 +2298,14 @@ function GenderField({ value, onChange, language }) {
   return (
     <label className="field">
       <span>{chinese ? '性别' : 'Gender'}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+      <span className="select-control">
+        <select value={value} onChange={(event) => onChange(event.target.value)}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <ChevronDown className="select-chevron" size={18} aria-hidden="true" />
+      </span>
     </label>
   );
 }

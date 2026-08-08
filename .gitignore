@@ -1,5 +1,10 @@
 # Installed dependencies
 node_modules/
 
+# Local credentials and environment-specific configuration
+.env
+.env.*
+!.env.example
+
 # Generated Vite dependency pre-bundle metadata
 node_modules/.vite/deps/_metadata.json
