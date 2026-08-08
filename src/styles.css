@@ -509,6 +509,14 @@ button:disabled {
   background: var(--surface-soft);
 }
 
+.resume-card-menu button.danger {
+  color: var(--danger);
+}
+
+.resume-card-menu button.danger:hover {
+  background: #fff1ef;
+}
+
 .library-empty {
   display: flex;
   flex-direction: column;
@@ -2239,8 +2247,17 @@ button:disabled {
   color: #505750;
 }
 
+.template-modern,
+.template-compact {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 9.3px;
+  line-height: 1.45;
+}
+
 .template-classic {
   font-family: Georgia, "Times New Roman", serif;
+  font-size: 9.3px;
+  line-height: 1.45;
 }
 
 .template-classic::before {
@@ -2540,6 +2557,96 @@ button:disabled {
   padding: 24px;
   background: rgba(28, 31, 29, 0.42);
   backdrop-filter: blur(3px);
+}
+
+.resume-dialog {
+  width: min(390px, 100%);
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dedfe2;
+  border-radius: 8px;
+  box-shadow: 0 26px 70px rgba(20, 22, 21, 0.24);
+}
+
+.resume-dialog-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.resume-dialog-header h2 {
+  margin: 0;
+  color: #282c29;
+  font-size: 17px;
+  letter-spacing: 0;
+}
+
+.resume-dialog-content {
+  display: grid;
+  gap: 19px;
+  padding: 20px;
+}
+
+.resume-language-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.resume-language-selector button {
+  height: 34px;
+  color: #5a625c;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.resume-language-selector button.is-selected {
+  color: #252a27;
+  background: #fff;
+  border-color: var(--line);
+  box-shadow: 0 1px 2px rgba(20, 22, 21, 0.08);
+}
+
+.resume-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.primary-button:disabled {
+  color: #a5aaa6;
+  background: #e8eae7;
+  border-color: #e8eae7;
+  cursor: not-allowed;
+}
+
+.danger-button {
+  background: #b73d31;
+  border-color: #b73d31;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #913026;
+}
+
+.delete-resume-content p {
+  margin: 0;
+  color: #555d58;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.delete-resume-content strong {
+  color: #2f3431;
 }
 
 .ai-panel {

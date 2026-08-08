@@ -300,6 +300,7 @@ function loadResumeSnapshot() {
     : 'modern';
   return {
     documentName: textValue(source.documentName, DEFAULT_DOCUMENT_NAME),
+    language: source.language === 'chinese' ? 'chinese' : 'english',
     data: normalizeResumeData(source.data),
     template,
     accent: normalizeAccent(source.accent),
@@ -313,6 +314,7 @@ function loadResumeSnapshot() {
 function roleResumeSnapshot({ documentName, role, summary, experience, skills, template, accent }) {
   return {
     documentName,
+    language: 'english',
     data: normalizeResumeData({
       basics: { ...initialResume.basics, role },
       summary,
@@ -427,6 +429,7 @@ function normalizeResumeDocument(value, index) {
   const customSections = normalizeCustomSections(source.customSections);
   const snapshot = {
     documentName: textValue(source.documentName, `Resume ${index + 1}`),
+    language: source.language === 'chinese' ? 'chinese' : 'english',
     data: normalizeResumeData(source.data),
     template,
     accent: normalizeAccent(source.accent),
@@ -464,9 +467,10 @@ function loadResumeLibrary() {
   };
 }
 
-function blankResumeSnapshot() {
+function blankResumeSnapshot({ documentName, language } = {}) {
   return {
-    documentName: 'Untitled resume',
+    documentName: textValue(documentName, 'Untitled resume'),
+    language: language === 'chinese' ? 'chinese' : 'english',
     data: normalizeResumeData({
       basics: {
         firstName: 'Jordan',
@@ -499,6 +503,7 @@ function resumeId() {
 function resumeSnapshotEqual(document, snapshot) {
   return JSON.stringify({
     documentName: document.documentName,
+    language: document.language,
     data: document.data,
     template: document.template,
     accent: document.accent,
@@ -620,9 +625,15 @@ function App() {
     return persistLibrary({ version: LIBRARY_VERSION, resumes });
   }, [persistLibrary]);
 
-  const createResume = useCallback(() => {
+  const createResume = useCallback(({ documentName, language }) => {
+    const name = documentName.trim();
+    if (!name) return;
     const id = resumeId();
-    const nextDocument = { id, ...blankResumeSnapshot(), updatedAt: Date.now() };
+    const nextDocument = {
+      id,
+      ...blankResumeSnapshot({ documentName: name, language }),
+      updatedAt: Date.now(),
+    };
     const nextLibrary = {
       version: LIBRARY_VERSION,
       resumes: [nextDocument, ...libraryRef.current.resumes],
@@ -650,6 +661,15 @@ function App() {
     });
   }, [persistLibrary]);
 
+  const deleteResume = useCallback((id) => {
+    const current = libraryRef.current;
+    if (!current.resumes.some((document) => document.id === id)) return;
+    persistLibrary({
+      version: LIBRARY_VERSION,
+      resumes: current.resumes.filter((document) => document.id !== id),
+    });
+  }, [persistLibrary]);
+
   const selectedResume = library.resumes.find((document) => document.id === selectedResumeId);
   if (!selectedResume) {
     return (
@@ -658,6 +678,7 @@ function App() {
         onOpen={openResume}
         onCreate={createResume}
         onDuplicate={duplicateResume}
+        onDelete={deleteResume}
       />
     );
   }
@@ -687,6 +708,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
   const [openExperience, setOpenExperience] = useState(initialWorkspaceState.openExperience);
   const [template, setTemplate] = useState(initialResumeState.template);
   const [accent, setAccent] = useState(initialResumeState.accent);
+  const [language] = useState(initialResumeState.language);
   const [zoom, setZoom] = useState(initialWorkspaceState.zoom);
   const [editorWidth, setEditorWidth] = useState(initialWorkspaceState.editorWidth);
   const [mobileMode, setMobileMode] = useState(initialWorkspaceState.mobileMode);
@@ -722,6 +744,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
     setSaveState('Saving...');
     const saved = onResumeChange(resumeId, {
       documentName,
+      language,
       data,
       template,
       accent,
@@ -742,6 +765,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
     customSections,
     data,
     documentName,
+    language,
     onResumeChange,
     resumeId,
     sectionOrder,
@@ -1056,9 +1080,11 @@ function formatUpdatedAt(timestamp) {
   }).format(new Date(timestamp))}`;
 }
 
-function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate }) {
+function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate, onDelete }) {
   const [query, setQuery] = useState('');
   const [openMenu, setOpenMenu] = useState(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const visibleResumes = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return [...resumes]
@@ -1079,7 +1105,7 @@ function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate }) {
           <span>Draftline</span>
         </a>
         <div className="library-topbar-actions">
-          <button className="primary-button library-create-top" onClick={onCreate} aria-label="New resume" title="New resume">
+          <button className="primary-button library-create-top" onClick={() => setCreateDialogOpen(true)} aria-label="New resume" title="New resume">
             <Plus size={16} />
             <span>New resume</span>
           </button>
@@ -1129,6 +1155,10 @@ function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate }) {
                   onDuplicate(resume.id);
                   setOpenMenu(null);
                 }}
+                onDelete={() => {
+                  setPendingDelete(resume);
+                  setOpenMenu(null);
+                }}
               />
             ))}
           </div>
@@ -1140,11 +1170,30 @@ function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate }) {
           </div>
         )}
       </main>
+      {createDialogOpen && (
+        <NewResumeDialog
+          onCancel={() => setCreateDialogOpen(false)}
+          onSave={(details) => {
+            onCreate(details);
+            setCreateDialogOpen(false);
+          }}
+        />
+      )}
+      {pendingDelete && (
+        <DeleteResumeDialog
+          resume={pendingDelete}
+          onCancel={() => setPendingDelete(null)}
+          onDelete={() => {
+            onDelete(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ResumeLibraryCard({ resume, menuOpen, onToggleMenu, onOpen, onDuplicate }) {
+function ResumeLibraryCard({ resume, menuOpen, onToggleMenu, onOpen, onDuplicate, onDelete }) {
   return (
     <article className="resume-library-card">
       <button
@@ -1171,12 +1220,86 @@ function ResumeLibraryCard({ resume, menuOpen, onToggleMenu, onOpen, onDuplicate
             {menuOpen && (
               <div className="resume-card-menu">
                 <button onClick={onDuplicate}><Copy size={15} /> Duplicate</button>
+                <button className="danger" onClick={onDelete}><Trash2 size={15} /> Delete</button>
               </div>
             )}
           </div>
         </div>
       </div>
     </article>
+  );
+}
+
+function NewResumeDialog({ onCancel, onSave }) {
+  const [language, setLanguage] = useState('english');
+  const [documentName, setDocumentName] = useState('');
+  const canSave = Boolean(documentName.trim());
+
+  const submit = (event) => {
+    event.preventDefault();
+    if (canSave) onSave({ documentName: documentName.trim(), language });
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <form className="resume-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="new-resume-title">
+        <header className="resume-dialog-header">
+          <h2 id="new-resume-title">New resume</h2>
+        </header>
+        <div className="resume-dialog-content">
+          <div className="resume-language-selector" role="group" aria-label="Resume language">
+            <button
+              type="button"
+              className={cx(language === 'english' && 'is-selected')}
+              onClick={() => setLanguage('english')}
+              aria-pressed={language === 'english'}
+            >
+              English
+            </button>
+            <button
+              type="button"
+              className={cx(language === 'chinese' && 'is-selected')}
+              onClick={() => setLanguage('chinese')}
+              aria-pressed={language === 'chinese'}
+            >
+              中文
+            </button>
+          </div>
+          <label className="field">
+            <span>Resume name</span>
+            <input
+              autoFocus
+              value={documentName}
+              onChange={(event) => setDocumentName(event.target.value)}
+              aria-label="Resume name"
+            />
+          </label>
+        </div>
+        <footer className="resume-dialog-actions">
+          <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>
+          <button className="primary-button" type="submit" disabled={!canSave}>Save</button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function DeleteResumeDialog({ resume, onCancel, onDelete }) {
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <section className="resume-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-resume-title">
+        <header className="resume-dialog-header">
+          <h2 id="delete-resume-title">Delete resume?</h2>
+        </header>
+        <div className="resume-dialog-content delete-resume-content">
+          <p><strong>{resume.documentName}</strong> will be permanently deleted.</p>
+        </div>
+        <footer className="resume-dialog-actions">
+          <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>
+          <button className="primary-button danger-button" type="button" onClick={onDelete}>Delete</button>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -1642,7 +1765,6 @@ function EditorPanel({
 
 function BasicsEditor({ basics, onChange }) {
   const initials = `${basics.firstName?.[0] || 'Y'}${basics.lastName?.[0] || ''}`;
-  const hasUploadedPhoto = basics.photoUrl.startsWith('data:');
   const uploadPhoto = (event) => {
     const [file] = event.target.files || [];
     if (!file) return;
@@ -1688,14 +1810,11 @@ function BasicsEditor({ basics, onChange }) {
       </div>
       <Field label="Location" value={basics.location} onChange={(value) => onChange('location', value)} />
       <Field
-        label="个人网站"
+        label="Personal website"
         value={basics.website}
-        placeholder="[网站名]https://..."
+        placeholder="[Website name]https://..."
         onChange={(value) => onChange('website', value)}
       />
-      {!hasUploadedPhoto && (
-        <Field label="Profile photo URL" type="url" value={basics.photoUrl} onChange={(value) => onChange('photoUrl', value)} />
-      )}
     </div>
   );
 }

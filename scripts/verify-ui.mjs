@@ -44,6 +44,25 @@ report.checks.libraryHomeVisible =
   (await desktopPage.locator('.resume-library-card').count()) === 3;
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-library-desktop.png') });
 
+await desktopPage.getByRole('button', { name: 'New resume' }).click();
+const newResumeDialog = desktopPage.getByRole('dialog', { name: 'New resume' });
+report.checks.newResumeDialog =
+  (await newResumeDialog.isVisible()) &&
+  (await newResumeDialog.getByRole('button', { name: 'Save' }).isDisabled());
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-new-resume-dialog.png') });
+await newResumeDialog.getByRole('button', { name: '中文' }).click();
+await newResumeDialog.getByLabel('Resume name').fill('Wei Zhang - Product Designer');
+report.checks.newResumeNameRequired = !(await newResumeDialog.getByRole('button', { name: 'Save' }).isDisabled());
+await newResumeDialog.getByRole('button', { name: 'Save' }).click();
+report.checks.newResumeCreated =
+  (await desktopPage.getByLabel('Resume name').inputValue()) === 'Wei Zhang - Product Designer' &&
+  (await desktopPage.evaluate(() =>
+    JSON.parse(localStorage.getItem('draftline-resume-library-v2')).resumes.some(
+      (resume) => resume.documentName === 'Wei Zhang - Product Designer' && resume.language === 'chinese',
+    ),
+  ));
+await desktopPage.getByRole('button', { name: 'Back to resumes' }).click();
+
 await desktopPage.getByLabel('Search resumes').fill('Android');
 report.checks.librarySearch =
   (await desktopPage.locator('.resume-library-card').count()) === 1 &&
@@ -52,6 +71,12 @@ await desktopPage.getByLabel('Clear search').click();
 await desktopPage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
 report.checks.librarySelection = await desktopPage.locator('.editor-panel').isVisible();
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-desktop.png') });
+report.checks.modernTypography = await desktopPage.locator('.resume-page.template-modern').evaluate(
+  (element) => {
+    const style = window.getComputedStyle(element);
+    return style.fontFamily === 'Arial, Helvetica, sans-serif' && style.fontSize === '9.3px';
+  },
+);
 
 const editorPanel = desktopPage.locator('.editor-panel');
 const previewPanel = desktopPage.locator('.preview-panel');
@@ -135,13 +160,7 @@ report.checks.profileContentFits = await desktopPage.locator('.resume-page.templ
 
 await desktopPage.getByRole('button', { name: 'Personal details' }).click();
 report.checks.personalWebsiteField =
-  (await desktopPage.getByLabel('个人网站').getAttribute('placeholder')) === '[网站名]https://...';
-await desktopPage.getByLabel('Profile photo URL').fill(
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLQKgAAAABJRU5ErkJggg==',
-);
-report.checks.profilePhoto =
-  (await desktopPage.locator('.resume-profile-avatar img').isVisible()) &&
-  !(await desktopPage.locator('.resume-profile-avatar .profile-avatar-initials').isVisible());
+  (await desktopPage.getByLabel('Personal website').getAttribute('placeholder')) === '[Website name]https://...';
 await desktopPage.getByLabel('Upload profile photo').setInputFiles({
   name: 'avatar.png',
   mimeType: 'image/png',
@@ -150,8 +169,12 @@ await desktopPage.getByLabel('Upload profile photo').setInputFiles({
     'base64',
   ),
 });
-report.checks.profilePhotoUpload = await desktopPage.locator('.details-avatar img').isVisible();
-report.checks.uploadedPhotoUrlHidden = !(await desktopPage.getByLabel('Profile photo URL').isVisible());
+await desktopPage.locator('.details-avatar img').waitFor({ state: 'visible' });
+await desktopPage.locator('.resume-profile-avatar img').waitFor({ state: 'visible' });
+report.checks.profilePhotoUpload =
+  (await desktopPage.locator('.details-avatar img').isVisible()) &&
+  (await desktopPage.locator('.resume-profile-avatar img').isVisible()) &&
+  !(await desktopPage.locator('.resume-profile-avatar .profile-avatar-initials').isVisible());
 
 await desktopPage.getByLabel('Phone').fill('');
 report.checks.emptyPhoneHidden =
@@ -160,6 +183,12 @@ report.checks.emptyPhoneHidden =
 await desktopPage.getByRole('button', { name: /Template/ }).click();
 await desktopPage.getByRole('button', { name: /Classic/ }).click();
 report.checks.templateSwitch = await desktopPage.locator('.resume-page.template-classic').isVisible();
+report.checks.classicTypography = await desktopPage.locator('.resume-page.template-classic').evaluate(
+  (element) => {
+    const style = window.getComputedStyle(element);
+    return style.fontFamily === 'Georgia, "Times New Roman", serif' && style.fontSize === '9.3px';
+  },
+);
 
 await desktopPage.getByRole('button', { name: 'Choose accent color' }).click();
 await desktopPage.getByRole('button', { name: 'Use color #2e5aac' }).click();
@@ -288,12 +317,30 @@ await desktopPage.getByRole('button', { name: 'Duplicate' }).click();
 report.checks.resumeDuplicate =
   (await desktopPage.locator('.resume-library-card').count()) === resumeCountBeforeDuplicate + 1 &&
   (await desktopPage.getByText('Avery Chen - Product Designer Copy', { exact: true }).isVisible());
+await desktopPage.getByRole('button', {
+  name: 'More actions for Avery Chen - Product Designer Copy',
+}).click();
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-resume-actions-menu.png') });
+await desktopPage.getByRole('button', { name: 'Delete' }).click();
+const deleteResumeDialog = desktopPage.getByRole('dialog', { name: 'Delete resume?' });
+report.checks.resumeDeleteDialog = await deleteResumeDialog.isVisible();
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-delete-resume-dialog.png') });
+await deleteResumeDialog.getByRole('button', { name: 'Delete' }).click();
+report.checks.resumeDelete =
+  (await desktopPage.locator('.resume-library-card').count()) === resumeCountBeforeDuplicate &&
+  !(await desktopPage.getByText('Avery Chen - Product Designer Copy', { exact: true }).isVisible());
 
 await desktopPage.getByRole('button', { name: 'Edit Jordan Lee - Android Developer' }).click();
 report.checks.resumeIsolation =
   (await desktopPage.locator('.resume-name-block p').getByText('Senior Android Developer', { exact: true }).isVisible()) &&
   (await desktopPage.locator('.resume-page.template-compact').isVisible()) &&
   (await desktopPage.locator('.zoom-value').textContent())?.trim() === '100%';
+report.checks.compactTypography = await desktopPage.locator('.resume-page.template-compact').evaluate(
+  (element) => {
+    const style = window.getComputedStyle(element);
+    return style.fontFamily === 'Arial, Helvetica, sans-serif' && style.fontSize === '9.3px';
+  },
+);
 await desktopPage.getByRole('button', { name: 'Back to resumes' }).click();
 report.checks.desktopMetrics = await pageMetrics(desktopPage);
 await desktop.close();
@@ -311,6 +358,12 @@ report.checks.mobileLibraryVisible = await mobilePage
   .getByRole('heading', { name: 'My resumes' })
   .isVisible();
 await mobilePage.screenshot({ path: join(tmpdir(), 'draftline-playwright-library-mobile.png') });
+await mobilePage.getByRole('button', { name: 'New resume' }).click();
+const mobileNewResumeDialog = mobilePage.getByRole('dialog', { name: 'New resume' });
+report.checks.mobileNewResumeDialog =
+  (await mobileNewResumeDialog.isVisible()) &&
+  (await mobileNewResumeDialog.getByRole('button', { name: 'Save' }).isDisabled());
+await mobileNewResumeDialog.getByRole('button', { name: 'Cancel' }).click();
 await mobilePage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
 report.checks.mobileMetrics = await pageMetrics(mobilePage);
 report.checks.mobileEditVisible = await mobilePage.locator('.editor-panel').isVisible();
