@@ -1202,10 +1202,19 @@ function App() {
       if (!response.ok) {
         throw new Error(textValue(payload.error, 'Unable to import personal details right now.'));
       }
-      if (!['chinese', 'english'].includes(payload.language) || !isRecord(payload.profile)) {
+      if (!['chinese', 'english'].includes(payload.language)) {
         throw new Error('The imported personal details could not be read. Please try again.');
       }
-      return payload;
+      const profiles = isRecord(payload.profiles) ? payload.profiles : {
+        [payload.language]: payload.profile,
+      };
+      if (!isRecord(profiles[payload.language])) {
+        throw new Error('The imported personal details could not be read. Please try again.');
+      }
+      return {
+        ...payload,
+        profiles: normalizeUserProfile(profiles),
+      };
     } finally {
       setProfileImporting(false);
     }
@@ -1234,10 +1243,6 @@ function App() {
         : null,
     });
   }, [runProfileRequest]);
-
-  const translateImportedProfile = useCallback((language, profile) =>
-    runProfileRequest('/api/translate-profile', { language, profile }),
-  [runProfileRequest]);
 
   const generateResumeFromJobDescription = useCallback(async ({
     jobDescription,
@@ -1349,7 +1354,6 @@ function App() {
         userProfile={userProfile}
         onProfileSave={saveUserProfile}
         onImportProfile={importProfileFromResume}
-        onTranslateImportedProfile={translateImportedProfile}
         onGenerate={generateResumeFromJobDescription}
     />
   );
@@ -1807,7 +1811,6 @@ function ResumeLibrary({
   userProfile,
   onProfileSave,
   onImportProfile,
-  onTranslateImportedProfile,
   onGenerate,
 }) {
   const [query, setQuery] = useState('');
@@ -1985,7 +1988,6 @@ function ResumeLibrary({
           onSave={onProfileSave}
           onComplete={() => setProfileDialogOpen(false)}
           onImport={onImportProfile}
-          onTranslateImportedProfile={onTranslateImportedProfile}
         />
       )}
       {generatorDialogOpen && (
@@ -2364,7 +2366,7 @@ function NewResumeDialog({ onCancel, onSave }) {
   );
 }
 
-function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport, onTranslateImportedProfile }) {
+function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport }) {
   const [language, setLanguage] = useState('chinese');
   const [draft, setDraft] = useState(() => normalizeUserProfile(profile));
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -2386,7 +2388,8 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
   const applyImportedProfile = async (source) => {
     const imported = await onImport(source);
     const importedLanguage = imported.language;
-    const normalizedFields = normalizeUserProfile({ [importedLanguage]: imported.profile })[importedLanguage];
+    const importedProfiles = normalizeUserProfile(imported.profiles);
+    const normalizedFields = importedProfiles[importedLanguage];
     const nextDraft = {
       ...draft,
       [importedLanguage]: normalizedFields,
@@ -2394,21 +2397,21 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
     if (!onSave(nextDraft)) throw new Error('The imported personal details could not be saved locally.');
     setDraft(nextDraft);
     setLanguage(importedLanguage);
-    setImportedProfile({ language: importedLanguage, profile: normalizedFields });
+    setImportedProfile({ language: importedLanguage, profiles: importedProfiles });
     setImportDialogOpen(false);
   };
 
-  const syncImportedProfile = async () => {
+  const syncImportedProfile = () => {
     if (!importedProfile) return;
-    const translated = await onTranslateImportedProfile(importedProfile.language, importedProfile.profile);
-    const translatedFields = normalizeUserProfile({ [translated.language]: translated.profile })[translated.language];
+    const targetLanguage = importedProfile.language === 'chinese' ? 'english' : 'chinese';
+    const translatedFields = importedProfile.profiles[targetLanguage];
     const nextDraft = {
       ...draft,
-      [translated.language]: translatedFields,
+      [targetLanguage]: translatedFields,
     };
-    if (!onSave(nextDraft)) throw new Error('The translated personal details could not be saved locally.');
+    if (!onSave(nextDraft)) throw new Error('The imported personal details could not be saved locally.');
     setDraft(nextDraft);
-    setLanguage(translated.language);
+    setLanguage(targetLanguage);
     setImportedProfile(null);
   };
 

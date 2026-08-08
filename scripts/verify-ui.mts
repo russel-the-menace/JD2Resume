@@ -126,21 +126,36 @@ await desktopPage.route('**/api/import-profile', async (route) => {
     contentType: 'application/json',
     body: JSON.stringify({
       language: 'chinese',
-      profile: {
-        fullName: '张三',
-        gender: '男',
-        phone: '13800138000',
-        email: 'zhangsan@example.com',
-        location: '上海',
-        wechat: 'zhangsan',
-        linkedin: '',
-        website: 'zhangsan.design',
-        summary: '产品设计师，拥有企业软件设计经验。',
+      profiles: {
+        chinese: {
+          fullName: '张三',
+          gender: '男',
+          phone: '13800138000',
+          email: 'zhangsan@example.com',
+          location: '上海',
+          wechat: 'zhangsan',
+          linkedin: '',
+          website: 'zhangsan.design',
+          summary: '产品设计师，拥有企业软件设计经验。',
+        },
+        english: {
+          fullName: 'Zhang San',
+          gender: 'Male',
+          phone: '13800138000',
+          email: 'zhangsan@example.com',
+          location: 'Shanghai',
+          wechat: 'zhangsan',
+          linkedin: '',
+          website: 'zhangsan.design',
+          summary: 'Product designer with enterprise software experience.',
+        },
       },
     }),
   });
 });
+let profileTranslationCalls = 0;
 await desktopPage.route('**/api/translate-profile', async (route) => {
+  profileTranslationCalls += 1;
   await route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -170,12 +185,16 @@ report.checks.profileImportDialog =
 await profileImportDialog.getByLabel('Resume content').fill('张三是一名产品设计师，居住在上海。邮箱 zhangsan@example.com，电话 13800138000。');
 await profileImportDialog.getByRole('button', { name: 'Import details' }).click();
 await desktopPage.locator('.profile-import-loading').waitFor({ state: 'visible' });
+report.checks.profileImportLoadingKeepsCursor = await desktopPage.locator('.profile-import-loading').evaluate(
+  (element) => getComputedStyle(element).cursor !== 'wait',
+);
 const profileSyncDialog = desktopPage.getByRole('dialog', { name: 'Create English profile too?' });
 await profileSyncDialog.waitFor({ state: 'visible' });
 await profileSyncDialog.getByRole('button', { name: 'Create English profile' }).click();
 await profileDialog.getByLabel('Full name').waitFor({ state: 'visible' });
 report.checks.profileImportDualLanguage =
   (await profileDialog.getByLabel('Full name').inputValue()) === 'Zhang San';
+report.checks.profileImportUsesReturnedBilingualData = profileTranslationCalls === 0;
 await profileDialog.getByRole('button', { name: '中文', exact: true }).click();
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-personal-profile-dialog.png') });
 await profileDialog.getByLabel('姓名').fill('张三');

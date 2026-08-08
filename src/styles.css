@@ -308,7 +308,6 @@ button:disabled {
   padding: 24px;
   background: rgba(28, 31, 29, 0.52);
   backdrop-filter: blur(4px);
-  cursor: wait;
 }
 
 .profile-import-loading-content {

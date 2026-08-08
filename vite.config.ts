@@ -57,7 +57,7 @@ function buildResumePrompt(input: Record<string, any>) {
 }
 
 function buildProfileImportPrompt(resumeText: string) {
-  return `You extract personal profile details from a resume. Return valid JSON only. Detect whether the resume is primarily Chinese or English. Use only explicit resume facts. Never invent a name, gender, contact details, location, social account, website, or summary.\n\nReturn exactly this JSON shape:\n{\n  "language": "chinese or english",\n  "profile": {\n    "fullName": "string",\n    "gender": "string",\n    "phone": "string",\n    "email": "string",\n    "location": "string",\n    "wechat": "string",\n    "linkedin": "string",\n    "website": "string",\n    "summary": "string"\n  }\n}\n\nFor Chinese profiles use Chinese values when they are known, including gender values 男, 女, or 其他. For English profiles use English values, including Male, Female, Non-binary, or Prefer not to say only when explicit. Leave unknown fields empty. The summary may be a concise factual synthesis of the resume in its detected language.\n\nResume text:\n${resumeText}`;
+  return `You extract personal profile details from a resume. Return valid JSON only. Detect whether the resume is primarily Chinese or English, then provide both a Chinese and an English profile in the same response. Use only explicit resume facts. Never invent a name, gender, contact details, location, social account, website, or summary. Preserve exact factual values such as email addresses, phone numbers, websites, and account handles across both profiles. Translate human-readable fields such as names, locations, gender, and summaries when appropriate.\n\nReturn exactly this JSON shape:\n{\n  "language": "chinese or english",\n  "profiles": {\n    "chinese": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    },\n    "english": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    }\n  }\n}\n\nFor Chinese profiles use Chinese values when they are known, including gender values 男, 女, or 其他. For English profiles use English values, including Male, Female, Non-binary, or Prefer not to say only when explicit. Leave unknown fields empty. The summary may be a concise factual synthesis of the resume in its target language.\n\nResume text:\n${resumeText}`;
 }
 
 function buildProfileTranslationPrompt(sourceLanguage: string, profile: Record<string, any>) {
@@ -162,6 +162,26 @@ function validProfileResponse(value: any) {
   return isRecord(value) && ['english', 'chinese'].includes(value.language) && isRecord(value.profile);
 }
 
+function validProfileImportResponse(value: any) {
+  return isRecord(value) && ['english', 'chinese'].includes(value.language) &&
+    ((isRecord(value.profiles) && isRecord(value.profiles.chinese) && isRecord(value.profiles.english)) ||
+      isRecord(value.profile));
+}
+
+function normalizeProfileImportResponse(value: Record<string, any>) {
+  const sourceLanguage = value.language === 'chinese' ? 'chinese' : 'english';
+  const profiles = isRecord(value.profiles) ? value.profiles : {
+    [sourceLanguage]: isRecord(value.profile) ? value.profile : {},
+  };
+  return {
+    language: sourceLanguage,
+    profiles: {
+      chinese: isRecord(profiles.chinese) ? profiles.chinese : {},
+      english: isRecord(profiles.english) ? profiles.english : {},
+    },
+  };
+}
+
 function resumeGenerationPlugin(providers: Provider[]): Plugin {
   const parseInput = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (request.method !== 'POST') {
@@ -235,9 +255,9 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
         providers,
         'Return extracted personal profile details as valid JSON. Do not use markdown or add commentary.',
         buildProfileImportPrompt(resumeText),
-        validProfileResponse,
+        validProfileImportResponse,
       );
-      sendJson(response, 200, imported);
+      sendJson(response, 200, normalizeProfileImportResponse(imported));
     } catch {
       sendJson(response, 502, { error: 'The profile import service is unavailable. Please try again.' });
     }
