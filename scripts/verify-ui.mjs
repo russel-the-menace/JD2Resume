@@ -106,6 +106,58 @@ report.checks.livePreview = await desktopPage
   .isVisible();
 
 await desktopPage.getByRole('button', { name: /Template/ }).click();
+await desktopPage.getByRole('button', { name: /Profile/ }).click();
+await desktopPage.waitForTimeout(100);
+const profileHeadings = await desktopPage.locator('.resume-page.template-profile .resume-section h3').allTextContents();
+report.checks.profileTemplateSwitch =
+  (await desktopPage.locator('.resume-page.template-profile').isVisible()) &&
+  (await desktopPage.locator('.resume-profile-avatar').isVisible());
+report.checks.profileReferenceFont = await desktopPage.locator('.resume-page.template-profile').evaluate(
+  (element) => {
+    const fontFamily = window.getComputedStyle(element).fontFamily;
+    return fontFamily.includes('PingFang SC') && fontFamily.includes('Microsoft YaHei');
+  },
+);
+report.checks.profileReferenceStructure =
+  JSON.stringify(profileHeadings) === JSON.stringify([
+    'Personal Introduction',
+    'Education',
+    'Work Experience',
+    'Professional Skills',
+  ]) &&
+  (await desktopPage.locator('.profile-work-entry').first().getByText(
+    'Northwind Labs - Lead Product Designer',
+    { exact: true },
+  ).isVisible());
+report.checks.profileContentFits = await desktopPage.locator('.resume-page.template-profile').evaluate((element) =>
+  element.clientHeight === element.scrollHeight,
+);
+
+await desktopPage.getByRole('button', { name: 'Personal details' }).click();
+report.checks.personalWebsiteField =
+  (await desktopPage.getByLabel('个人网站').getAttribute('placeholder')) === '[网站名]https://...';
+await desktopPage.getByLabel('Profile photo URL').fill(
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLQKgAAAABJRU5ErkJggg==',
+);
+report.checks.profilePhoto =
+  (await desktopPage.locator('.resume-profile-avatar img').isVisible()) &&
+  !(await desktopPage.locator('.resume-profile-avatar .profile-avatar-initials').isVisible());
+await desktopPage.getByLabel('Upload profile photo').setInputFiles({
+  name: 'avatar.png',
+  mimeType: 'image/png',
+  buffer: Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLQKgAAAABJRU5ErkJggg==',
+    'base64',
+  ),
+});
+report.checks.profilePhotoUpload = await desktopPage.locator('.details-avatar img').isVisible();
+report.checks.uploadedPhotoUrlHidden = !(await desktopPage.getByLabel('Profile photo URL').isVisible());
+
+await desktopPage.getByLabel('Phone').fill('');
+report.checks.emptyPhoneHidden =
+  (await desktopPage.locator('.resume-page .resume-contact svg.lucide-phone').count()) === 0;
+
+await desktopPage.getByRole('button', { name: /Template/ }).click();
 await desktopPage.getByRole('button', { name: /Classic/ }).click();
 report.checks.templateSwitch = await desktopPage.locator('.resume-page.template-classic').isVisible();
 
@@ -115,6 +167,25 @@ report.checks.accentSwitch =
   (await desktopPage.locator('.resume-page').evaluate((element) =>
     element.style.getPropertyValue('--resume-accent'),
   )) === '#2e5aac';
+
+await desktopPage.getByRole('button', { name: 'Choose accent color' }).click();
+await desktopPage.getByRole('button', { name: 'Use color #3498db' }).click();
+report.checks.referenceBlueAccent =
+  (await desktopPage.locator('.resume-page').evaluate((element) =>
+    element.style.getPropertyValue('--resume-accent'),
+  )) === '#3498db';
+
+await desktopPage.getByRole('button', { name: 'Choose accent color' }).click();
+await desktopPage.getByLabel('Choose a custom accent color').evaluate((input) => {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  setter.call(input, '#d45b2c');
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+});
+report.checks.customAccent =
+  (await desktopPage.locator('.resume-page').evaluate((element) =>
+    element.style.getPropertyValue('--resume-accent'),
+  )) === '#d45b2c';
 
 await desktopPage.getByRole('button', { name: /Improve with AI/ }).click();
 report.checks.aiDialog = await desktopPage.getByRole('dialog').isVisible();
@@ -187,7 +258,7 @@ report.checks.templatePersisted = await desktopPage.locator('.resume-page.templa
 report.checks.accentPersisted =
   (await desktopPage.locator('.resume-page').evaluate((element) =>
     element.style.getPropertyValue('--resume-accent'),
-  )) === '#2e5aac';
+  )) === '#d45b2c';
 report.checks.customSectionPersisted =
   (await desktopPage.getByLabel('Entry title').inputValue()) === 'Persistent portfolio case study';
 report.checks.zoomPersisted =
@@ -271,6 +342,31 @@ report.checks.corruptStorageRecovery =
   (await recoveryPage.getByLabel('Resume name').inputValue()) === 'Jordan Lee - Product Designer' &&
   (await recoveryPage.locator('.resume-page').getByText('Jordan Lee', { exact: true }).isVisible());
 await recovery.close();
+
+const reorder = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+const reorderPage = await reorder.newPage();
+await attachDiagnostics(reorderPage);
+await reorderPage.goto(baseUrl, { waitUntil: 'networkidle' });
+await reorderPage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
+await reorderPage.locator('.section-nav-item').filter({ hasText: 'Skills' }).dragTo(
+  reorderPage.locator('.section-nav-item').filter({ hasText: 'Experience' }),
+);
+const reorderedLabels = await reorderPage.locator('.section-nav-item .section-label').allTextContents();
+const reorderedPreview = await reorderPage.locator('.resume-section h3').allTextContents();
+report.checks.sectionReorder =
+  JSON.stringify(reorderedLabels) === JSON.stringify([
+    'Personal details',
+    'Professional summary',
+    'Skills',
+    'Experience',
+    'Education',
+  ]) &&
+  JSON.stringify(reorderedPreview) === JSON.stringify(['Profile', 'Skills', 'Experience', 'Education']);
+await reorderPage.reload({ waitUntil: 'networkidle' });
+report.checks.sectionOrderPersisted = JSON.stringify(
+  await reorderPage.locator('.section-nav-item .section-label').allTextContents(),
+) === JSON.stringify(reorderedLabels);
+await reorder.close();
 
 await browser.close();
 

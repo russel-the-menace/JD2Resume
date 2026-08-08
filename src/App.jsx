@@ -43,6 +43,7 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Upload,
   UserRound,
   WandSparkles,
   X,
@@ -59,7 +60,7 @@ const initialResume = {
     phone: '(415) 555-0148',
     location: 'San Francisco, CA',
     website: 'jordanlee.design',
-    linkedin: 'linkedin.com/in/jordanlee',
+    photoUrl: '',
   },
   summary:
     'Product designer with 7+ years of experience turning complex workflows into clear, high-impact products. Skilled at connecting customer insight, business goals, and design systems to ship experiences that scale.',
@@ -121,9 +122,10 @@ const templateOptions = [
   { id: 'classic', name: 'Classic', detail: 'Traditional' },
   { id: 'modern', name: 'Modern', detail: 'Balanced' },
   { id: 'compact', name: 'Compact', detail: 'Space-saving' },
+  { id: 'profile', name: 'Profile', detail: 'Editorial' },
 ];
 
-const accentOptions = ['#167c65', '#2e5aac', '#a34636', '#5f4b8b', '#2f3438'];
+const accentOptions = ['#167c65', '#3498db', '#2e5aac', '#a34636', '#5f4b8b', '#2f3438'];
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2.5;
 const ZOOM_STEP = 0.1;
@@ -184,6 +186,12 @@ function textValue(value, fallback = '') {
   return typeof value === 'string' ? value : fallback;
 }
 
+function normalizeAccent(value, fallback = accentOptions[0]) {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
+    ? value.toLowerCase()
+    : fallback;
+}
+
 function normalizeResumeData(value) {
   const source = isRecord(value) ? value : {};
   const basics = isRecord(source.basics) ? source.basics : {};
@@ -229,8 +237,11 @@ function normalizeResumeData(value) {
       email: textValue(basics.email, initialResume.basics.email),
       phone: textValue(basics.phone, initialResume.basics.phone),
       location: textValue(basics.location, initialResume.basics.location),
-      website: textValue(basics.website, initialResume.basics.website),
-      linkedin: textValue(basics.linkedin, initialResume.basics.linkedin),
+      website: textValue(
+        basics.website,
+        textValue(basics.linkedin, initialResume.basics.website),
+      ),
+      photoUrl: textValue(basics.photoUrl, initialResume.basics.photoUrl),
     },
     summary: textValue(source.summary, initialResume.summary),
     experience,
@@ -247,6 +258,22 @@ function normalizeResumeData(value) {
 function normalizeCustomSections(value) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((id) => Object.hasOwn(emptyCustomSection, id)))];
+}
+
+function defaultSectionOrder(template, customSections) {
+  const baseOrder = template === 'profile'
+    ? ['basics', 'summary', 'education', 'experience', 'skills']
+    : baseSections.map((section) => section.id);
+  return [...baseOrder, ...customSections];
+}
+
+function normalizeSectionOrder(value, customSections, template = 'modern') {
+  const defaultOrder = defaultSectionOrder(template, customSections);
+  const allowed = new Set(defaultOrder);
+  const storedOrder = Array.isArray(value)
+    ? value.filter((id) => typeof id === 'string' && allowed.has(id))
+    : [];
+  return [...new Set([...storedOrder, ...defaultOrder])];
 }
 
 function normalizeCustomContent(sectionIds, value) {
@@ -268,15 +295,18 @@ function loadResumeSnapshot() {
   const stored = storedJson(RESUME_STORAGE_KEY);
   const source = isRecord(stored) ? stored : {};
   const customSections = normalizeCustomSections(source.customSections);
+  const template = templateOptions.some((option) => option.id === source.template)
+    ? source.template
+    : 'modern';
   return {
     documentName: textValue(source.documentName, DEFAULT_DOCUMENT_NAME),
     data: normalizeResumeData(source.data),
-    template: templateOptions.some((option) => option.id === source.template)
-      ? source.template
-      : 'modern',
-    accent: accentOptions.includes(source.accent) ? source.accent : accentOptions[0],
+    template,
+    accent: normalizeAccent(source.accent),
     customSections,
     customContent: normalizeCustomContent(customSections, source.customContent),
+    sectionOrder: normalizeSectionOrder(source.sectionOrder, customSections, template),
+    sectionOrderCustomized: source.sectionOrderCustomized === true,
   };
 }
 
@@ -294,6 +324,8 @@ function roleResumeSnapshot({ documentName, role, summary, experience, skills, t
     accent,
     customSections: [],
     customContent: {},
+    sectionOrder: defaultSectionOrder(template, []),
+    sectionOrderCustomized: false,
   };
 }
 
@@ -389,15 +421,19 @@ function androidDeveloperSnapshot() {
 
 function normalizeResumeDocument(value, index) {
   const source = isRecord(value) ? value : {};
+  const template = templateOptions.some((option) => option.id === source.template)
+    ? source.template
+    : 'modern';
+  const customSections = normalizeCustomSections(source.customSections);
   const snapshot = {
     documentName: textValue(source.documentName, `Resume ${index + 1}`),
     data: normalizeResumeData(source.data),
-    template: templateOptions.some((option) => option.id === source.template)
-      ? source.template
-      : 'modern',
-    accent: accentOptions.includes(source.accent) ? source.accent : accentOptions[0],
-    customSections: normalizeCustomSections(source.customSections),
+    template,
+    accent: normalizeAccent(source.accent),
+    customSections,
     customContent: {},
+    sectionOrder: normalizeSectionOrder(source.sectionOrder, customSections, template),
+    sectionOrderCustomized: source.sectionOrderCustomized === true,
   };
   snapshot.customContent = normalizeCustomContent(snapshot.customSections, source.customContent);
   return {
@@ -440,7 +476,7 @@ function blankResumeSnapshot() {
         phone: initialResume.basics.phone,
         location: initialResume.basics.location,
         website: initialResume.basics.website,
-        linkedin: initialResume.basics.linkedin,
+        photoUrl: initialResume.basics.photoUrl,
       },
       summary: '',
       experience: [],
@@ -451,6 +487,8 @@ function blankResumeSnapshot() {
     accent: accentOptions[0],
     customSections: [],
     customContent: {},
+    sectionOrder: defaultSectionOrder('modern', []),
+    sectionOrderCustomized: false,
   };
 }
 
@@ -466,6 +504,8 @@ function resumeSnapshotEqual(document, snapshot) {
     accent: document.accent,
     customSections: document.customSections,
     customContent: document.customContent,
+    sectionOrder: document.sectionOrder,
+    sectionOrderCustomized: document.sectionOrderCustomized,
   }) === JSON.stringify(snapshot);
 }
 
@@ -601,6 +641,7 @@ function App() {
       data: normalizeResumeData(source.data),
       customSections: [...source.customSections],
       customContent: normalizeCustomContent(source.customSections, source.customContent),
+      sectionOrder: [...source.sectionOrder],
       updatedAt: Date.now(),
     };
     persistLibrary({
@@ -654,6 +695,10 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
   const [aiPanel, setAiPanel] = useState(false);
   const [customSections, setCustomSections] = useState(initialResumeState.customSections);
   const [customContent, setCustomContent] = useState(initialResumeState.customContent);
+  const [sectionOrder, setSectionOrder] = useState(initialResumeState.sectionOrder);
+  const [sectionOrderCustomized, setSectionOrderCustomized] = useState(
+    initialResumeState.sectionOrderCustomized,
+  );
   const [documentName, setDocumentName] = useState(initialResumeState.documentName);
   const [previewPosition, setPreviewPosition] = useState(initialWorkspaceState.previewPosition);
   const [saveState, setSaveState] = useState('Saved');
@@ -682,6 +727,8 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
       accent,
       customSections,
       customContent,
+      sectionOrder,
+      sectionOrderCustomized,
     });
     if (!saved) {
       setSaveState('Save failed');
@@ -689,7 +736,18 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
     }
     const timer = window.setTimeout(() => setSaveState('Saved'), 260);
     return () => window.clearTimeout(timer);
-  }, [accent, customContent, customSections, data, documentName, onResumeChange, resumeId, template]);
+  }, [
+    accent,
+    customContent,
+    customSections,
+    data,
+    documentName,
+    onResumeChange,
+    resumeId,
+    sectionOrder,
+    sectionOrderCustomized,
+    template,
+  ]);
 
   useEffect(() => {
     try {
@@ -820,7 +878,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
     return Math.min(total, 96);
   }, [data, customSections]);
 
-  const sections = [
+  const sectionDefinitions = [
     ...baseSections,
     ...customSections.map((sectionId) => ({
       id: sectionId,
@@ -828,10 +886,14 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
       icon: sectionSuggestions.find((item) => item.id === sectionId)?.icon || Award,
     })),
   ];
+  const sections = sectionOrder
+    .map((id) => sectionDefinitions.find((section) => section.id === id))
+    .filter(Boolean);
 
   const addCustomSection = (id) => {
     if (!customSections.includes(id)) {
       setCustomSections((current) => [...current, id]);
+      setSectionOrder((current) => [...current.filter((sectionId) => sectionId !== id), id]);
       setCustomContent((current) => ({
         ...current,
         [id]: { ...emptyCustomSection[id] },
@@ -841,6 +903,20 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
     setSectionMenu(false);
     setMobileMode('edit');
     setToast(`${emptyCustomSection[id].title} added`);
+  };
+
+  const reorderSections = (sourceId, targetId) => {
+    if (sourceId === targetId) return;
+    setSectionOrder((current) => {
+      const sourceIndex = current.indexOf(sourceId);
+      const targetIndex = current.indexOf(targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      const next = current.filter((id) => id !== sourceId);
+      next.splice(next.indexOf(targetId), 0, sourceId);
+      return next;
+    });
+    setSectionOrderCustomized(true);
+    setToast('Section order updated');
   };
 
   const applyAiSummary = () => {
@@ -857,6 +933,8 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
     setHistory({ past: [], present: normalizeResumeData(null), future: [] });
     setCustomSections([]);
     setCustomContent({});
+    setSectionOrder(defaultSectionOrder('modern', []));
+    setSectionOrderCustomized(false);
     setDocumentName(DEFAULT_DOCUMENT_NAME);
     setTemplate('modern');
     setAccent(accentOptions[0]);
@@ -900,6 +978,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
           setSectionMenu={setSectionMenu}
           customSections={customSections}
           addCustomSection={addCustomSection}
+          onReorder={reorderSections}
         />
 
         <EditorPanel
@@ -939,6 +1018,8 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
           setTemplateMenu={setTemplateMenu}
           customSections={customSections}
           customContent={customContent}
+          sectionOrder={sectionOrder}
+          sectionOrderCustomized={sectionOrderCustomized}
         />
       </main>
 
@@ -1101,9 +1182,13 @@ function ResumeLibraryCard({ resume, menuOpen, onToggleMenu, onOpen, onDuplicate
 
 function ResumeCardPreview({ resume }) {
   const name = `${resume.data.basics.firstName} ${resume.data.basics.lastName}`.trim();
+  const initials = `${resume.data.basics.firstName?.[0] || 'Y'}${resume.data.basics.lastName?.[0] || ''}`;
   return (
     <span className={cx('resume-card-canvas', `card-template-${resume.template}`)} style={{ '--card-accent': resume.accent }}>
       <span className="resume-card-paper">
+        {resume.template === 'profile' && (
+          <ProfileAvatar photoUrl={resume.data.basics.photoUrl} initials={initials} className="card-profile-avatar" />
+        )}
         <span className="card-paper-header">
           <strong>{name || 'Your name'}</strong>
           <small>{resume.data.basics.role || 'Target role'}</small>
@@ -1336,7 +1421,20 @@ function OutlineSidebar({
   setSectionMenu,
   customSections,
   addCustomSection,
+  onReorder,
 }) {
+  const [draggedSectionId, setDraggedSectionId] = useState(null);
+  const [dropTargetId, setDropTargetId] = useState(null);
+  const ignoreClickRef = useRef(false);
+
+  const finishDrag = () => {
+    setDraggedSectionId(null);
+    setDropTargetId(null);
+    window.setTimeout(() => {
+      ignoreClickRef.current = false;
+    }, 0);
+  };
+
   return (
     <aside className="outline-sidebar">
       <div className="score-block">
@@ -1365,16 +1463,49 @@ function OutlineSidebar({
       </div>
 
       <nav className="section-nav" aria-label="Resume sections">
-        {sections.map(({ id, label, icon: Icon }, index) => (
+        {sections.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
-            className={cx('section-nav-item', activeSection === id && 'active')}
-            onClick={() => onSelect(id)}
+            draggable
+            aria-grabbed={draggedSectionId === id}
+            className={cx(
+              'section-nav-item',
+              activeSection === id && 'active',
+              draggedSectionId === id && 'dragging',
+              dropTargetId === id && draggedSectionId !== id && 'drop-target',
+            )}
+            onClick={(event) => {
+              if (ignoreClickRef.current) {
+                event.preventDefault();
+                return;
+              }
+              onSelect(id);
+            }}
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', id);
+              ignoreClickRef.current = true;
+              setDraggedSectionId(id);
+              setDropTargetId(id);
+            }}
+            onDragOver={(event) => {
+              if (!draggedSectionId || draggedSectionId === id) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              setDropTargetId(id);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const sourceId = event.dataTransfer.getData('text/plain') || draggedSectionId;
+              if (sourceId) onReorder(sourceId, id);
+              finishDrag();
+            }}
+            onDragEnd={finishDrag}
           >
             <GripVertical className="drag-icon" size={15} />
             <span className="section-icon"><Icon size={16} /></span>
             <span className="section-label">{label}</span>
-            {index < 5 ? (
+            {baseSections.some((section) => section.id === id) ? (
               <CheckCircle2 className="complete-icon" size={16} />
             ) : (
               <Circle className="complete-icon" size={16} />
@@ -1510,11 +1641,45 @@ function EditorPanel({
 }
 
 function BasicsEditor({ basics, onChange }) {
+  const initials = `${basics.firstName?.[0] || 'Y'}${basics.lastName?.[0] || ''}`;
+  const hasUploadedPhoto = basics.photoUrl.startsWith('data:');
+  const uploadPhoto = (event) => {
+    const [file] = event.target.files || [];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      if (typeof reader.result === 'string') onChange('photoUrl', reader.result);
+    });
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
   return (
     <div className="form-content">
       <div className="form-grid two-columns">
         <Field label="First name" value={basics.firstName} onChange={(value) => onChange('firstName', value)} />
         <Field label="Last name" value={basics.lastName} onChange={(value) => onChange('lastName', value)} />
+      </div>
+      <div className="profile-photo-field">
+        <span>Profile photo</span>
+        <div className="profile-photo-controls">
+          <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="details-avatar" />
+          <label className="avatar-upload" title="Upload profile photo">
+            <Upload size={16} />
+            <input type="file" accept="image/*" onChange={uploadPhoto} aria-label="Upload profile photo" />
+          </label>
+          {basics.photoUrl && (
+            <button
+              type="button"
+              className="icon-button small"
+              onClick={() => onChange('photoUrl', '')}
+              aria-label="Remove profile photo"
+              title="Remove profile photo"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
       </div>
       <Field label="Professional title" value={basics.role} onChange={(value) => onChange('role', value)} />
       <div className="form-grid two-columns">
@@ -1522,10 +1687,15 @@ function BasicsEditor({ basics, onChange }) {
         <Field label="Phone" value={basics.phone} onChange={(value) => onChange('phone', value)} />
       </div>
       <Field label="Location" value={basics.location} onChange={(value) => onChange('location', value)} />
-      <div className="form-grid two-columns">
-        <Field label="Portfolio" value={basics.website} onChange={(value) => onChange('website', value)} />
-        <Field label="LinkedIn" value={basics.linkedin} onChange={(value) => onChange('linkedin', value)} />
-      </div>
+      <Field
+        label="个人网站"
+        value={basics.website}
+        placeholder="[网站名]https://..."
+        onChange={(value) => onChange('website', value)}
+      />
+      {!hasUploadedPhoto && (
+        <Field label="Profile photo URL" type="url" value={basics.photoUrl} onChange={(value) => onChange('photoUrl', value)} />
+      )}
     </div>
   );
 }
@@ -1739,7 +1909,7 @@ function CustomSectionEditor({ content, onChange }) {
   );
 }
 
-function Field({ label, value, onChange, type = 'text', disabled = false }) {
+function Field({ label, value, onChange, type = 'text', disabled = false, placeholder = '' }) {
   return (
     <label className="field">
       <span>{label}</span>
@@ -1747,6 +1917,7 @@ function Field({ label, value, onChange, type = 'text', disabled = false }) {
         type={type}
         value={value}
         disabled={disabled}
+        placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
@@ -1767,9 +1938,22 @@ function PreviewPanel({
   setTemplateMenu,
   customSections,
   customContent,
+  sectionOrder,
+  sectionOrderCustomized,
 }) {
   const [colorMenu, setColorMenu] = useState(false);
+  const [profilePageHeight, setProfilePageHeight] = useState(932);
   const zoomPercent = Math.round(zoom * 100);
+  const pageHeight = template === 'profile' ? profilePageHeight : 932;
+  const pageCount = Math.max(1, Math.ceil(pageHeight / 932));
+  const updateProfilePageHeight = useCallback((height) => {
+    setProfilePageHeight((current) => (Math.abs(current - height) < 1 ? current : height));
+  }, []);
+
+  useEffect(() => {
+    if (template !== 'profile') setProfilePageHeight(932);
+  }, [template]);
+
   const changeZoom = (delta) => {
     setZoom((current) =>
       Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +(current + delta).toFixed(2))),
@@ -1780,7 +1964,7 @@ function PreviewPanel({
       <div className="preview-toolbar">
         <div className="preview-toolbar-left">
           <span className="preview-label"><Eye size={15} /> Preview</span>
-          <span className="page-count">1 page</span>
+          <span className="page-count">{pageCount} {pageCount === 1 ? 'page' : 'pages'}</span>
         </div>
         <div className="preview-toolbar-actions">
           <div className="toolbar-popover-wrap">
@@ -1807,7 +1991,7 @@ function PreviewPanel({
             {colorMenu && (
               <div className="color-popover">
                 <span>Accent color</span>
-                <div>
+                <div className="color-swatches">
                   {accentOptions.map((color) => (
                     <button
                       key={color}
@@ -1822,6 +2006,17 @@ function PreviewPanel({
                       {accent === color && <Check size={14} />}
                     </button>
                   ))}
+                  <label className="custom-color-control" title="Choose a custom accent color">
+                    <input
+                      type="color"
+                      value={accent}
+                      onChange={(event) => {
+                        setAccent(normalizeAccent(event.target.value));
+                        setColorMenu(false);
+                      }}
+                      aria-label="Choose a custom accent color"
+                    />
+                  </label>
                 </div>
               </div>
             )}
@@ -1851,6 +2046,7 @@ function PreviewPanel({
       <ResumeStage
         zoom={zoom}
         setZoom={setZoom}
+        pageHeight={pageHeight}
         initialPosition={previewPosition}
         onPositionChange={onPreviewPositionChange}
       >
@@ -1860,6 +2056,9 @@ function PreviewPanel({
           accent={accent}
           customSections={customSections}
           customContent={customContent}
+          sectionOrder={sectionOrder}
+          sectionOrderCustomized={sectionOrderCustomized}
+          onContentHeightChange={updateProfilePageHeight}
         />
       </ResumeStage>
     </section>
@@ -1902,7 +2101,7 @@ function MiniResume({ variant }) {
   );
 }
 
-function ResumeStage({ zoom, setZoom, initialPosition, onPositionChange, children }) {
+function ResumeStage({ zoom, setZoom, pageHeight, initialPosition, onPositionChange, children }) {
   const stageRef = useRef(null);
   const dragRef = useRef(null);
   const positionTimerRef = useRef(null);
@@ -1911,7 +2110,6 @@ function ResumeStage({ zoom, setZoom, initialPosition, onPositionChange, childre
   const [fitScale, setFitScale] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const pageWidth = 720;
-  const pageHeight = 932;
 
   useLayoutEffect(() => {
     const element = stageRef.current;
@@ -1932,7 +2130,7 @@ function ResumeStage({ zoom, setZoom, initialPosition, onPositionChange, childre
     const observer = new ResizeObserver(updateScale);
     observer.observe(element, { box: 'border-box' });
     return () => observer.disconnect();
-  }, []);
+  }, [pageHeight]);
 
   useLayoutEffect(() => {
     const element = stageRef.current;
@@ -2029,7 +2227,7 @@ function ResumeStage({ zoom, setZoom, initialPosition, onPositionChange, childre
         className="resume-scale-wrap"
         style={{ width: pageWidth * scale, height: pageHeight * scale }}
       >
-        <div className="resume-transform" style={{ transform: `scale(${scale})` }}>
+        <div className="resume-transform" style={{ height: pageHeight, transform: `scale(${scale})` }}>
           {children}
         </div>
       </div>
@@ -2037,76 +2235,189 @@ function ResumeStage({ zoom, setZoom, initialPosition, onPositionChange, childre
   );
 }
 
-function ResumePage({ data, template, accent, customSections, customContent }) {
+function ResumePage({
+  data,
+  template,
+  accent,
+  customSections,
+  customContent,
+  sectionOrder,
+  sectionOrderCustomized,
+  onContentHeightChange,
+}) {
   const { basics } = data;
+  const initials = `${basics.firstName?.[0] || 'Y'}${basics.lastName?.[0] || ''}`;
+  const isProfileTemplate = template === 'profile';
+  const displayOrder = useMemo(
+    () => isProfileTemplate && !sectionOrderCustomized
+      ? defaultSectionOrder('profile', customSections)
+      : sectionOrder,
+    [customSections, isProfileTemplate, sectionOrder, sectionOrderCustomized],
+  );
+  const pageRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!isProfileTemplate) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const contentHeight = Math.max(932, Math.ceil(pageRef.current?.scrollHeight || 932));
+      onContentHeightChange(contentHeight);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    customContent,
+    customSections,
+    data,
+    displayOrder,
+    isProfileTemplate,
+    onContentHeightChange,
+  ]);
+
   return (
-    <article className={cx('resume-page', `template-${template}`)} style={{ '--resume-accent': accent }}>
+    <article ref={pageRef} className={cx('resume-page', `template-${template}`)} style={{ '--resume-accent': accent }}>
       <header className="resume-header">
+        {isProfileTemplate && (
+          <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="resume-profile-avatar" />
+        )}
         <div className="resume-name-block">
           <h2>{basics.firstName} {basics.lastName}</h2>
           <p>{basics.role}</p>
         </div>
         <div className="resume-contact">
-          <span><Mail size={11} />{basics.email}</span>
-          <span><Phone size={11} />{basics.phone}</span>
-          <span><MapPin size={11} />{basics.location}</span>
-          <span><Link size={11} />{basics.website}</span>
+          {basics.email && <span><Mail size={11} />{basics.email}</span>}
+          {basics.phone && <span><Phone size={11} />{basics.phone}</span>}
+          {basics.location && <span><MapPin size={11} />{basics.location}</span>}
+          {basics.website && <span><Link size={11} />{basics.website}</span>}
         </div>
       </header>
 
       <div className="resume-body">
-        <ResumeSection title="Profile" className="profile-section">
-          <p>{data.summary}</p>
-        </ResumeSection>
-
-        <ResumeSection title="Experience" className="experience-section">
-          {data.experience.map((item) => (
-            <div className="resume-entry" key={item.id}>
-              <div className="resume-entry-heading">
-                <div><strong>{item.role}</strong><span>{item.company} · {item.location}</span></div>
-                <time>{item.start} - {item.end}</time>
-              </div>
-              <ul>
-                {item.bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
-              </ul>
-            </div>
-          ))}
-        </ResumeSection>
-
-        <div className="resume-bottom-grid">
-          <ResumeSection title="Education" className="education-section">
-            {data.education.map((item) => (
-              <div className="resume-entry compact-entry" key={item.id}>
-                <div className="resume-entry-heading">
-                  <div><strong>{item.degree}</strong><span>{item.school} · {item.location}</span></div>
-                  <time>{item.start} - {item.end}</time>
-                </div>
-              </div>
-            ))}
-          </ResumeSection>
-
-          <ResumeSection title="Skills" className="skills-section">
-            <div className="resume-skill-row"><strong>Expertise</strong><span>{data.skills.expertise}</span></div>
-            <div className="resume-skill-row"><strong>Tools</strong><span>{data.skills.tools}</span></div>
-          </ResumeSection>
-        </div>
-
-        {customSections.map((sectionId) => {
-          const content = customContent[sectionId];
-          if (!content) return null;
-          return (
-            <ResumeSection title={content.title} key={sectionId}>
-              <div className="resume-entry compact-entry">
-                <div className="resume-entry-heading">
-                  <div><strong>{content.itemTitle}</strong><span>{content.subtitle}</span></div>
-                </div>
-                {content.description && <p>{content.description}</p>}
-              </div>
-            </ResumeSection>
-          );
-        })}
+        {displayOrder.map((sectionId) => (
+          <ResumeContentSection
+            key={sectionId}
+            sectionId={sectionId}
+            data={data}
+            profile={isProfileTemplate}
+            customContent={customContent}
+          />
+        ))}
       </div>
     </article>
+  );
+}
+
+function ResumeContentSection({ sectionId, data, profile, customContent }) {
+  if (sectionId === 'basics') return null;
+  if (sectionId === 'summary') {
+    return (
+      <ResumeSection title={profile ? 'Personal Introduction' : 'Profile'} className="profile-section">
+        <p>{data.summary}</p>
+      </ResumeSection>
+    );
+  }
+  if (sectionId === 'education') {
+    return (
+      <ResumeSection title="Education" className="education-section">
+        <EducationEntries items={data.education} profile={profile} />
+      </ResumeSection>
+    );
+  }
+  if (sectionId === 'experience') {
+    return (
+      <ResumeSection title={profile ? 'Work Experience' : 'Experience'} className="experience-section">
+        <ExperienceEntries items={data.experience} profile={profile} />
+      </ResumeSection>
+    );
+  }
+  if (sectionId === 'skills') {
+    return profile ? (
+      <ResumeSection title="Professional Skills" className="skills-section">
+        <ProfileSkills skills={data.skills} />
+      </ResumeSection>
+    ) : (
+      <ResumeSection title="Skills" className="skills-section">
+        <div className="resume-skill-row"><strong>Expertise</strong><span>{data.skills.expertise}</span></div>
+        <div className="resume-skill-row"><strong>Tools</strong><span>{data.skills.tools}</span></div>
+      </ResumeSection>
+    );
+  }
+
+  const content = customContent[sectionId];
+  if (!content) return null;
+  return (
+    <ResumeSection title={content.title}>
+      <div className="resume-entry compact-entry">
+        <div className="resume-entry-heading">
+          <div><strong>{content.itemTitle}</strong><span>{content.subtitle}</span></div>
+        </div>
+        {content.description && <p>{content.description}</p>}
+      </div>
+    </ResumeSection>
+  );
+}
+
+function ProfileAvatar({ photoUrl, initials, className }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const hasImage = Boolean(photoUrl) && !imageFailed;
+
+  useEffect(() => setImageFailed(false), [photoUrl]);
+
+  return (
+    <span className={cx(className, hasImage && 'has-image')} aria-hidden="true">
+      {hasImage && <img src={photoUrl} alt="" onError={() => setImageFailed(true)} />}
+      <span className="profile-avatar-initials">{initials}</span>
+    </span>
+  );
+}
+
+function ExperienceEntries({ items, profile = false }) {
+  return items.map((item) => (
+    <div className={cx('resume-entry', profile && 'profile-work-entry')} key={item.id}>
+      <div className="resume-entry-heading">
+        <div>
+          <strong>{profile ? `${item.company} - ${item.role}` : item.role}</strong>
+          <span>{profile ? item.location : `${item.company} · ${item.location}`}</span>
+        </div>
+        <time>{item.start} - {item.end}</time>
+      </div>
+      <ul>
+        {item.bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
+      </ul>
+    </div>
+  ));
+}
+
+function EducationEntries({ items, profile = false }) {
+  return items.map((item) => (
+    <div className={cx('resume-entry', 'compact-entry', profile && 'profile-education-entry')} key={item.id}>
+      <div className="resume-entry-heading">
+        <div>
+          <strong>{profile ? item.school : item.degree}</strong>
+          <span>{profile ? `${item.degree}${item.location ? `, ${item.location}` : ''}` : `${item.school} · ${item.location}`}</span>
+        </div>
+        <time>{item.start} - {item.end}</time>
+      </div>
+    </div>
+  ));
+}
+
+function ProfileSkills({ skills }) {
+  const categories = [
+    { title: 'Expertise', items: skills.expertise },
+    { title: 'Tools & Platforms', items: skills.tools },
+  ].map((category) => ({
+    ...category,
+    items: category.items.split(',').map((item) => item.trim()).filter(Boolean),
+  })).filter((category) => category.items.length);
+
+  return (
+    <div className="profile-skills-grid">
+      {categories.map((category) => (
+        <div className="profile-skill-category" key={category.title}>
+          <strong>{category.title}</strong>
+          <ul>{category.items.map((item) => <li key={item}>{item}</li>)}</ul>
+        </div>
+      ))}
+    </div>
   );
 }
 
