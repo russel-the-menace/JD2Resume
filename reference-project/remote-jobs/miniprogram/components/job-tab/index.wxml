@@ -1,0 +1,71 @@
+<!-- miniprogram/components/job-tab/index.wxml -->
+<view class="tab-content-wrapper {{tabType === 1 && !isFeaturedUnlocked ? 'featured-locked' : ''}}">
+  <view class="search-bar">
+    <input
+      class="search-input"
+      type="text"
+      placeholder="{{ui.searchPlaceholder}}"
+      placeholder-class="search-placeholder"
+      confirm-type="search"
+      value="{{searchKeyword}}"
+      bindinput="onSearchInput"
+      cursor-color="{{ui.cursorColor}}"
+      show-confirm-bar="{{false}}"
+    />
+
+    <view class="search-actions">
+      <view class="search-pill" bindtap="toggleSaveMenu">
+        <text class="search-pill-text">{{ui.saveMenuLabel}}</text>
+        <view class="search-pill-triangle {{showSaveMenu ? 'search-pill-triangle-up' : ''}}" />
+      </view>
+      <view class="search-pill" bindtap="toggleDrawer">
+        <text class="search-pill-text">{{ui.filterLabel}}</text>
+        <view class="search-pill-triangle" />
+      </view>
+    </view>
+  </view>
+
+  <!-- Save Menu Dropdown -->
+  <view wx:if="{{showSaveMenu}}" class="save-menu-mask save-menu-mask-open" bindtap="toggleSaveMenu"></view>
+  <view wx:if="{{showSaveMenu}}" class="save-menu-dropdown">
+    <view class="save-menu-option" bindtap="onSaveAllJobs">
+      <text class="save-menu-option-text">{{ui.collectAllLabel}}</text>
+    </view>
+    <view class="save-menu-option" bindtap="onSaveSearchCondition">
+      <text class="save-menu-option-text">{{ui.saveSearchLabel}}</text>
+    </view>
+    <view class="save-menu-option" bindtap="onRestoreSearchCondition">
+      <text class="save-menu-option-text">{{ui.restoreSearchLabel}}</text>
+    </view>
+  </view>
+
+  <view class="job-list-wrapper {{tabType === 1 ? 'featured-tab-wrapper' : ''}}">
+    <job-list
+      class="job-list-instance"
+      jobs="{{jobs}}"
+      loading="{{loading}}"
+      has-more="{{hasMore}}"
+      scroll-y="{{tabType === 1 ? featuredScrollEnabled : true}}"
+      scroll-top="{{scrollTop}}"
+      lower-threshold="{{lowerThreshold}}"
+      scroll-with-animation="{{true}}"
+      enhanced="{{true}}"
+      show-scrollbar="{{false}}"
+      enable-back-to-top="{{false}}"
+      enable-passive="{{true}}"
+      bind:itemtap="onItemTap"
+      bind:scrolltolower="onScrollLower"
+    />
+    
+    <!-- Empty state for favorites tab -->
+    <view wx:if="{{tabType === 2 && !loading && jobs.length === 0}}" class="empty-favorites">
+      <text class="empty-favorites-text">{{ui.emptyFavorites}}</text>
+    </view>
+  </view>
+  
+  <!-- Subscription overlay for 精选 tab when expired -->
+  <view wx:if="{{tabType === 1 && !isFeaturedUnlocked}}" class="featured-overlay" bindtap="onFeaturedSubscribeTap">
+    <view class="featured-overlay-text">{{ui.featuredSubscribeText}}</view>
+  </view>
+</view>
+

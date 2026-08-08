@@ -1,0 +1,21 @@
+<view class="ui-dock-wrapper {{customClass}}" wx:if="{{visible}}">
+  <view class="ui-dock-overlay"></view>
+  <view class="ui-dock-content">
+    <view 
+      class="ui-dock-btn {{disabled ? 'disabled' : ''}} {{loading ? 'loading' : ''}}" 
+      style="width: {{width}}; {{!icon ? 'padding-right: 0;' : ''}}"
+      catchtap="onTap" 
+      hover-class="{{!disabled && !loading ? 'ui-dock-btn-active' : ''}}"
+      hover-stay-time="100"
+    >
+      <image 
+        wx:if="{{icon}}" 
+        class="ui-dock-icon {{animateIcon ? 'animate' : ''}}" 
+        src="{{icon}}" 
+        mode="aspectFit"
+      ></image>
+      <text class="ui-dock-text">{{text}}</text>
+      <view wx:if="{{loading}}" class="ui-dock-loading-dot"></view>
+    </view>
+  </view>
+</view>

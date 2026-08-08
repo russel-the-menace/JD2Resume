@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "",
+  "enablePullDownRefresh": false,
+  "usingComponents": {
+    "ui-feedback": "../../components/ui-feedback/index"
+  }
+}
+

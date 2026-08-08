@@ -1,0 +1,30 @@
+{
+  "extends": "stylelint-config-standard",
+  "plugins": [
+    "stylelint-declaration-strict-value"
+  ],
+  "rules": {
+    "scale-unlimited/declaration-strict-value": [
+      ["/color/", "background-color", "border-color"],
+      {
+        "ignoreValues": ["transparent", "inherit", "currentColor", "none"],
+        "message": "禁止使用硬编码颜色或未经定义的颜色。请使用 app.wxss 中定义的 CSS 变量（例如 var(--primary)）。"
+      }
+    ],
+    "selector-type-no-unknown": [true, {
+      "ignoreTypes": ["page", "view", "text", "image", "scroll-view", "button", "input", "textarea", "picker", "swiper", "swiper-item", "canvas"]
+    }],
+    "unit-no-unknown": [true, {
+      "ignoreUnits": ["rpx"]
+    }],
+    "selector-class-pattern": null,
+    "custom-property-pattern": null,
+    "comment-empty-line-before": null,
+    "declaration-empty-line-before": null,
+    "rule-empty-line-before": null,
+    "no-descending-specificity": null,
+    "at-rule-no-unknown": [true, {
+      "ignoreAtRules": ["import"]
+    }]
+  }
+}

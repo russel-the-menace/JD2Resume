@@ -1,0 +1,56 @@
+name: Auto Deploy
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          password: ${{ secrets.REMOTE_PASSWORD }}
+          script: |
+            # 1. 进入项目目录
+            cd /root/projects/PuppetResume || { echo "❌ Directory not found"; exit 1; }
+            
+            # 2. 强制同步代码 (保持 .env 和 .pem 文件不被清理)
+            echo "--- Git Syncing ---"
+            git fetch --all
+            git clean -fd -e .env -e "*.pem"
+            git reset --hard origin/master
+            
+            # 3. 验证 HEAD 状态
+            echo "--- Deployment Verification ---"
+            LOCAL_HEAD=$(git rev-parse HEAD)
+            REMOTE_HEAD=$(git rev-parse origin/master)
+            echo "Local  HEAD: $LOCAL_HEAD"
+            echo "Remote HEAD: $REMOTE_HEAD"
+            
+            if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
+              echo "✅ SUCCESS: Server is now at the latest commit."
+            else
+              echo "❌ ERROR: Server HEAD mismatch!"
+              exit 1
+            fi
+            
+            echo "Latest Commit Info:"
+            git log -1 --format="%h - %an: %s (%cr)"
+            
+            # 4. 环境准备与部署
+            export PUPPETEER_SKIP_DOWNLOAD=true
+            npm ci || npm install
+            npm run build
+            
+            # 5. 重启服务
+            pm2 restart Resume-Server --update-env || pm2 start dist/server.js --name Resume-Server
+            echo "--- Deployment Finished ---"

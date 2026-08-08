@@ -1,0 +1,165 @@
+import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import pLimit from 'p-limit';
+import { GenerateFromFrontendRequest } from './types';
+import { ResumeAIService } from './resumeAIService';
+import { ResumeGenerator } from './resumeGenerator';
+
+// 创建并发限制器：限制同时进行的生成任务数量为 2
+const limit = pLimit(2);
+
+// 定义依赖接口
+export interface TaskServices {
+  db: any;
+  // 以下服务在由于“以测试为基准”的逻辑下，将在任务内部按需创建
+}
+
+const COLLECTION_RESUMES = 'generated_resumes';
+
+// 静态文件服务 - 用于访问生成的简历
+const PUBLIC_DIR = join(process.cwd(), 'public');
+const RESUMES_DIR = join(PUBLIC_DIR, 'resumes');
+if (!existsSync(RESUMES_DIR)) {
+  mkdirSync(RESUMES_DIR, { recursive: true });
+}
+
+/**
+ * 包装器：确保任务受并发限制器控制，并增加硬超时保护
+ */
+export async function runBackgroundTask(taskId: string, payload: GenerateFromFrontendRequest, services: TaskServices) {
+  // 设置 120 秒硬超时处理
+  const TIMEOUT_MS = 120000;
+  
+  return limit(() => {
+    return Promise.race([
+      executeTask(taskId, payload, services),
+      new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Task ${taskId} timed out after ${TIMEOUT_MS / 1000}s`));
+        }, TIMEOUT_MS);
+      })
+    ]);
+  });
+}
+
+/**
+ * 实际的后台任务执行逻辑：负责 AI 增强、PDF 生成和本地保存
+ * 基准参考: tests/full_flow_test.ts
+ */
+async function executeTask(taskId: string, payload: GenerateFromFrontendRequest, services: TaskServices) {
+  const { db } = services;
+  console.log(`\n🚀 [Task ${taskId}] 后台任务启动...`);
+
+  if (!db) {
+    console.error(`[Task ${taskId}] ❌ 数据库未就绪`);
+    return;
+  }
+
+  // 0. 状态二次确认：如果任务在排队期间已被清理（如重启），则不再执行
+  const currentTask = await db.collection(COLLECTION_RESUMES).findOne({ task_id: taskId });
+  if (!currentTask || currentTask.status === 'failed') {
+      console.log(`⚠️ [Task ${taskId}] 任务已被标记为失效，放弃执行。`);
+      return;
+  }
+
+  const aiService = new ResumeAIService();
+  const generator = new ResumeGenerator();
+
+  try {
+    // Stage 1: AI 增强 (如果 payload 中已有 enhancedData，则跳过 AI 服务，实现旧简历“秒级恢复”)
+    let enhancedData = payload.enhancedData;
+
+    if (!enhancedData) {
+      console.log(`\n🤖 [Task ${taskId}] [Step 1/2] 正在调用 AI 进行内容增强...`);
+      enhancedData = await aiService.enhance(payload);
+      
+      console.log(`✅ [Task ${taskId}] AI 增强完成！素材概览:`);
+      console.log(`- 岗位: ${enhancedData.position}`);
+    } else {
+      console.log(`\n♻️ [Task ${taskId}] 检测到已存在的增强数据，正在跳过 AI 调用进行物理文件恢复...`);
+    }
+
+    if (enhancedData) {
+      console.log(`- 个人介绍长度: ${enhancedData.personalIntroduction.length} 字`);
+      console.log(`- 技能组数量: ${enhancedData.professionalSkills?.length || 0}`);
+      console.log(`- 工作经历数: ${enhancedData.workExperience.length}`);
+    }
+
+    // Stage 2: PDF 生成
+    console.log(`\n📄 [Task ${taskId}] [Step 2/2] 正在启动布局引擎进行模拟与裁剪...`);
+    enhancedData.workExperience.forEach((exp, i) => {
+        console.log(`  [Job ${i+1}] ${exp.company} (${exp.startDate}-${exp.endDate}) - 职责数: ${exp.responsibilities?.length || 0}`);
+    });
+
+    // Stage 2: PDF 生成
+    console.log(`\n📄 [Task ${taskId}] [Step 2/2] 正在启动布局引擎进行模拟与裁剪...`);
+    await generator.init();
+    
+    const timestamp = Date.now();
+    // 构造描述性的文件名: 姓名_职位_时间戳.pdf
+    const safeName = (enhancedData.name || 'Resume').replace(/[/\\?%*:|"<>]/g, '-');
+    const safePosition = (enhancedData.position || '').replace(/[/\\?%*:|"<>]/g, '-');
+    const baseName = safePosition ? `${safeName}_${safePosition}` : safeName;
+    
+    const fileName = `${baseName}_${timestamp}_${taskId}.pdf`;
+    const filePath = join(RESUMES_DIR, fileName);
+    const fileUrl = `/public/resumes/${fileName}`;
+
+    // 直接生成到文件 (遵循测试基准逻辑)
+    await generator.generatePDFToFile(enhancedData, filePath);
+
+    // 4. 更新数据库状态为成功，并保存增强后的资料（用于未来过期后的免 AI 重新渲染）
+    await db.collection(COLLECTION_RESUMES).updateOne({ task_id: taskId }, {
+      $set: {
+        status: 'completed',
+        jobTitle: enhancedData.position || 'Resume', 
+        jobTitle_cn: enhancedData.position || 'Resume', // 同步设置中英文标题，确保前端多语言对齐
+        jobTitle_en: enhancedData.position || 'Resume',
+        fileUrl: fileUrl, 
+        enhancedData: enhancedData, // 保存 AI 生成的结果
+        completeTime: new Date()
+      }
+    });
+
+    console.log(`\n🎉 [Task ${taskId}] 任务圆满完成！`);
+    console.log(`✅ 简历已生成并保存至: ${filePath}`);
+    
+    // 释放资源
+    await generator.close();
+  } catch (error: any) {
+    console.error(`\n❌ [Task ${taskId}] 任务处理流程异常:`, error.message);
+    if (error.stack) console.error(error.stack);
+
+    // 确保资源被释放
+    try { await generator.close(); } catch (e) {}
+
+    // 更新数据库状态为失败
+    try {
+      const task = await db.collection(COLLECTION_RESUMES).findOne({ task_id: taskId });
+      
+      await db.collection(COLLECTION_RESUMES).updateOne({ task_id: taskId }, {
+        $set: {
+          status: 'failed',
+          errorMessage: error.message || '内部处理超时或生成失败',
+          completeTime: new Date()
+        }
+      });
+
+      // --- Quota Refund Logic ---
+      if (task && task.phoneNumber && task.consumedType) {
+        console.log(`[Task ${taskId}] 正在尝试为用户 ${task.phoneNumber} 退回额度 (${task.consumedType})...`);
+        const usersCol = db.collection('users');
+        if (task.consumedType === 'monthly') {
+          await usersCol.updateOne({ phone: task.phoneNumber }, { $inc: { 'membership.pts_quota.used': -1 } });
+        } else if (task.consumedType === 'topup') {
+          await usersCol.updateOne({ phone: task.phoneNumber }, { $inc: { 'membership.topup_quota': 1 } });
+        }
+        console.log(`[Task ${taskId}] 额度已退回。`);
+      }
+
+    } catch (dbError) {
+      console.error(`[Task ${taskId}] ❌ 无法回滚状态或退回额度:`, dbError);
+    }
+  }
+}
+

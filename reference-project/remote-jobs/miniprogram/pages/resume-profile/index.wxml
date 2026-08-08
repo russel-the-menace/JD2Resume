@@ -1,0 +1,696 @@
+<!--miniprogram/pages/resume-profile/index.wxml-->
+<wxs src="../../utils/format.wxs" module="format" />
+<view class="page">
+  <ui-feedback id="ui-feedback" />
+  <view class="header-section">
+    <!-- <view class="title-row">
+      <text class="page-title">{{ui.title}}</text>
+    </view> -->
+    
+    <view class="lang-switcher">
+      <view class="lang-tab {{currentLang === 'Chinese' ? 'active' : ''}}" bindtap="onSwitchLang" data-lang="Chinese">
+        <text>{{ui.tabCn}}</text>
+      </view>
+      <view class="lang-tab {{currentLang === 'English' ? 'active' : ''}}" bindtap="onSwitchLang" data-lang="English">
+        <text>{{ui.tabEn}}</text>
+      </view>
+    </view>
+
+    <!-- Tips Card Removed -->
+
+  </view>
+
+  <ui-scroll-view     
+    class="resume-content" 
+    scrollY="{{true}}"
+    bounces="{{false}}"
+  >
+    <view class="resume-body">
+      <!-- 基本信息 -->
+      <view class="section-group">
+        <view class="section-header-row">
+          <view class="section-group-title">{{ui.personalInfo}}</view>
+          <!-- <view class="sync-btn-small" wx:if="{{currentLang === 'English'}}" bindtap="onSyncFromChinese">
+            <text class="sync-icon">🔄</text>
+            <text>{{ui.syncFromCn}}</text>
+          </view> -->
+        </view>
+        <view class="card">
+          <!-- 照片 -->
+          <view class="list-item photo-item" bindtap="onEditPhoto">
+            <view class="item-label">
+              <text>{{ui.photo}}</text>
+            </view>
+            <view class="item-value">
+              <view class="avatar-progress-container" style="background-image: conic-gradient(var(--primary) 0% {{currentPercent}}%, var(--divider) {{currentPercent}}% 100%)">
+                <block wx:if="{{photo}}">
+                  <image class="avatar-img shadow-none" src="{{photo}}" mode="aspectFill"></image>
+                </block>
+                <block wx:else>
+                  <view class="avatar-placeholder shadow-none"></view>
+                </block>
+              </view>
+              <text class="ui-arrow">❯</text>
+            </view>
+          </view>
+          
+          <!-- 姓名 -->
+          <view class="list-item" bindtap="onEditBasicInfo">
+            <view class="item-label">{{ui.nameLabel}}</view>
+            <view class="item-value">
+              <text class="{{name ? 'value-text' : 'placeholder-text'}}">{{name || ui.noData}}</text>
+              <text class="ui-arrow">❯</text>
+            </view>
+          </view>
+
+          <!-- 所在地 (仅英文版显示) -->
+          <view class="list-item" bindtap="onEditBasicInfo" wx:if="{{currentLang === 'English'}}">
+            <view class="item-label">{{ui.location}}</view>
+            <view class="item-value">
+              <text class="{{location ? 'value-text' : 'placeholder-text'}}">{{location || ui.noData}}</text>
+              <text class="ui-arrow">❯</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 联系方式 -->
+      <view class="section-group">
+        <view class="section-group-title">{{ui.contactInfo}}</view>
+        <view class="card">
+          <!-- 中文显示：微信、邮箱、手机 -->
+          <block wx:if="{{currentLang === 'Chinese'}}">
+            <view class="list-item" bindtap="onEditContactInfo">
+              <view class="item-label">{{ui.wechat}}</view>
+              <view class="item-value">
+                <text class="{{wechat ? 'value-text' : 'placeholder-text'}}">{{wechat || ui.noData}}</text>
+                <text class="ui-arrow">❯</text>
+              </view>
+            </view>
+            <view class="list-item" bindtap="onEditContactInfo">
+              <view class="item-label">{{ui.email}}</view>
+              <view class="item-value">
+                <text class="{{email ? 'value-text' : 'placeholder-text'}}">{{email || ui.noData}}</text>
+                <text class="ui-arrow">❯</text>
+              </view>
+            </view>
+            <view class="list-item" bindtap="onEditContactInfo">
+              <view class="item-label">{{ui.phone}}</view>
+              <view class="item-value">
+                <text class="{{phone ? 'value-text' : 'placeholder-text'}}">{{phone || ui.noData}}</text>
+                <text class="ui-arrow">❯</text>
+              </view>
+            </view>
+          </block>
+
+          <!-- 英文显示：邮箱、领英、个人网站 -->
+          <block wx:else>
+            <view class="list-item" bindtap="onEditContactInfo">
+              <view class="item-label">{{ui.email}}</view>
+              <view class="item-value">
+                <text class="{{email ? 'value-text' : 'placeholder-text'}}">{{email || ui.noData}}</text>
+                <text class="ui-arrow">❯</text>
+              </view>
+            </view>
+            <view class="list-item" bindtap="onEditContactInfo">
+              <view class="item-label">{{ui.linkedin}}</view>
+              <view class="item-value">
+                <text class="{{linkedin ? 'value-text' : 'placeholder-text'}}">{{linkedin || ui.noData}}</text>
+                <text class="ui-arrow">❯</text>
+              </view>
+            </view>
+            <view class="list-item" bindtap="onEditContactInfo">
+              <view class="item-label">{{ui.personalWebsite}}</view>
+              <view class="item-value">
+                <text class="{{website ? 'value-text' : 'placeholder-text'}}">{{website || ui.noData}}</text>
+                <text class="ui-arrow">❯</text>
+              </view>
+            </view>
+          </block>
+        </view>
+      </view>
+
+      <!-- 毕业院校 -->
+      <view class="section-group">
+        <view class="section-header-row">
+          <view class="section-group-title">{{ui.education}}</view>
+          <view class="add-btn" bindtap="onAddEducation">
+            <text class="add-btn-text">{{ui.addEducation}}</text>
+          </view>
+        </view>
+        
+        <view class="card education-card">
+          <block wx:if="{{educations && educations.length > 0}}">
+            <view class="education-item" wx:for="{{educations}}" wx:key="index" bindtap="onEditEducation" data-index="{{index}}">
+              <view class="edu-info">
+                <view class="edu-header">
+                  <view class="edu-school">
+                    <block wx:if="{{currentLang === 'English'}}">
+                      <text wx:if="{{item.school}}">{{item.school}}{{item.country_english ? ', ' + item.country_english : ''}}</text>
+                      <text wx:else class="placeholder-text" style="font-size: 26rpx;">{{ui.schoolPlaceholder}}</text>
+                    </block>
+                    <block wx:else>
+                      {{item.school || ui.noData}}
+                    </block>
+                  </view>
+                  <view class="edu-date" wx:if="{{item.startDate || item.endDate || item.graduationDate}}">
+                    {{format.formatDate(item.startDate, currentLang, interfaceLang)}} - {{format.formatDate(item.endDate || item.graduationDate, currentLang, interfaceLang)}}
+                  </view>
+                </view>
+                <view class="edu-details" wx:if="{{currentLang === 'English'}}">
+                  <text wx:if="{{item.major}}">{{item.major}}</text>
+                  <text wx:else class="placeholder-text" style="font-size: 26rpx;">{{ui.majorPlaceholder}}</text>
+                </view>
+                <view class="edu-details" wx:else>
+                  <text wx:if="{{item.degree}}">{{item.degree}}</text>
+                  <text wx:if="{{item.degree && item.major}}"> · </text>
+                  <text wx:if="{{item.major}}">{{item.major}}</text>
+                </view>
+              </view>
+              <text class="ui-arrow">❯</text>
+            </view>
+          </block>
+          <block wx:else>
+            <view class="empty-state" bindtap="onAddEducation">
+              <text class="empty-text">{{ui.noData}}</text>
+            </view>
+          </block>
+        </view>
+      </view>
+
+      <!-- 工作经历 -->
+      <view class="section-group">
+        <view class="section-header-row">
+          <view class="section-group-title">{{ui.workExperience}}</view>
+          <view class="add-btn" bindtap="onAddWorkExperience">
+            <text class="add-btn-text">{{ui.addWorkExperience}}</text>
+          </view>
+        </view>
+        
+        <view class="card education-card">
+          <block wx:if="{{workExperiences && workExperiences.length > 0}}">
+            <view class="education-item" wx:for="{{workExperiences}}" wx:key="index" bindtap="onEditWorkExperience" data-index="{{index}}">
+              <view class="edu-info">
+                <view class="edu-header">
+                  <view class="edu-school">{{item.company || ui.noData}}</view>
+                  <view class="edu-date" wx:if="{{item.startDate || item.endDate}}">
+                    {{format.formatDate(item.startDate, currentLang, interfaceLang)}} - {{format.formatDate(item.endDate, currentLang, interfaceLang)}}
+                  </view>
+                </view>
+                <view class="edu-details">
+                  <text wx:if="{{item.jobTitle}}">{{item.jobTitle}}</text>
+                </view>
+                <view class="edu-details" wx:if="{{item.workContent}}" style="margin-top: 4px; color: var(--text-sub); font-size: 13px;">
+                  <text>{{item.workContent}}</text>
+                </view>
+                <view class="edu-details business-dir" wx:if="{{item.businessDirection}}">
+                  <text>{{item.businessDirection}}</text>
+                </view>
+              </view>
+              <text class="ui-arrow">❯</text>
+            </view>
+          </block>
+          <block wx:else>
+            <view class="empty-state" bindtap="onAddWorkExperience">
+              <text class="empty-text">{{ui.noData}}</text>
+            </view>
+          </block>
+        </view>
+      </view>
+
+      <!-- 技能 -->
+      <view class="section-group">
+        <view class="section-header-row">
+          <view class="section-group-title">{{ui.skills}}</view>
+          <view class="add-btn" bindtap="onEditSkills">
+            <text class="add-btn-text">{{ui.addSkill}}</text>
+          </view>
+        </view>
+        
+        <view class="tags-wrapper" bindtap="onEditSkills">
+          <block wx:if="{{skills && skills.length > 0}}">
+            <view class="tag-item skill-tag" wx:for="{{skills}}" wx:key="index">
+              <text class="tag-text">{{item}}</text>
+            </view>
+          </block>
+          <block wx:else>
+            <view class="empty-tags">
+              <text class="empty-text">{{ui.noData}}</text>
+            </view>
+          </block>
+        </view>
+      </view>
+
+      <!-- 证书 -->
+      <view class="section-group">
+        <view class="section-header-row">
+          <view class="section-group-title">{{ui.certificates}}</view>
+          <view class="add-btn" bindtap="onEditCertificates">
+            <text class="add-btn-text">{{ui.addCertificate}}</text>
+          </view>
+        </view>
+        
+        <view class="tags-wrapper" bindtap="onEditCertificates">
+          <block wx:if="{{certificates && certificates.length > 0}}">
+            <view class="tag-item cert-tag" wx:for="{{certificates}}" wx:key="index">
+              <text class="tag-text">{{item}}</text>
+            </view>
+          </block>
+          <block wx:else>
+            <view class="empty-tags">
+              <text class="empty-text">{{ui.noData}}</text>
+            </view>
+          </block>
+        </view>
+      </view>
+
+      <!-- 对 AI 说的话 -->
+      <view class="section-group">
+        <view class="section-group-title">{{ui.aiMessageLabel}}</view>
+        <view class="card">
+          <view class="list-item" bindtap="onEditAiMessage">
+            <view class="item-value ai-message-value">
+              <text class="{{aiMessage ? 'value-text' : 'placeholder-text'}} ai-message-text">{{aiMessage || ui.aiMessageDefault}}</text>
+              <text class="ui-arrow">❯</text>
+            </view>
+          </view>
+        </view>
+      </view>
+      
+      <view class="bottom-safe-area"></view>
+    </view>
+  </ui-scroll-view>
+
+  <!-- 工作经历编辑弹窗 (右侧弹出) -->
+  <view class="drawer-mask {{showWorkDrawer ? 'drawer-mask-show' : ''}}" bindtap="closeWorkDrawer"></view>
+  <view class="drawer {{showWorkDrawer ? 'drawer-show' : ''}}">
+    <view class="drawer-header">
+      <text class="drawer-title">{{editingWorkIndex === -1 ? ui.addWorkExperience : ui.workExperience}}</text>
+      <view wx:if="{{editingWorkIndex !== -1}}" class="header-delete" bindtap="onDeleteWorkExperience">
+        <text>{{ui.delete}}</text>
+      </view>
+    </view>
+    
+    <view class="drawer-content">
+      <view class="form-item">
+        <text class="form-label">{{ui.company}}</text>
+        <input class="form-input" placeholder="{{ui.companyPlaceholder}}" value="{{workForm.company}}" bindinput="onWorkCompanyInput" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">{{ui.jobTitle}}</text>
+        <input class="form-input" placeholder="{{ui.jobTitlePlaceholder}}" value="{{workForm.jobTitle}}" bindinput="onWorkJobTitleInput" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">{{ui.timePeriod}}</text>
+        <view class="date-range-row">
+          <view class="picker-value {{workForm.startDate ? '' : 'placeholder-text'}}" bindtap="openDatePicker" data-field="work_startDate">
+            {{workForm.startDate || ui.startDate}}
+          </view>
+          <text class="date-sep">-</text>
+          <view class="picker-value {{workForm.endDate ? '' : 'placeholder-text'}}" bindtap="openDatePicker" data-field="work_endDate">
+            {{workForm.endDate || ui.endDate}}
+          </view>
+        </view>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">{{ui.workContent}} <text class="optional-hint">({{ui.optional}})</text></text>
+        <textarea 
+          class="form-textarea" 
+          placeholder="{{ui.workContentPlaceholder}}" 
+          value="{{workForm.workContent}}" 
+          bindinput="onWorkContentInput"
+          maxlength="1000"
+          style="min-height: 80px;"
+          cursor-color="{{ui.cursorColor}}"
+          show-confirm-bar="{{false}}"
+        />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">{{ui.businessDirection}} <text class="optional-hint">({{ui.optional}})</text></text>
+        <textarea 
+          class="form-textarea" 
+          placeholder="{{ui.businessDirectionPlaceholder}}" 
+          value="{{workForm.businessDirection}}" 
+          bindinput="onWorkBusinessDirectionInput"
+          maxlength="200"
+          auto-height
+          cursor-color="{{ui.cursorColor}}"
+          show-confirm-bar="{{false}}"
+        />
+      </view>
+    </view>
+
+    <view class="drawer-footer">
+      <view class="btn-secondary" bindtap="closeWorkDrawer">
+        <text>{{ui.cancel}}</text>
+      </view>
+      <view class="btn-primary" bindtap="onSaveWorkExperience">
+        <text>{{ui.save}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 教育经历编辑弹窗 (右侧弹出) -->
+  <view class="drawer-mask {{showEduDrawer ? 'drawer-mask-show' : ''}}" bindtap="closeEduDrawer"></view>
+  <view class="drawer {{showEduDrawer ? 'drawer-show' : ''}}">
+    <view class="drawer-header">
+      <text class="drawer-title">{{editingEduIndex === -1 ? ui.addEducation : ui.education}}</text>
+      <view wx:if="{{editingEduIndex !== -1}}" class="header-delete" bindtap="onDeleteEducation">
+        <text>{{ui.delete}}</text>
+      </view>
+    </view>
+    
+    <view class="drawer-content">
+      <view class="form-item form-item-relative">
+        <text class="form-label">{{ui.education}}</text>
+        <input class="form-input" placeholder="{{ui.schoolPlaceholder}}" value="{{eduForm.school}}" bindinput="onEduSchoolInput" bindfocus="onEduSchoolFocus" bindblur="onEduSchoolBlur" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+        <ui-scroll-view scrollY="{{true}}" class="suggestions-box" wx:if="{{showUniversitySuggestions && universitySuggestions.length > 0}}">
+          <view class="suggestion-item" wx:for="{{universitySuggestions}}" wx:key="_id" bindtap="onSelectUniversity" data-item="{{item}}">
+            <text class="suggestion-main">{{currentLang === 'English' ? (item.english_name + (item.country_english && item.country_english !== 'China' ? ' (' + item.country_english + ')' : '')) : (item.chinese_name + (item.country_chinese && item.country_chinese !== '中国' ? ' (' + item.country_chinese + ')' : ''))}}</text>
+            <text class="suggestion-sub" wx:if="{{item.english_name && item.chinese_name}}">{{currentLang === 'English' ? (item.chinese_name + (item.country_chinese && item.country_chinese !== '中国' ? ' (' + item.country_chinese + ')' : '')) : (item.english_name + (item.country_english && item.country_english !== 'China' ? ' (' + item.country_english + ')' : ''))}}</text>
+          </view>
+        </ui-scroll-view>
+      </view>
+
+      <view class="form-item" bindtap="openDegreePicker">
+        <text class="form-label">{{ui.degree}}</text>
+        <view class="picker-value {{eduForm.degree ? '' : 'placeholder-text'}}">
+          {{eduForm.degree || ui.degreePlaceholder}}
+        </view>
+      </view>
+
+      <view class="form-item form-item-relative">
+        <text class="form-label">{{ui.major}}</text>
+        <input class="form-input" placeholder="{{ui.majorPlaceholder}}" value="{{eduForm.major}}" bindinput="onEduMajorInput" bindfocus="onEduMajorFocus" bindblur="onEduMajorBlur" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+        <ui-scroll-view scrollY="{{true}}" class="suggestions-box" wx:if="{{showMajorSuggestions && majorSuggestions.length > 0}}">
+          <view class="suggestion-item" wx:for="{{majorSuggestions}}" wx:key="_id" bindtap="onSelectMajor" data-item="{{item}}">
+            <text class="suggestion-main">{{currentLang === 'English' ? item.english_name : item.chinese_name}}</text>
+            <text class="suggestion-sub" wx:if="{{item.english_name && item.chinese_name}}">{{currentLang === 'English' ? item.chinese_name : item.english_name}}</text>
+          </view>
+        </ui-scroll-view>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">{{ui.timePeriod}}</text>
+        <view class="date-range-row">
+          <view class="picker-value {{eduForm.startDate ? '' : 'placeholder-text'}}" bindtap="openDatePicker" data-field="startDate" style="flex: 1;">
+            {{eduForm.startDate || ui.startDate}}
+          </view>
+          <text class="date-sep">-</text>
+          <view class="picker-value {{eduForm.endDate ? '' : 'placeholder-text'}}" bindtap="openDatePicker" data-field="endDate" style="flex: 1;">
+            {{eduForm.endDate || ui.endDate}}
+          </view>
+        </view>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">{{ui.description}} <text class="optional-hint">({{ui.optional}})</text></text>
+        <textarea 
+          class="form-textarea" 
+          placeholder="{{ui.descriptionPlaceholder}}" 
+          value="{{eduForm.description}}" 
+          bindinput="onEduDescriptionInput"
+          maxlength="500"
+          auto-height
+          cursor-color="{{ui.cursorColor}}"
+          show-confirm-bar="{{false}}"
+        />
+      </view>
+    </view>
+
+    <view class="drawer-footer">
+      <view class="btn-secondary" bindtap="closeEduDrawer">
+        <text>{{ui.cancel}}</text>
+      </view>
+      <view class="btn-primary" bindtap="onSaveEducation">
+        <text>{{ui.save}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 个人基本信息编辑弹窗 (右侧弹出) -->
+  <view class="drawer-mask {{showBasicInfoDrawer ? 'drawer-mask-show' : ''}}" bindtap="closeBasicInfoDrawer"></view>
+  <view class="drawer {{showBasicInfoDrawer ? 'drawer-show' : ''}}">
+    <view class="drawer-header">
+      <text class="drawer-title">{{ui.personalInfo}}</text>
+    </view>
+    
+    <view class="drawer-content">
+      <view class="form-item">
+        <text class="form-label">{{ui.nameLabel}}</text>
+        <input class="form-input" placeholder="{{ui.namePlaceholder}}" value="{{basicInfoForm.name}}" bindinput="onBasicNameInput" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">{{ui.gender}}</text>
+        <view class="picker-value {{basicInfoForm.gender ? '' : 'placeholder-text'}}" bindtap="openGenderPicker">
+          {{basicInfoForm.gender || ui.genderPlaceholder}}
+        </view>
+      </view>
+
+      <view class="form-item" wx:if="{{currentLang === 'Chinese'}}">
+        <text class="form-label">{{ui.birthday}}</text>
+        <view class="picker-value {{basicInfoForm.birthday ? '' : 'placeholder-text'}}" bindtap="openBirthdayPicker">
+          {{basicInfoForm.birthday || ui.birthdayPlaceholder}}
+        </view>
+      </view>
+
+      <view class="form-item" wx:if="{{currentLang === 'English'}}">
+        <text class="form-label">{{ui.location}}</text>
+        <input class="form-input" placeholder="{{ui.locationPlaceholder || ui.location}}" value="{{basicInfoForm.location}}" bindinput="onBasicLocationInput" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+      </view>
+    </view>
+
+    <view class="drawer-footer">
+      <view class="btn-secondary" bindtap="closeBasicInfoDrawer">
+        <text>{{ui.cancel}}</text>
+      </view>
+      <view class="btn-primary" bindtap="onSaveBasicInfo">
+        <text>{{ui.save}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 联系方式编辑弹窗 (右侧弹出) -->
+  <view class="drawer-mask {{showContactInfoDrawer ? 'drawer-mask-show' : ''}}" bindtap="closeContactInfoDrawer"></view>
+  <view class="drawer {{showContactInfoDrawer ? 'drawer-show' : ''}}">
+    <view class="drawer-header">
+      <text class="drawer-title">{{ui.contactInfo}}</text>
+    </view>
+    
+    <view class="drawer-content">
+      <view class="form-item">
+        <text class="form-label">{{ui.email}}</text>
+        <input class="form-input" placeholder="{{ui.email}}" value="{{contactInfoForm.email}}" bindinput="onContactInput" data-field="email" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+      </view>
+
+      <view class="form-item" wx:if="{{currentLang === 'Chinese'}}">
+        <text class="form-label">{{ui.wechat}}</text>
+        <input class="form-input" placeholder="{{ui.wechat}}" value="{{contactInfoForm.wechat}}" bindinput="onContactInput" data-field="wechat" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+      </view>
+
+      <view class="form-item" wx:if="{{currentLang === 'Chinese'}}">
+        <text class="form-label">{{ui.phone}}</text>
+        <input class="form-input" placeholder="{{ui.phone}}" value="{{contactInfoForm.phone}}" bindinput="onContactInput" data-field="phone" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+      </view>
+
+      <view class="form-item" wx:if="{{currentLang === 'Chinese'}}">
+        <text class="form-label">{{ui.personalWebsite}}</text>
+        <input class="form-input" placeholder="{{ui.personalWebsite}}" value="{{contactInfoForm.website}}" bindinput="onContactInput" data-field="website" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+      </view>
+
+      <block wx:if="{{currentLang === 'English'}}">
+        <view class="form-item">
+          <text class="form-label">{{ui.phoneEn}}</text>
+          <input class="form-input" placeholder="{{ui.phoneEn}}" value="{{contactInfoForm.phone_en}}" bindinput="onContactInput" data-field="phone_en" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">{{ui.whatsapp}}</text>
+          <input class="form-input" placeholder="{{ui.whatsapp}}" value="{{contactInfoForm.whatsapp}}" bindinput="onContactInput" data-field="whatsapp" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">{{ui.telegram}}</text>
+          <input class="form-input" placeholder="{{ui.telegram}}" value="{{contactInfoForm.telegram}}" bindinput="onContactInput" data-field="telegram" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">{{ui.linkedin}}</text>
+          <input class="form-input" placeholder="{{ui.linkedin}}" value="{{contactInfoForm.linkedin}}" bindinput="onContactInput" data-field="linkedin" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">{{ui.personalWebsite}}</text>
+          <input class="form-input" placeholder="{{ui.personalWebsite}}" value="{{contactInfoForm.website}}" bindinput="onContactInput" data-field="website" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+        </view>
+      </block>
+    </view>
+
+    <view class="drawer-footer">
+      <view class="btn-secondary" bindtap="closeContactInfoDrawer">
+        <text>{{ui.cancel}}</text>
+      </view>
+      <view class="btn-primary" bindtap="onSaveContactInfo">
+        <text>{{ui.save}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 对 AI 说的话编辑弹窗 (底部弹出) Redesigned -->
+  <ui-drawer 
+    show="{{showAiMessageSheet}}" 
+    title="{{ui.aiMessageLabel}}" 
+    activeConfirmText="{{ui.save}}"
+    inactiveConfirmText="{{ui.close}}"
+    confirmActive="{{aiMessageValid}}"
+    useScroll="{{false}}"
+    bind:close="closeAiMessageSheet"
+    bind:confirm="onAiMessageConfirm"
+  >
+    <view class="bottom-sheet-content ai-message-input-content">
+      <textarea 
+        class="ai-message-textarea" 
+        placeholder="{{ui.aiMessageDefault}}" 
+        placeholder-style="line-height: 1.6;"
+        value="{{aiMessageForm}}" 
+        bindinput="onAiMessageInput"
+        maxlength="500"
+        focus="{{isAiMessageFocus}}"
+        cursor-spacing="140"
+        always-embed="{{true}}"
+        disable-default-padding
+        cursor-color="{{ui.cursorColor}}"
+        show-confirm-bar="{{false}}"
+      />
+    </view>
+  </ui-drawer>
+
+  <!-- 自定义性别选择器 (底部弹出) Redesigned -->
+  <ui-drawer 
+    show="{{showGenderPicker}}" 
+    title="{{ui.genderPlaceholder}}" 
+    bind:close="closeGenderPicker"
+    bind:confirm="onGenderConfirm"
+  >
+    <ui-scroll-view class="bottom-sheet-content custom-picker-body" scrollY="{{true}}">
+      <view 
+        wx:for="{{genderOptions}}" 
+        wx:key="*this" 
+        class="picker-option {{basicInfoForm.gender === item ? 'picker-option-active' : ''}}"
+        bindtap="onSelectGender"
+        data-value="{{item}}"
+      >
+        <text class="option-text">{{item}}</text>
+        <view class="check-icon" wx:if="{{basicInfoForm.gender === item}}"></view>
+      </view>
+    </ui-scroll-view>
+  </ui-drawer>
+
+  <!-- 技能编辑弹窗 Redesigned -->
+  <ui-drawer 
+    show="{{showSkillsDrawer}}" 
+    title="{{ui.skills}}" 
+    confirmText="{{ui.save}}"
+    bind:close="closeSkillsDrawer"
+    bind:confirm="onSkillsConfirm"
+  >
+    <view class="drawer-content">
+      <view class="form-item-list" wx:for="{{skillsForm}}" wx:key="index">
+        <input class="form-input list-input" placeholder="{{ui.skillPlaceholder}}" value="{{item}}" data-index="{{index}}" bindinput="onSkillInput" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+        <view class="list-action-btn {{index === skillsForm.length - 1 ? 'add-action' : 'remove-action'}}" 
+              bindtap="{{index === skillsForm.length - 1 ? 'addSkillRow' : 'removeSkillRow'}}" data-index="{{index}}">
+          <text class="action-icon">{{index === skillsForm.length - 1 ? '+' : '-'}}</text>
+        </view>
+      </view>
+    </view>
+  </ui-drawer>
+
+  <!-- 证书编辑弹窗 Redesigned -->
+  <ui-drawer 
+    show="{{showCertificatesDrawer}}" 
+    title="{{ui.certificates}}" 
+    confirmText="{{ui.save}}"
+    bind:close="closeCertificatesDrawer"
+    bind:confirm="onCertificatesConfirm"
+  >
+    <view class="drawer-content">
+      <view class="form-item-list" wx:for="{{certificatesForm}}" wx:key="index">
+        <input class="form-input list-input" placeholder="{{ui.certificatesPlaceholder}}" value="{{item}}" data-index="{{index}}" bindinput="onCertificateInput" cursor-color="{{ui.cursorColor}}" show-confirm-bar="{{false}}" />
+        <view class="list-action-btn {{index === certificatesForm.length - 1 ? 'add-action' : 'remove-action'}}" 
+              bindtap="{{index === certificatesForm.length - 1 ? 'addCertificateRow' : 'removeCertificateRow'}}" data-index="{{index}}">
+          <text class="action-icon">{{index === certificatesForm.length - 1 ? '+' : '-'}}</text>
+        </view>
+      </view>
+    </view>
+  </ui-drawer>
+
+  <!-- 自定义年月选择器 (底部弹出) Redesigned -->
+  <ui-drawer 
+    show="{{showDatePicker}}" 
+    title="{{(currentDatePickingField === 'startDate' || currentDatePickingField === 'work_startDate') ? ui.startDate : ((currentDatePickingField === 'endDate' || currentDatePickingField === 'work_endDate') ? ui.endDate : ui.birthday)}}" 
+    confirmText="{{ui.save}}"
+    bind:close="closeDatePicker"
+    bind:confirm="onDateConfirm"
+  >
+    <view slot="header-right-extra">
+        <view wx:if="{{currentDatePickingField === 'work_endDate' || currentDatePickingField === 'endDate'}}" class="bottom-sheet-header-btn-extra" bindtap="onSetToPresent">{{ui.toPresent}}</view>
+    </view>
+    <view class="bottom-sheet-content picker-view-container">
+      <picker-view 
+        indicator-style="height: 160rpx;" 
+        style="width: 100%; height: 640rpx;" 
+        value="{{datePickerValue}}" 
+        bindchange="onDatePickerChange"
+      >
+        <picker-view-column>
+          <view wx:for="{{years}}" wx:key="*this" class="picker-column-item">{{item}}{{ui.year}}</view>
+        </picker-view-column>
+        <picker-view-column>
+          <view wx:for="{{months}}" wx:key="*this" class="picker-column-item">{{item}}{{ui.month}}</view>
+        </picker-view-column>
+      </picker-view>
+    </view>
+  </ui-drawer>
+
+  <!-- 自定义学历选择器 (双滚轮，底部弹出) Redesigned -->
+  <ui-drawer 
+    show="{{showDegreePicker}}" 
+    title="{{ui.degreePlaceholder}}" 
+    confirmText="{{ui.save}}"
+    bind:close="closeDegreePicker"
+    bind:confirm="onDegreePickConfirm"
+  >
+    <view class="bottom-sheet-content picker-view-container">
+      <picker-view 
+        indicator-style="height: 160rpx;" 
+        style="width: 100%; height: 640rpx;" 
+        value="{{degreePickerValue}}" 
+        bindchange="onDegreePickerChange"
+      >
+        <picker-view-column>
+          <view wx:for="{{degreeOptions}}" wx:key="*this" class="picker-column-item">{{item}}</view>
+        </picker-view-column>
+        <picker-view-column wx:if="{{currentLang === 'Chinese'}}">
+          <view wx:for="{{studyTypes}}" wx:key="*this" class="picker-column-item">{{item}}</view>
+        </picker-view-column>
+      </picker-view>
+    </view>
+  </ui-drawer>
+
+  <!-- Onboarding Flow Drawers & Modals -->
+  <!-- File Upload Drawer (Using Component) -->
+  <file-uploader
+    show="{{showOnboardingDrawer}}"
+    config="{{ { title: '立刻完善简历', selectFromChat: '从聊天记录选择', uploadFromLocal: '从相册选择图片', confirmUpload: '一键生成', previewTip: '确认上传文件', cancel: '取消', quotaWarning: '请确保文件清晰且包含姓名、联系方式、教育与工作背景。AI 提取精度受文件质量影响。' } }}"
+    bind:close="closeOnboardingDrawer"
+    bind:success="onOnboardingParseSuccess"
+  />
+
+  <ui-feedback id="ui-feedback" />
+</view>
+

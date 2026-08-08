@@ -1,0 +1,29 @@
+.ui-button {
+  width: 100% !important;
+  height: 88rpx;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 44rpx;
+  font-size: 32rpx;
+  font-weight: 500;
+  transition: all 0.2s;
+  padding: 0 40rpx;
+  box-sizing: border-box;
+}
+
+.primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.secondary {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.disabled {
+  opacity: 0.6;
+  background: var(--border);
+  color: var(--text-holder);
+}

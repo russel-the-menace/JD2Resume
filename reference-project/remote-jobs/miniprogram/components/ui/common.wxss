@@ -1,0 +1,48 @@
+/* 1. 流光加载圆环 - 适用于各种需要内嵌 Loading 的场景 */
+.ui-spinner {
+  width: 48rpx;
+  height: 48rpx;
+  border: 4rpx solid var(--border);
+  border-top: 4rpx solid var(--primary);
+  border-radius: 50%;
+  animation: ui-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  display: inline-block;
+}
+
+@keyframes ui-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 2. 统一右侧箭头 UI Arrow (Chevron Right) */
+.ui-arrow {
+  font-size: 24rpx;
+  color: #cbd5e1;
+  font-weight: 500;
+  margin-left: 8rpx;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* 3. 工业级分界线 - 用于列表项之间 */
+.ui-divider {
+  position: relative;
+}
+
+.ui-divider:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: var(--divider-gap-left, 40rpx);
+  right: var(--divider-gap-right, 40rpx);
+  height: 1rpx;
+  background: var(--divider);
+  transform: scaleY(0.5);
+  transform-origin: bottom;
+}
+
+/* 4. 统一“关键值”样式 - 用于数字、选项结果等深色加粗文本 */
+.ui-value-bold {
+  font-weight: 500;
+  color: var(--text-value);
+  font-family: -apple-system, SF UI Text, Arial, sans-serif;
+}

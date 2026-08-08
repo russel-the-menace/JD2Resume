@@ -1,0 +1,24 @@
+{
+  "entryPagePath": "pages/main/index",
+  "pages": [
+    "pages/main/index",
+    "pages/filter/index",
+    "pages/job-detail/index",
+    "pages/resume-profile/index",
+    "pages/generated-resumes/index",
+    "pages/resume-generator/index"
+  ],
+  "window": {
+    "navigationBarTextStyle": "@navTextStyle",
+    "navigationBarTitleText": "",
+    "navigationBarBackgroundColor": "@navBackgroundColor",
+    "backgroundColor": "@windowBackground",
+    "backgroundColorTop": "@windowBackground",
+    "backgroundColorBottom": "@windowBackground",
+    "enablePullDownRefresh": false
+  },
+  "darkmode": true,
+  "themeLocation": "theme.json",
+  "lazyCodeLoading": "requiredComponents",
+  "style": "v2"
+}

@@ -1,0 +1,121 @@
+/* miniprogram/components/ui-dock-button/index.wxss */
+
+.ui-dock-wrapper {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  /* 容器高度适配 iOS 安全区域 */
+  height: calc(180rpx + env(safe-area-inset-bottom, 0)); 
+  pointer-events: none;
+}
+
+.ui-dock-overlay {
+  position: absolute;
+  inset: 0;
+  /* 更加通透的渐变，使用主题变量 */
+  background: linear-gradient(to top, var(--bg-page, #F8FAFC) 15%, transparent 100%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ui-dock-overlay {
+    background: linear-gradient(to top, var(--bg-page, #131314) 15%, transparent 100%);
+  }
+}
+
+.ui-dock-content {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0); /* 留白设为 0 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.ui-dock-btn {
+  width: 45%; 
+  height: 86rpx; 
+  background: rgba(0, 103, 248, 0.5); 
+  backdrop-filter: blur(2px) saturate(180%);
+  -webkit-backdrop-filter: blur(2px) saturate(180%);
+  color: #ffffff;
+  border-radius: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding-right: 10rpx;
+  
+  /* iOS 20 细节：极细亮边 + 物理深度感 */
+  border: 1rpx solid rgba(255, 255, 255, 0.45);
+  box-shadow: 
+    0 12rpx 35rpx rgba(0, 103, 248, 0.25), 
+    inset 0 2rpx 6rpx rgba(255, 255, 255, 0.7),
+    inset 0 -2rpx 10rpx rgba(0, 0, 0, 0.1);
+    
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: liquid-pulse 6s infinite ease-in-out;
+}
+
+/* 禁用状态：褪色、去饱和度、降低透明度 */
+.ui-dock-btn.disabled {
+  background: rgba(148, 163, 184, 0.2);
+  backdrop-filter: blur(2px) grayscale(100%);
+  -webkit-backdrop-filter: blur(2px) grayscale(100%);
+  color: rgba(255, 255, 255, 0.4);
+  border: 1rpx solid rgba(255, 255, 255, 0.15);
+  box-shadow: none;
+  animation: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ui-dock-btn {
+    background: rgba(0, 103, 248, 0.35);
+    border: 1rpx solid rgba(255, 255, 255, 0.25);
+    box-shadow: 
+      0 12rpx 40rpx rgba(0, 0, 0, 0.5),
+      inset 0 2rpx 4rpx rgba(255, 255, 255, 0.2);
+  }
+
+  .ui-dock-btn.disabled {
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.2);
+  }
+}
+
+.ui-dock-btn-active {
+  transform: scale(0.96);
+  opacity: 0.95;
+}
+
+.ui-dock-icon {
+  width: 36rpx;
+  height: 36rpx;
+}
+
+.ui-dock-icon.animate {
+  animation: shake-plane 7s infinite ease-in-out;
+}
+
+.ui-dock-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+}
+
+/* 动画定义 */
+@keyframes liquid-pulse {
+  0%, 100% { transform: scale(1); border-radius: 80rpx; }
+  50% { transform: scale(1.015); border-radius: 75rpx 85rpx 75rpx 85rpx; }
+}
+
+@keyframes shake-plane {
+  0%, 95.72%, 100% { transform: translate(0, 0) rotate(0); }
+  97.14% { transform: translate(1rpx, -2rpx) rotate(6deg); }
+  98.57% { transform: translate(-1rpx, 1rpx) rotate(-4deg); }
+}

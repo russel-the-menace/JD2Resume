@@ -1,0 +1,92 @@
+<!-- miniprogram/components/jobs-view/index.wxml -->
+<view class="jobs-view-container">
+    <view class="jobs-tabs">
+      <view class="tab-slider tab-slider-{{currentTab}}"></view>
+      <view class="tab {{currentTab === 0 ? 'tab-active' : ''}}" data-idx="0" bindtap="onTabTap">{{ui.tabPublic}}</view>
+      <view class="tab {{currentTab === 1 ? 'tab-active' : ''}}" data-idx="1" bindtap="onTabTap">{{ui.tabFeatured}}</view>
+      <view class="tab {{currentTab === 2 ? 'tab-active' : ''}}" data-idx="2" bindtap="onTabTap">{{ui.tabSaved}}</view>
+    </view>
+
+    <!-- Swiper for animated tab switch; enable touch for swipe -->
+    <swiper current="{{currentTab}}" class="jobs-swiper" indicator-dots="{{false}}" autoplay="{{false}}" circular="{{false}}" duration="300" easing-function="easeOutCubic" disable-touch="{{false}}" bindchange="onSwiperChange">
+      <!-- 公开 tab -->
+      <swiper-item class="jobs-swiper-item">
+        <job-tab
+          id="jobTab0"
+          tab-type="{{0}}"
+          active="{{currentTab === 0}}"
+          is-featured-unlocked="{{isFeaturedUnlocked}}"
+          featured-scroll-enabled="{{featuredScrollEnabled}}"
+          bind:itemtap="onJobTap"
+          bind:refreshsaved="onRefreshSaved"
+          bind:restoresearch="onRestoreSearch"
+          bind:featuresubscribe="onFeaturedSubscribeTap"
+          bind:openfilter="onOpenFilterDrawer"
+        />
+      </swiper-item>
+      
+      <!-- 精选 tab -->
+      <swiper-item class="jobs-swiper-item">
+        <job-tab
+          id="jobTab1"
+          tab-type="{{1}}"
+          active="{{currentTab === 1}}"
+          is-featured-unlocked="{{isFeaturedUnlocked}}"
+          featured-scroll-enabled="{{featuredScrollEnabled}}"
+          bind:itemtap="onJobTap"
+          bind:refreshsaved="onRefreshSaved"
+          bind:restoresearch="onRestoreSearch"
+          bind:featuresubscribe="onFeaturedSubscribeTap"
+          bind:openfilter="onOpenFilterDrawer"
+        />
+      </swiper-item>
+      
+      <!-- 收藏 tab -->
+      <swiper-item class="jobs-swiper-item">
+        <job-tab
+          id="jobTab2"
+          tab-type="{{2}}"
+          active="{{currentTab === 2}}"
+          is-featured-unlocked="{{isFeaturedUnlocked}}"
+          featured-scroll-enabled="{{featuredScrollEnabled}}"
+          bind:itemtap="onJobTap"
+          bind:refreshsaved="onRefreshSaved"
+          bind:restoresearch="onRestoreSearch"
+          bind:featuresubscribe="onFeaturedSubscribeTap"
+          bind:openfilter="onOpenFilterDrawer"
+        />
+      </swiper-item>
+    </swiper>
+
+
+    <!-- Restore Search Condition Bottom Sheet (Upgraded) -->
+    <ui-drawer 
+      title="{{ui.restoreSearchLabel}}" 
+      show="{{showRestoreSheet}}" 
+      confirmText="{{ui.doneLabel}}"
+      bind:close="closeRestoreSheet"
+      bind:confirm="onRestoreConfirm"
+    >
+      <view slot="header-left" class="restore-header-actions">
+          <text wx:if="{{isRestoreEditing}}" class="restore-header-btn-left" bindtap="onClearAllRestoreConditions">{{ui.clearAllLabel}}</text>
+          <text class="restore-header-btn-left" bindtap="toggleRestoreEdit">{{isRestoreEditing ? ui.doneLabel : ui.editLabel}}</text>
+      </view>
+      
+      <view class="restore-sheet-content">
+        <view wx:if="{{savedSearchConditions.length === 0}}" class="empty-restore">
+          <text class="empty-restore-text">{{ui.noSavedSearchConditions}}</text>
+        </view>
+        <view wx:for="{{savedSearchConditions}}" wx:key="_id" wx:for-item="item" wx:for-index="idx" class="restore-item {{isRestoreEditing ? 'restore-item-editing' : ''}} {{item.deleting ? 'restore-item-deleting' : ''}} {{item.collapsing ? 'restore-item-collapsing' : ''}}" data-index="{{idx}}" bindtap="{{isRestoreEditing ? '' : 'onSelectRestoreCondition'}}">
+          <view class="restore-item-content">
+            <view class="restore-item-title">{{item.title}}</view>
+            <view class="restore-item-desc">{{item.desc}}</view>
+          </view>
+          <view wx:if="{{isRestoreEditing}}" class="restore-item-delete" data-index="{{idx}}" catchtap="onDeleteRestoreCondition">
+            <image class="restore-item-delete-icon" src="/assets/icons/del-btn.png" mode="aspectFit" />
+          </view>
+        </view>
+      </view>
+    </ui-drawer>
+
+    <ui-feedback id="ui-feedback" />
+</view>

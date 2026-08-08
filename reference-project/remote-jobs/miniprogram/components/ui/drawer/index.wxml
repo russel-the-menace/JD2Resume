@@ -1,0 +1,36 @@
+<view class="ui-drawer-mask {{show ? 'show' : ''}}" bindtap="onMaskTap"></view>
+<view class="ui-drawer-container {{show ? 'show' : ''}}">
+  <view class="ui-drawer-header">
+    <view class="ui-drawer-header-left">
+      <slot name="header-left"></slot>
+      <view 
+        class="ui-drawer-close {{!showClose ? 'hidden' : ''}}" 
+        bindtap="onClose"
+      >
+        <text>✕</text>
+      </view>
+    </view>
+    <text class="ui-drawer-title">{{title}}</text>
+    <view class="ui-drawer-header-right">
+      <slot name="header-right-extra"></slot>
+      <view 
+        wx:if="{{showConfirm}}" 
+        class="ui-drawer-confirm-btn {{loading ? 'loading' : ''}} {{!confirmActive ? 'disabled' : ''}}" 
+        bindtap="onConfirm"
+      >
+        <view wx:if="{{loading}}" class="ui-drawer-loading-icon"></view>
+        <block wx:else>
+          <text wx:if="{{confirmActive && activeConfirmText}}">{{activeConfirmText}}</text>
+          <text wx:elif="{{!confirmActive && inactiveConfirmText}}">{{inactiveConfirmText}}</text>
+          <text wx:else>{{confirmText}}</text>
+        </block>
+      </view>
+    </view>
+  </view>
+  <ui-scroll-view wx:if="{{useScroll}}" custom-class="ui-drawer-content" scrollY="{{true}}">
+    <slot></slot>
+  </ui-scroll-view>
+  <view wx:else class="ui-drawer-content">
+    <slot></slot>
+  </view>
+</view>

@@ -1,0 +1,6 @@
+{
+  "component": true,
+  "usingComponents": {
+    "ui-drawer": "../ui/drawer/index"
+  }
+}

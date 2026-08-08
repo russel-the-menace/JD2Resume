@@ -1,0 +1,384 @@
+<view class="me-view-container">
+  <block>
+    <ui-scroll-view scrollY="{{true}}" enableFlex="{{true}}" custom-class="me-scroll-container">
+        <!-- ... content ... -->
+      <!-- 1. 沉浸式头部 Hero Section -->
+    <view class="hero-section">
+      <view class="hero-bg"></view>
+      <view class="user-container" bindtap="onAvatarTap">
+        <view class="avatar-wrapper member-color-{{displayMemberLevel}}">
+          <block wx:if="{{userInfo}}">
+            <image class="avatar-large" src="{{userInfo.avatar}}" />
+          </block>
+          <block wx:else>
+            <view class="avatar-placeholder-large"></view>
+          </block>
+          <view class="edit-badge">
+            <view class="edit-badge-icon"></view>
+          </view>
+        </view>
+        <view class="user-info-main">
+          <text class="nickname-large">{{userInfo.nickName || ui.loginNow}}</text>
+          <view class="user-subtext-wrapper">
+            <text class="user-subtext">{{ui.viewEditProfile}}</text>
+            <text class="ui-arrow">❯</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="content-body">
+    <!-- 2. 会员权益看板 VIP Benefit Card (Redesigned) -->
+    <view class="vip-card-v3 {{isMember ? 'level-' + displayMemberLevel : 'level-0'}}" bindtap="openMemberHub">
+      <!-- 背景光效 -->
+      <view class="card-glow"></view>
+      <view class="card-content">
+        <view class="card-top">
+          <view class="card-badge-wrap">
+            <text class="vip-name">{{memberBadgeText || ui.regularUser}}</text>
+          </view>
+          <view class="card-points">
+            <view class="points-upper">
+              <text class="points-label">{{ui.available}}:</text>
+              <text class="points-current ui-value-bold">{{(isMember || totalBalance > 0) ? totalBalance : '-'}}</text>
+              <text class="points-total">/{{(isMember || totalBalance > 0) ? displayLimit : '--'}}</text>
+            </view>
+            <view class="points-progress-wrap">
+              <view class="points-progress-inner" style="width: {{(isMember || totalBalance > 0) ? resumeQuotaProgress + '%' : '0%'}}"></view>
+            </view>
+          </view>
+        </view>
+        <view class="card-bottom">
+          <view class="card-validity">
+            <text class="val-label">{{isMember ? (ui.memberExpiredDate || 'Expires') : (ui.unlockAIFeatures || 'Unlock AI Power')}}</text>
+            <text class="val-date ui-value-bold" wx:if="{{isMember}}">{{expiredDateText}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 3. 核心功能列表 Action List Group -->
+    <view class="action-list-group">
+      <view class="action-row ui-divider" bindtap="onResumeProfileTap" hover-class="row-hover">
+        <view class="row-left">
+          <view class="icon-circle blue-bg">📄</view>
+          <view class="row-text">
+            <text class="row-title">{{ui.resumeProfileEntry}}</text>
+            <text class="row-subtitle">{{ui.resumeProfileSubtitle}}</text>
+          </view>
+        </view>
+        <view class="row-right">
+          <text class="ui-arrow">❯</text>
+        </view>
+      </view>
+
+      <view class="action-row ui-divider" bindtap="onGeneratedResumesTap" hover-class="row-hover">
+        <view class="row-left">
+          <view class="icon-circle green-bg">✨</view>
+          <view class="row-text">
+            <text class="row-title">{{ui.generatedResumesEntry}}</text>
+            <text class="row-subtitle">{{ui.generatedResumesSubtitle}}</text>
+          </view>
+        </view>
+        <view class="row-right">
+          <text class="ui-arrow">❯</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 4. 设置列表 Settings List -->
+    <view class="settings-group">
+      <view class="setting-row ui-divider" bindtap="onLanguageTap" hover-class="row-hover">
+        <view class="row-left">
+          <view class="row-icon-box"><text>🌍</text></view>
+          <text class="row-label">{{ui.languageEntry}}</text>
+        </view>
+        <view class="row-right">
+          <text class="row-value ui-value-bold">{{appLanguage === 'Chinese' ? ui.langChinese : (appLanguage === 'AIChinese' ? ui.langAIChinese : (appLanguage === 'English' ? ui.langEnglish : ui.langAIEnglish))}}</text>
+          <text class="ui-arrow">❯</text>
+        </view>
+      </view>
+
+      <view class="setting-row ui-divider" bindtap="onInviteTap" hover-class="row-hover" wx:if="{{isBeta}}">
+        <view class="row-left">
+          <view class="row-icon-box"><text>✉️</text></view>
+          <text class="row-label">{{ui.inviteCodeEntry}}</text>
+        </view>
+        <view class="row-right">
+          <text class="ui-arrow">❯</text>
+        </view>
+      </view>
+
+      <view class="setting-row ui-divider" bindtap="onContactAuthor" hover-class="row-hover">
+        <view class="row-left">
+          <view class="row-icon-box"><text style="font-size: 28rpx;">💬</text></view>
+          <text class="row-label">{{ui.contactAuthor}}</text>
+        </view>
+        <view class="row-right">
+          <text class="ui-arrow">❯</text>
+        </view>
+      </view>
+    </view>
+
+  </view>
+</ui-scroll-view>
+
+  <!-- Language Sheet (Redesigned) -->
+  <ui-drawer 
+    show="{{showLanguageSheet}}" 
+    title="{{ui.languageEntry}}" 
+    confirmText="{{ui.confirm}}"
+    confirmActive="{{isLanguageChanged}}"
+    bind:close="closeLanguageSheet"
+    bind:confirm="onLanguageConfirm"
+  >
+    <view class="bottom-sheet-content">
+      <!-- Standard Modes -->
+      <view class="mode-section-title">{{ui.basicMode}}</view>
+      <view class="mode-card {{tempLanguage === 'Chinese' ? 'mode-card-active' : ''}}"
+            data-value="Chinese" bindtap="onLanguageSelect">
+        <view class="mode-card-main">
+          <text class="mode-name">{{ui.langChinese}}</text>
+          <text class="mode-desc">{{ui.langChineseDesc}}</text>
+        </view>
+        <view class="mode-check" wx:if="{{tempLanguage === 'Chinese'}}">
+          <icon type="success_no_circle" size="16" color="var(--primary-dark)"/>
+        </view>
+      </view>
+
+      <view class="mode-card {{tempLanguage === 'English' ? 'mode-card-active' : ''}}"
+            data-value="English" bindtap="onLanguageSelect">
+        <view class="mode-card-main">
+          <text class="mode-name">{{ui.langEnglish}}</text>
+          <text class="mode-desc">{{ui.langEnglishDesc}}</text>
+        </view>
+        <view class="mode-check" wx:if="{{tempLanguage === 'English'}}">
+          <icon type="success_no_circle" size="16" color="var(--primary-dark)"/>
+        </view>
+      </view>
+
+      <!-- AI VIP Modes -->
+      <view class="mode-section-title mode-section-title-vip">
+        <text>{{ui.aiMode}}</text>
+        <text class="vip-tag-mini">{{ui.vipTag}}</text>
+      </view>
+
+      <view class="mode-card mode-card-vip {{tempLanguage === 'AIChinese' ? 'mode-card-active' : ''}}"
+            data-value="AIChinese" bindtap="onLanguageSelect">
+        <view class="mode-card-icon">✨</view>
+        <view class="mode-card-main">
+          <text class="mode-name">{{ui.langAIChinese}}</text>
+          <text class="mode-desc">{{ui.langAIChineseDesc}}</text>
+        </view>
+        <view class="mode-check" wx:if="{{tempLanguage === 'AIChinese'}}">
+          <icon type="success_no_circle" size="16" color="var(--primary-dark)"/>
+        </view>
+      </view>
+
+      <view class="mode-card mode-card-vip {{tempLanguage === 'AIEnglish' ? 'mode-card-active' : ''}}"
+            data-value="AIEnglish" bindtap="onLanguageSelect">
+        <view class="mode-card-icon">✨</view>
+        <view class="mode-card-main">
+          <text class="mode-name">{{ui.langAIEnglish}}</text>
+          <text class="mode-desc">{{ui.langAIEnglishDesc}}</text>
+        </view>
+        <view class="mode-check" wx:if="{{tempLanguage === 'AIEnglish'}}">
+          <icon type="success_no_circle" size="16" color="var(--primary-dark)"/>
+        </view>
+      </view>
+    </view>
+  </ui-drawer>
+
+  <!-- 邀请好友计划 Drawer -->
+  <ui-drawer 
+    show="{{showInviteSheet}}" 
+    title="{{ui.inviteFriendPlan}}" 
+    activeConfirmText="{{ui.redeem}}"
+    inactiveConfirmText="{{ui.close}}"
+    confirmActive="{{isInviteCodeValid}}"
+    bind:close="closeInviteSheet"
+    bind:confirm="onInviteConfirm"
+  >
+    <view class="invite-sheet-content-v2">
+        <!-- Hero Section -->
+        <view class="invite-hero">
+          <text class="invite-hero-sub">{{ui.inviteRewardDesc}}</text>
+        </view>
+
+        <!-- My Code Section -->
+        <view class="code-display-card" bindtap="onCopyInviteCode">
+          <text class="code-label">{{ui.myInviteCode}}</text>
+          <view class="code-main-row">
+            <text class="code-text">{{myInviteCode}}</text>
+          </view>
+          <text class="code-hint">{{ui.clickToCopy}}</text>
+        </view>
+
+        <!-- Redemption Input -->
+        <view class="redeem-container">
+          <text class="redeem-title">{{ui.iHaveInviteCode}}</text>
+          <view class="redeem-input-group {{inputInviteCode.length > 0 ? 'has-value' : ''}}">
+            <input class="redeem-input" 
+                   type="text" 
+                   placeholder="{{ui.inputInviteCodePlaceholder}}" 
+                   placeholder-class="redeem-placeholder"
+                   value="{{inputInviteCode}}" 
+                   bindinput="onInviteCodeInput"
+                   maxlength="6"
+                   cursor-color="{{ui.cursorColor}}"
+                   show-confirm-bar="{{false}}" />
+          </view>
+        </view>
+    </view>
+  </ui-drawer>
+
+  <include src="./profile-sheet.wxml"/>
+
+  <!-- 会员权益 center 弹窗 Member Hub Sheet (Redesigned) -->
+  <ui-drawer 
+    title="{{ui.memberCenter}}" 
+    show="{{showMemberHub}}" 
+    confirmText="{{ui.confirm}}"
+    confirmActive="{{false}}"
+    useScroll="{{false}}"
+    bind:close="closeMemberHub"
+    bind:confirm="onMemberHubConfirm"
+  >
+    <ui-scroll-view scrollY="{{true}}" custom-class="sheet-body-v3">
+      <!-- 1. Dashboard: Points & Identity (Clean version without user info) -->
+      <view class="dashboard-card tier-{{displayMemberLevel}}">
+        <view class="dash-row-top">
+           <view class="dash-identity-box">
+              <text class="dash-badge-v3">{{memberBadgeText || ui.regularUser}}</text>
+           </view>
+           <view class="dash-status-pill {{isMember ? 'active' : ''}}">
+              {{isMember ? ui.active : ui.inactive}}
+           </view>
+        </view>
+        
+        <view class="dash-balance-row">
+           <view class="balance-item">
+              <text class="bal-label">{{ui.available}}</text>
+              <text class="bal-value">{{totalBalance}} / {{displayLimit}}</text>
+           </view>
+           <view class="balance-sep"></view>
+           <view class="balance-item align-right">
+              <text class="bal-label">{{ui.memberExpiredDate}}</text>
+              <text class="bal-value small">{{expiredDateText || ui.notActivated}}</text>
+           </view>
+        </view>
+      </view>
+
+      <!-- 2. Shop Section -->
+      <view class="shop-section">
+         <view class="section-head">
+            <text class="sec-title">{{ui.rechargeUpgrade}}</text>
+         </view>
+         
+         <!-- Product List (Horizontal) -->
+         <ui-scroll-view scrollX="{{true}}" enableFlex="{{true}}" custom-class="product-scroll-v3">
+            <block wx:for="{{ schemsList || [] }}" wx:key="scheme_id">
+               <view class="prod-card-v3 {{selectedSchemeId === item.scheme_id ? 'selected' : ''}} {{item.type === 'topup' ? 'type-topup' : 'type-plan'}}"
+                     bindtap="onSelectScheme" 
+                     data-id="{{item.scheme_id}}">
+                  
+                  <view class="prod-upper">
+                     <text class="prod-name">{{appLanguage === 'Chinese' || appLanguage === 'AIChinese' ? item.name_chinese : item.name_english}}</text>
+                     <text class="prod-price"><text class="curr">¥</text>{{item.price / 100}}</text>
+                  </view>
+                  
+                  <view class="prod-lower">
+                     <view class="prod-points">
+                        <text class="pts-val">+{{item.points}}</text>
+                        <text class="pts-unit">{{ui.unitPoints}}</text>
+                     </view>
+                     <view class="prod-days" wx:if="{{item.days > 0}}">{{item.days}}{{ui.unitDays}}</view>
+                     <view class="prod-days" wx:else>{{ui.forever}}</view>
+                  </view>
+
+                  <view class="selection-check"></view>
+               </view>
+            </block>
+            <!-- Spacing purely for horizontal scroll stability -->
+            <view class="product-scroll-spacer"></view>
+         </ui-scroll-view>
+         
+         <!-- Selected Product Details -->
+         <view class="selection-detail-box" wx:if="{{selectedScheme}}">
+            <text class="detail-desc">{{(appLanguage === 'Chinese' || appLanguage === 'AIChinese') ? (selectedScheme.description_chinese || selectedScheme.description) : (selectedScheme.description_english || selectedScheme.description)}}</text>
+            <view class="privileges-notes">
+               <block wx:if="{{(appLanguage === 'Chinese' || appLanguage === 'AIChinese') && selectedScheme.features_chinese}}">
+                  <view class="note-item" wx:for="{{selectedScheme.features_chinese}}" wx:key="*this">
+                       <text class="note-dash" wx:if="{{selectedScheme.features_is_dash[index]}}">-</text>
+                       <text class="note-check" wx:else>✓</text>
+                       <text class="{{selectedScheme.features_is_dash[index] ? 'note-gray' : ''}}">{{item}}</text>
+                  </view>
+               </block>
+               <block wx:elif="{{selectedScheme.features_english}}">
+                  <view class="note-item" wx:for="{{selectedScheme.features_english}}" wx:key="*this">
+                       <text class="note-dash" wx:if="{{selectedScheme.features_is_dash[index]}}">-</text>
+                       <text class="note-check" wx:else>✓</text>
+                       <text class="{{selectedScheme.features_is_dash[index] ? 'note-gray' : ''}}">{{item}}</text>
+                  </view>
+               </block>
+            </view>
+         </view>
+      </view>
+      <view class="bottom-spacer"></view>
+    </ui-scroll-view>
+
+    <!-- Sticky Footer: Pay Action -->
+    <view class="sheet-footer-v3">
+       <view class="footer-left">
+          <text class="total-label">{{ui.totalLabel}}</text>
+          <view class="total-price-box">
+              <block wx:if="{{isCalculatingPrice}}">
+                  <view class="price-loading-spinner"></view>
+              </block>
+              <block wx:else>
+                  <text class="total-curr">¥</text>
+                  <text class="old-amt" wx:if="{{isUpgradeOrder}}">{{originalPrice / 100}}</text>
+                  <text class="total-amt">{{finalPrice / 100}}</text>
+              </block>
+          </view>
+       </view>
+       <view class="pay-btn-v3" bindtap="onPurchase">
+          {{ui.payNow}}
+       </view>
+    </view>
+  </ui-drawer>
+
+  <!-- 联系作者弹窗 Contact Author Sheet -->
+  <ui-drawer 
+    title="{{ui.contactAuthor}}" 
+    show="{{showContactSheet}}" 
+    inactiveConfirmText="{{ui.close}}"
+    confirmActive="{{false}}"
+    useScroll="{{false}}"
+    bind:close="closeContactSheet"
+  >
+    <view class="author-sheet-body">
+      <!-- 场景化标签 Tags Area -->
+      <view class="feedback-tags">
+        <view class="f-tag">{{ui.feedbackTagBug}}</view>
+        <view class="f-tag">{{ui.feedbackTagCoach}}</view>
+        <view class="f-tag">{{ui.feedbackTagCollab}}</view>
+      </view>
+
+      <text class="author-slogan-v2">{{ui.authorWechatSlogan}}</text>
+      
+      <view class="qr-wrapper-v3">
+        <view class="qr-container-premium">
+          <image class="qr-image-v3" src="/assets/contact-qr.svg" mode="widthFix" show-menu-by-longpress="{{true}}" />
+        </view>
+      </view>
+      
+      <text class="qr-hint-v2">{{ui.qrHint}}</text>
+
+      <view class="copy-wechat-btn" bindtap="onCopyWechatRaw">
+        <text>{{ui.copyWechatId}}</text>
+      </view>
+    </view>
+  </ui-drawer>
+  </block>
+</view>

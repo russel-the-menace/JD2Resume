@@ -8,3 +8,9 @@ node_modules/
 
 # Generated Vite dependency pre-bundle metadata
 node_modules/.vite/deps/_metadata.json
+
+# Reference project build artifacts
+reference-project/**/dist/
+reference-project/**/.venv/
+reference-project/**/coverage/
+reference-project/**/*.tsbuildinfo

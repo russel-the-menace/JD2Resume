@@ -1,0 +1,62 @@
+<ui-drawer 
+  show="{{show}}" 
+  title="{{config.title}}" 
+  useScroll="{{false}}"
+  showConfirm="{{false}}"
+  bind:close="onClose"
+>
+  <view class="drawer-body">
+    <view class="upload-options">
+        <view class="upload-btn" bindtap="onSelectFromChat">
+          <view class="icon-box blue">
+            <text class="tool-emoji">💬</text>
+          </view>
+          <text class="btn-text">{{config.selectFromChat}}</text>
+          <text class="ui-arrow">❯</text>
+        </view>
+        <view class="upload-btn" bindtap="onSelectFromLocal">
+          <view class="icon-box blue">
+            <text class="tool-emoji">📁</text>
+          </view>
+          <text class="btn-text">{{config.uploadFromLocal}}</text>
+            <text class="ui-arrow">❯</text>
+        </view>
+    </view>
+  </view>
+</ui-drawer>
+
+<!-- Custom File Preview Modal -->
+<view class="preview-mask {{showPreviewModal ? 'visible' : ''}}" catchtouchmove="true">
+  <view class="preview-container">
+      <view class="preview-header">
+          <text class="preview-title">{{config.confirmUpload}}</text>
+      </view>
+      
+      <view class="preview-content">
+          <!-- Image Preview -->
+          <image 
+              wx:if="{{previewType === 'image'}}" 
+              src="{{previewPath}}" 
+              mode="aspectFit" 
+              class="file-preview-img"
+          />
+          
+          <!-- PDF Preview (Icon) -->
+          <view wx:else class="file-preview-pdf" bindtap="openPdfPreview">
+              <view class="pdf-icon">📄</view>
+              <text class="pdf-name">{{previewName}}</text>
+              <text class="pdf-tip">{{config.previewTip}}</text>
+          </view>
+
+          <view class="quota-warning">
+              <text class="warning-icon">⚠️</text>
+              <text class="warning-text">{{config.quotaWarning}}</text>
+          </view>
+      </view>
+
+      <view class="preview-footer">
+          <button class="btn-cancel" bindtap="onCancelPreview">{{config.cancel}}</button>
+          <button class="btn-confirm" bindtap="onConfirmPreview">{{config.confirmUpload}}</button>
+      </view>
+  </view>
+</view>

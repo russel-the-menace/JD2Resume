@@ -1,0 +1,78 @@
+<!--miniprogram/components/education-drawer/index.wxml-->
+<view class="drawer-mask {{show ? 'drawer-mask-open' : ''}}" bindtap="onClose"></view>
+
+<view 
+  class="drawer-content {{show ? 'drawer-open' : ''}}"
+  catchtap="stopPropagation"
+>
+  <view class="drawer-header">
+    <text class="drawer-title">{{isEdit ? ui.editEducation : ui.addEducation}}</text>
+    <view class="close-btn" bindtap="onClose">
+      <view class="close-icon"></view>
+    </view>
+  </view>
+
+  <ui-scroll-view class="drawer-body" scrollY="{{true}}">
+    <view class="form-group">
+      <view class="form-label">{{ui.school}}</view>
+      <input 
+        class="form-input" 
+        placeholder="{{ui.schoolPlaceholder}}" 
+        value="{{formData.school}}" 
+        bindinput="onInputChange" 
+        data-field="school"
+        cursor-color="{{ui.cursorColor}}"
+        show-confirm-bar="{{false}}"
+      />
+    </view>
+
+    <view class="form-group">
+      <view class="form-label">{{ui.degree}}</view>
+      <picker bindchange="onDegreeChange" value="{{degreeIndex}}" range="{{ui.degreeOptions}}">
+        <view class="form-picker {{formData.degree ? '' : 'placeholder'}}">
+          {{formData.degree || ui.degreePlaceholder}}
+        </view>
+      </picker>
+    </view>
+
+    <view class="form-group">
+      <view class="form-label">{{ui.major}}</view>
+      <input 
+        class="form-input" 
+        placeholder="{{ui.majorPlaceholder}}" 
+        value="{{formData.major}}" 
+        bindinput="onInputChange" 
+        data-field="major"
+        cursor-color="{{ui.cursorColor}}"
+        show-confirm-bar="{{false}}"
+      />
+    </view>
+
+    <view class="form-group">
+      <view class="form-label">{{ui.dateRange}}</view>
+      <view class="date-range-container">
+        <picker mode="date" fields="month" value="{{formData.startDate}}" bindchange="onDateChange" data-field="startDate">
+          <view class="date-picker {{formData.startDate ? '' : 'placeholder'}}">
+            {{formData.startDate || ui.startDate}}
+          </view>
+        </picker>
+        <text class="date-sep">-</text>
+        <picker mode="date" fields="month" value="{{formData.endDate}}" bindchange="onDateChange" data-field="endDate">
+          <view class="date-picker {{formData.endDate ? '' : 'placeholder'}}">
+            {{formData.endDate || ui.endDate}}
+          </view>
+        </picker>
+      </view>
+    </view>
+  </ui-scroll-view>
+
+  <view class="drawer-footer">
+    <ui-button wx:if="{{isEdit}}" type="secondary" bindtap="onDelete" custom-class="btn-delete">
+      {{ui.delete}}
+    </ui-button>
+    <ui-button type="primary" bindtap="onSave" custom-class="btn-save">
+      {{ui.save}}
+    </ui-button>
+  </view>
+</view>
+

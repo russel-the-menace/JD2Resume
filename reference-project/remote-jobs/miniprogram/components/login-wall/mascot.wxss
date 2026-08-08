@@ -1,0 +1,58 @@
+/* --- Mascot 独立物理层 (基准引擎) --- */
+.mascot-container {
+  position: absolute;
+  z-index: 1001;
+  /* 坐标投射：基于变量精确控制位姿 */
+  left: var(--star-x);
+  top: var(--star-y);
+  width: var(--star-size);
+  height: var(--star-size);
+  opacity: var(--star-opacity);
+  /* 核心修复：使用百分比平移替代复杂的 calc 偏移，彻底消除尺寸变化时的位置跳变 */
+  transform: translate3d(-50%, -50%, 0) scale(var(--star-scale));
+  
+  /* 关键：所有物理属性共用同一套高精度过渡 */
+  transition: 
+    transform 0.8s cubic-bezier(0.23, 1, 0.32, 1),
+    left 0.8s cubic-bezier(0.23, 1, 0.32, 1),
+    top 0.8s cubic-bezier(0.23, 1, 0.32, 1),
+    width 0.8s cubic-bezier(0.23, 1, 0.32, 1),
+    height 0.8s cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 0.8s ease;
+    
+  will-change: transform, left, top, opacity, width, height;
+  pointer-events: none;
+}
+
+/* 针对最终淡出阶段，星星用对齐登录墙和背景，采用由慢到快的加速曲线 */
+/* 核心修复：淡出阶段同时将 --star-opacity 设为 0，并保持 scale 稳定 */
+.login-wall.s-hidden .mascot-container {
+  opacity: 0 !important;
+  transition: 
+    opacity 2s cubic-bezier(0.9, 0, 0.3, 1) !important;
+}
+
+.mascot-inner {
+  width: 100%;
+  height: 100%;
+  /* 默认保持呼吸 */
+  animation: ai-breathe 4s infinite ease-in-out;
+}
+
+.ai-star-view {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 0 15rpx rgba(46, 95, 233, 0.4));
+}
+
+@media (prefers-color-scheme: dark) {
+  .ai-star-view {
+    filter: drop-shadow(0 0 25rpx rgba(96, 165, 250, 0.6)) brightness(1.2);
+  }
+}
+
+@keyframes ai-breathe {
+  0%, 100% { transform: scale(0.95) rotate(-2deg); }
+  50% { transform: scale(1.05) rotate(2deg); }
+}

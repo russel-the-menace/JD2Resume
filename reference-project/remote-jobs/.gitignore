@@ -1,0 +1,10 @@
+
+# Private environment variables
+miniprogram/env.js
+.idea/*
+
+# Cloud functions node_modules
+cloudfunctions/*/node_modules/
+
+.DS_Store
+node_modules

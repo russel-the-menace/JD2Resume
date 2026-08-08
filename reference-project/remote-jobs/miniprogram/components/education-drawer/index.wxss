@@ -1,0 +1,216 @@
+/* miniprogram/components/education-drawer/index.wxss */
+.drawer-mask {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 40%);
+  z-index: 1000;
+  
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  
+  /* Close: Fade out, then hide visibility at the END */
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s step-end;
+  /* Hardware acceleration fix */
+  backface-visibility: hidden;
+  perspective: 1000;
+}
+
+.drawer-mask-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  
+  /* Open: Show visibility INSTANTLY, then fade in */
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s step-start;
+}
+
+.drawer-content {
+  position: fixed;
+  inset: 0 0 0 auto;
+  
+  /* Reset to Standard Right Anchor */
+  width: 85vw;
+  height: 100%;
+  
+  background: #fff;
+  z-index: 1001;
+  
+  /* Restored: 100% Translation (Standard) */
+  transform: translate3d(100%, 0, 0);
+  
+  /* Close: Slide out, then hide visibility at the END */
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s step-end;
+  visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -10rpx 0 30rpx rgb(0 0 0 / 5%);
+  border-top-left-radius: 32rpx;
+  border-bottom-left-radius: 32rpx;
+  will-change: transform;
+  backface-visibility: hidden;
+  perspective: 1000;
+}
+
+.drawer-open {
+  /* Active State: No translation (at right: 0) */
+  transform: translate3d(0, 0, 0); 
+  
+  visibility: visible;
+  /* Open: Show visibility INSTANTLY, then slide in */
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s step-start;
+}
+
+.drawer-header {
+  padding: 40rpx 40rpx 30rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1rpx solid var(--border);
+}
+
+.drawer-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.close-btn {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-icon {
+  position: relative;
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.close-icon::before, .close-icon::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 4rpx;
+  background-color: var(--text-holder);
+  border-radius: 2rpx;
+}
+
+.close-icon::before {
+  transform: rotate(45deg);
+}
+
+.close-icon::after {
+  transform: rotate(-45deg);
+}
+
+.drawer-body {
+  flex: 1;
+  padding: 40rpx;
+}
+
+.form-group {
+  margin-bottom: 40rpx;
+}
+
+.form-label {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text-sub);
+  margin-bottom: 16rpx;
+}
+
+.form-input {
+  width: 100%;
+  height: 88rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  padding: 0 24rpx;
+  font-size: 30rpx;
+  color: var(--text-main);
+  box-sizing: border-box;
+}
+
+.form-picker {
+  width: 100%;
+  height: 88rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  padding: 0 24rpx;
+  font-size: 30rpx;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.placeholder {
+  color: var(--text-holder);
+}
+
+.date-range-container {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.date-picker {
+  flex: 1;
+  height: 88rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  padding: 0 24rpx;
+  font-size: 30rpx;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.date-sep {
+  color: var(--text-holder);
+  font-weight: 600;
+}
+
+.drawer-footer {
+  padding: 40rpx;
+  display: flex;
+  gap: 24rpx;
+  border-top: 1rpx solid var(--border);
+}
+
+.btn-save {
+  flex: 1;
+  height: 96rpx;
+  background: var(--primary-mid);
+  color: #fff;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  font-weight: 600;
+  margin: 0;
+  border: none;
+}
+
+.btn-delete {
+  flex: 0 0 200rpx;
+  height: 96rpx;
+  background: #fef2f2;
+  color: #ef4444;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  font-weight: 600;
+  margin: 0;
+  border: none;
+}
+

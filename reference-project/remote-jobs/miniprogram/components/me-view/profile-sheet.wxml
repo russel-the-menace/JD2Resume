@@ -1,0 +1,101 @@
+<!-- 个人资料底部弹窗 -->
+<ui-drawer 
+  title="{{ui.userProfileTitle}}" 
+  show="{{showProfileSheet}}" 
+  bind:close="closeProfileSheet" 
+  showConfirm="{{false}}"
+>
+  <view class="bottom-sheet-content profile-sheet-content">
+    <!-- Upload Avatar - 独立一栏，左右布局 -->
+    <view class="profile-avatar-section" catchtap="onUploadAvatar">
+      <text class="profile-avatar-title">{{ui.uploadAvatar}}</text>
+      <view class="profile-avatar-content">
+        <block wx:if="{{userInfo}}">
+          <view class="profile-avatar-wrapper profile-avatar-bordered">
+            <image class="profile-avatar-preview" src="{{userInfo.avatar}}" mode="aspectFill"/>
+          </view>
+        </block>
+        <block wx:else>
+          <view class="profile-avatar-wrapper profile-avatar-bordered">
+            <view class="profile-avatar-placeholder"></view>
+          </view>
+        </block>
+      </view>
+    </view>
+
+    <!-- Edit Nickname & Phone Number - 合并到一个card -->
+    <view class="profile-info-section">
+      <!-- Edit Nickname -->
+      <view class="profile-info-item">
+        <view class="profile-nickname-header">
+          <text class="profile-nickname-title">{{ui.editNickname}}</text>
+          <view class="profile-nickname-change-btn" catchtap="onEditNickname">
+            <text class="profile-nickname-change-btn-text">修改</text>
+          </view>
+        </view>
+        <view class="profile-nickname-content">
+          <text class="profile-nickname-value">{{userInfo ? userInfo.nickName : ui.notSet}}</text>
+        </view>
+      </view>
+
+      <!-- Phone Number -->
+      <view class="profile-info-item">
+        <view class="profile-phone-header">
+          <text class="profile-phone-title">{{ui.phoneNumber}}</text>
+          <button
+            wx:if="{{!userPhone}}"
+            class="profile-nickname-change-btn"
+            open-type="getPhoneNumber"
+            bindgetphonenumber="onChangePhoneNumber"
+            hover-class="none"
+          >
+            <text class="profile-nickname-change-btn-text">设置</text>
+          </button>
+        </view>
+        <view class="profile-phone-content">
+          <text class="profile-phone-value">{{userPhone ? maskedPhone : ui.notSet}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</ui-drawer>
+
+<!-- Edit Nickname Modal -->
+<block wx:if="{{showNicknameModal}}">
+  <view class="nickname-modal-mask {{nicknameModalOpen ? 'nickname-modal-mask-open' : ''}}" catchtap="closeNicknameModal"></view>
+  <view class="nickname-modal {{nicknameModalOpen ? 'nickname-modal-open' : ''}}">
+    <view class="nickname-modal-header">
+      <text class="nickname-modal-title">{{ui.editNickname}}</text>
+    </view>
+    <view class="nickname-modal-body">
+      <view class="nickname-input-wrapper">
+        <input
+                class="nickname-modal-input"
+                type="text"
+                value="{{newNickname}}"
+                bindinput="onNicknameInput"
+                maxlength="20"
+                placeholder="{{ui.editNickname}}"
+                focus="{{nicknameModalOpen}}"
+                confirm-type="done"
+                bindconfirm="onSaveNickname"
+                cursor-color="{{ui.cursorColor}}"
+                show-confirm-bar="{{false}}"
+        />
+        <text class="nickname-counter {{nicknameWeightedLength > 16 ? 'overflow' : ''}}">{{nicknameDisplayCount}}/8</text>
+      </view>
+    </view>
+    <view class="nickname-modal-footer">
+      <view class="nickname-modal-footer-btn nickname-modal-cancel">
+        <ui-button class="nickname-btn-instance" type="secondary" size="md" bindtap="onCancelEditNickname">
+          {{ui.cancel}}
+        </ui-button>
+      </view>
+      <view class="nickname-modal-footer-btn nickname-modal-save {{shouldShake ? 'shake-animation' : ''}}">
+        <ui-button class="nickname-btn-instance" type="primary" size="md" bindtap="onSaveNickname">
+          {{ui.save}}
+        </ui-button>
+      </view>
+    </view>
+  </view>
+</block>

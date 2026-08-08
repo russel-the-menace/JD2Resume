@@ -1,0 +1,89 @@
+<!--miniprogram/pages/job-detail/index.wxml-->
+<view class="page">
+  <ui-feedback id="ui-feedback" />
+  <ui-scroll-view     
+    class="detail-content" 
+    scrollY="{{true}}"
+    upperThreshold="0"
+    bounces="{{false}}"
+  >
+    <block wx:if="{{job}}">
+      <view class="detail-body">
+        <view class="detail-header-section">
+          <view class="detail-title-meta-wrapper">
+        <view class="detail-title-row">
+          <text class="detail-title">{{(isAIChinese && job.title_chinese) ? job.title_chinese : (isAIEnglish && job.title_english ? job.title_english : job.title)}}</text>
+        </view>
+        <view class="detail-meta" wx:if="{{((isAIEnglish || isNormalEnglish) && (job.source_name_english || job.source_name)) || (!isAIEnglish && !isNormalEnglish && job.team && job.team !== ui.unknownCompany) || job.salary}}">
+          <text wx:if="{{(isAIEnglish || isNormalEnglish) && (job.source_name_english || job.source_name)}}" class="detail-meta-item">From {{job.source_name_english || job.source_name}}</text>
+          <text wx:if="{{!isAIEnglish && !isNormalEnglish && job.team && job.team !== ui.unknownCompany}}" class="detail-meta-item">{{job.team}}</text>
+          <text wx:if="{{(((isAIEnglish || isNormalEnglish) && (job.source_name_english || job.source_name)) || (!isAIEnglish && !isNormalEnglish && job.team && job.team !== ui.unknownCompany)) && job.salary}}" class="detail-meta-dot">·</text>
+          <text wx:if="{{job.salary}}" class="detail-meta-item">{{job.salary}}</text>
+            </view>
+          </view>
+          <view class="collect-button" bindtap="toggleSave">
+            <view class="collect-icon-wrapper">
+              <image class="collect-icon" src="{{saved ? '/assets/icons/save-active-icon.png' : '/assets/icons/save-icon.png'}}" mode="aspectFit"></image>
+            </view>
+          </view>
+        </view>
+        <view class="detail-tags" wx:if="{{job.displayTags && job.displayTags.length > 0}}">
+          <view class="detail-tag" wx:for="{{job.displayTags}}" wx:key="*this">
+            <text class="detail-tag-text">{{item}}</text>
+          </view>
+        </view>
+        <view class="detail-description-wrapper" wx:if="{{job.richDescription}}">
+          <view class="detail-description">
+          <rich-text class="detail-description-rich" nodes="{{job.richDescription}}"></rich-text>
+        </view>
+        </view>
+      </view>
+    </block>
+    <block wx:elif="{{loading}}">
+      <view class="loading">{{loadingText}}</view>
+    </block>
+    <block wx:else>
+      <view class="error">{{loadFailedText}}</view>
+    </block>
+  </ui-scroll-view>
+  <!-- 底部操作栏 (Dock) -->
+  <ui-dock-button 
+    wx:if="{{job}}"
+    text="{{oneClickApplyText}}" 
+    icon="/assets/icons/paper-plane.svg"
+    bind:tap="onOneClickApply"
+  />
+
+  <!-- 功能抽屉 (Bottom Sheet) Redesigned -->
+  <ui-drawer 
+    show="{{showApplyMenu}}" 
+    title="{{applyMenuTitle}}" 
+    showConfirm="{{false}}"
+    bind:close="closeApplyMenu"
+  >
+    <ui-scroll-view class="apply-menu-scroll" scrollY="{{true}}">
+      <view class="apply-menu-content-padding">
+        <!-- AI 增强功能区 -->
+        <view class="apply-menu-section ai-section">
+          <view class="apply-menu-item ai-item" bindtap="onGenerateResume">
+            <view class="apply-menu-item-left">
+              <image class="apply-menu-item-icon ai-icon" src="/assets/icons/four-point-star-twin.png" mode="aspectFit"></image>
+              <text class="apply-menu-item-text ai-text">{{aiResumeGenerateText}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 常规功能区 -->
+        <view class="apply-menu-section">
+          <view class="apply-menu-item" bindtap="onViewSource">
+            <view class="apply-menu-item-left">
+              <view class="apply-menu-icon-placeholder">🔗</view>
+              <text class="apply-menu-item-text">{{copySourceLinkText}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </ui-scroll-view>
+  </ui-drawer>
+</view>
+

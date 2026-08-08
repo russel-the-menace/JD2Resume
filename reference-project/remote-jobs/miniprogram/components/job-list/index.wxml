@@ -1,0 +1,53 @@
+<!-- miniprogram/components/job-list/index.wxml -->
+<ui-scroll-view
+  custom-class="job-list {{className}}"
+  scrollY="{{scrollY}}"
+  scrollTop="{{scrollTop}}"
+  scrollWithAnimation="{{scrollWithAnimation}}"
+  lowerThreshold="{{lowerThreshold}}"
+  upperThreshold="0"
+  bounces="{{false}}"
+  bindscrolltolower="onScrollLower"
+  bindscroll="onScroll"
+  bindtouchstart="onTouchStart"
+  bindtouchend="onTouchEnd"
+  enableBackToTop="{{enableBackToTop}}"
+  enablePassive="{{enablePassive}}"
+>
+  <view class="job-list-content">
+    <block wx:for="{{jobs}}" wx:key="_id">
+      <view class="job-card" data-_id="{{item._id}}" data-job="{{item}}" bindtap="onItemTap">
+        <view class="job-main">
+          <view class="job-title-row">
+            <text class="job-title">{{(isAIChinese && item.title_chinese) ? item.title_chinese : (isAIEnglish && item.title_english ? item.title_english : item.title)}}</text>
+            <text class="job-time">{{item.createdAt}}</text>
+          </view>
+          <view class="job-meta" wx:if="{{((isAIEnglish || isNormalEnglish) && (item.source_name_english || item.source_name)) || (!isAIEnglish && !isNormalEnglish && item.team && item.team !== ui.unknownCompany) || item.salary}}">
+            <text wx:if="{{(isAIEnglish || isNormalEnglish) && (item.source_name_english || item.source_name)}}" class="job-meta-item">From {{item.source_name_english || item.source_name}}</text>
+            <text wx:if="{{!isAIEnglish && !isNormalEnglish && item.team && item.team !== ui.unknownCompany}}" class="job-meta-item">{{item.team}}</text>
+            <text wx:if="{{(((isAIEnglish || isNormalEnglish) && (item.source_name_english || item.source_name)) || (!isAIEnglish && !isNormalEnglish && item.team && item.team !== ui.unknownCompany)) && item.salary}}" class="job-meta-dot">·</text>
+            <text wx:if="{{item.salary}}" class="job-meta-item">{{item.salary}}</text>
+          </view>
+          <ui-scroll-view custom-class="job-tags" scrollX="{{true}}">
+            <view class="job-tag" wx:for="{{item.displayTags || item.tags}}" wx:key="*this">
+              <text class="job-tag-text">{{item}}</text>
+            </view>
+          </ui-scroll-view>
+        </view>
+      </view>
+    </block>
+
+    <view wx:if="{{bottomSpace && bottomSpace > 0}}" style="height: {{bottomSpace}}rpx;"></view>
+
+    <!-- Loading indicator: show spinner when loading -->
+    <view wx:if="{{loading}}" class="list-loading-container">
+      <view class="loading-spinner"></view>
+      <text class="loading-text">{{ui.loading}}</text>
+    </view>
+
+    <!-- No more data indicator: show when not loading and no more data -->
+    <view wx:if="{{!loading && showNoMore}}" class="no-more-container {{noMoreVisible ? 'no-more-visible' : ''}}">
+      <text class="no-more-text">{{ui.allDataLoaded}}</text>
+    </view>
+  </view>
+</ui-scroll-view>

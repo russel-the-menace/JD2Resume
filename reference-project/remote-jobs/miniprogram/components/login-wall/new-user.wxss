@@ -1,0 +1,78 @@
+/* ============================================================ 
+   新用户路径 (New User Path)
+   逻辑说明：从 Logo 到居中的位移仪式，背景高透明毛玻璃
+   ============================================================ */
+
+/* 1. 场景位姿定义 (Scene Definitions) */
+
+/* Scene: Splash (开屏) */
+.login-wall.s-splash {
+  --star-x: 50vw;
+  --star-y: var(--anchor-y);
+  --star-size: 40vw; 
+  --star-opacity: 1;
+}
+
+/* Scene: Login Card (登录卡片 - 默认逻辑：缩小并移动到 Logo 位) */
+.login-wall.s-login {
+  --star-x: calc(11vw + 72rpx + 10rpx);
+  --star-y: calc(var(--anchor-y) - 130rpx); 
+  --star-size: 160rpx;
+  --star-opacity: 1;
+}
+
+/* Loading 状态：默认保持在 Logo 位进行加载 */
+.login-wall.s-loading {
+  --star-x: calc(11vw + 72rpx + 10rpx);
+  --star-y: calc(var(--anchor-y) - 130rpx); 
+  --star-size: 160rpx;
+  --star-opacity: 1;
+}
+
+/* Scene: Success (注册成功 - 展示 30vw 居中) */
+.login-wall.s-success {
+  --star-x: 50vw;
+  --star-y: var(--anchor-y);
+  --star-size: 30vw;
+  --star-opacity: 1;
+}
+
+/* 2. 背景演变：纯白 -> 毛玻璃 -> 透明 */
+
+/* 初始阶段 & 开屏：适配背景 */
+.login-wall.sm-new.s-splash .glass-mask {
+  background: var(--bg-card) !important;
+  backdrop-filter: none !important;
+}
+
+/* 登录墙阶段：保持与 Splash 一致的纯色背景 */
+.login-wall.sm-new.s-login .glass-mask,
+.login-wall.sm-new.s-loading .glass-mask {
+  background: var(--bg-card) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 注册成功 & 最终阶段：透明 (仅在 s-hidden 阶段由 index.wxss 统一处理淡出) */
+.login-wall.sm-new.s-hidden .glass-mask {
+  background: transparent !important;
+  background-color: transparent !important;
+  backdrop-filter: blur(4px) !important; 
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+
+/* 3. 停止呼吸：当进入消失阶段，停止呼吸以保持静态美 */
+.login-wall.s-hidden.sm-new .mascot-inner {
+  animation-play-state: paused !important;
+}
+
+/* 4. 新用户在 s-success 和淡出阶段的尺寸锁定 */
+.login-wall.sm-new.s-success .mascot-container,
+.login-wall.sm-new.s-hidden .mascot-container {
+  left: 50vw !important;
+  top: var(--anchor-y) !important;
+  width: 30vw !important;
+  height: 30vw !important;
+}
+
+/* 5. 已经移除此处 s-login/s-loading 逻辑，移动到了 index.wxss 作为共享逻辑 */

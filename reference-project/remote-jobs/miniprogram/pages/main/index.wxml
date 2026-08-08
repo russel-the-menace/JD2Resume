@@ -1,0 +1,48 @@
+<view class="spa-container">
+  <!-- 1. 全局登录墙与开屏仪式 (Top Level Animation & Auth) -->
+  <login-wall visible="{{!isLoggedIn}}" bind:loginSuccess="onLoginSuccess" />
+
+  <ui-feedback id="ui-feedback" />
+
+  <!-- 2. Content Area (Conditional Rendering based on Tab) -->
+  <view class="main-content" style="height: calc(100vh - 96rpx - env(safe-area-inset-bottom)); overflow: hidden;">
+    <block wx:if="{{bootStatus === 'loading'}}">
+      <!-- 基础占位，具体动画由 login-wall 的 splash-phase 承载 -->
+      <view style="height: 100vh; background: var(--bg-card);"></view>
+    </block>
+
+    <block wx:else>
+      <!-- Tab 0: Jobs -->
+      <view hidden="{{activeTab !== 0}}" class="tab-page">
+        <jobs-view id="jobs-view" active="{{activeTab === 0}}" isLoggedIn="{{isLoggedIn}}" bind:tabChange="onTabChange" />
+      </view>
+
+      <!-- Tab 1: Resume -->
+      <view hidden="{{activeTab !== 1}}" class="tab-page">
+        <resume-view id="resume-view" active="{{activeTab === 1}}" isLoggedIn="{{isLoggedIn}}" bind:tabChange="onTabChange" />
+      </view>
+
+      <!-- Tab 2: Me -->
+      <view hidden="{{activeTab !== 2}}" class="tab-page">
+         <me-view id="me-view" active="{{activeTab === 2}}" isLoggedIn="{{isLoggedIn}}" bind:tabChange="onTabChange" />
+      </view>
+    </block>
+  </view>
+
+  <!-- 3. Custom Tab Bar -->
+  <view class="custom-tab-bar">
+    <view class="tab-item" bindtap="onTabChange" data-index="0">
+      <image class="tab-icon" src="/assets/tabbar/jobs{{activeTab === 0 ? '-active' : ''}}.png"></image>
+      <text class="tab-text {{activeTab === 0 ? 'active' : ''}}">{{tabLabels.jobs}}</text>
+    </view>
+    <view class="tab-item" bindtap="onTabChange" data-index="1">
+      <image class="tab-icon" src="/assets/tabbar/resume{{activeTab === 1 ? '-active' : ''}}.png"></image>
+      <text class="tab-text {{activeTab === 1 ? 'active' : ''}}">{{tabLabels.resume}}</text>
+    </view>
+    <view class="tab-item" bindtap="onTabChange" data-index="2">
+      <image class="tab-icon" src="/assets/tabbar/me{{activeTab === 2 ? '-active' : ''}}.png"></image>
+      <text class="tab-text {{activeTab === 2 ? 'active' : ''}}">{{tabLabels.me}}</text>
+    </view>
+  </view>
+</view>
+

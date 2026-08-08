@@ -1,0 +1,104 @@
+<!--miniprogram/pages/filter/index.wxml-->
+<view class="page">
+  <view class="filter-main">
+    <!-- 左侧导航tab -->
+    <view class="filter-nav">
+      <view class="filter-nav-slider filter-nav-slider-{{currentNavTab}}"></view>
+      <view
+        wx:for="{{navTabs}}"
+        wx:key="key"
+        wx:for-index="idx"
+        class="filter-nav-item {{currentNavTab === idx ? 'filter-nav-item-active' : ''}}"
+        data-key="{{item.key}}"
+        data-index="{{idx}}"
+        bindtap="onNavTabTap"
+      >
+        <text class="filter-nav-text">{{item.label}}</text>
+      </view>
+    </view>
+
+    <view class="filter-content">
+      <ui-scroll-view 
+        class="filter-body" 
+        scrollY="{{true}}"
+        scrollIntoView="{{scrollIntoView}}"
+        scrollWithAnimation="{{true}}"
+        upperThreshold="0"
+        bounces="{{false}}"
+        bindscroll="onScrollViewScroll"
+      >
+        <view class="filter-section filter-section-salary" id="section-salary">
+          <view class="filter-section-title">{{ui.salaryTitle}}</view>
+          <view class="filter-grid">
+            <view
+              wx:for="{{salaryOptions}}"
+              wx:key="*this"
+              wx:for-index="idx"
+              class="filter-chip {{tempValue.salary === item ? 'filter-chip-active' : ''}}"
+              data-value="{{item}}"
+              bindtap="onPickSalary"
+            >
+              <text class="filter-chip-text">{{displaySalaryOptions[idx]}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="filter-section filter-section-experience" id="section-experience">
+          <view class="filter-section-title">{{ui.experienceTitle}}</view>
+          <view class="filter-grid">
+            <view
+              wx:for="{{experienceOptions}}"
+              wx:key="*this"
+              wx:for-index="idx"
+              class="filter-chip {{tempValue.experience === item ? 'filter-chip-active' : ''}}"
+              data-value="{{item}}"
+              bindtap="onPickExperience"
+            >
+              <text class="filter-chip-text">{{displayExperienceOptions[idx]}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="filter-section filter-section-region" id="section-region" wx:if="{{_tabIndex !== 0}}">
+          <view class="filter-section-title">{{ui.regionTitle}}</view>
+          <view class="filter-grid">
+            <view
+              wx:for="{{regionOptions}}"
+              wx:key="*this"
+              wx:for-index="idx"
+              class="filter-chip {{tempValue.region === item ? 'filter-chip-active' : ''}}"
+              data-value="{{item}}"
+              bindtap="onPickRegion"
+            >
+              <text class="filter-chip-text">{{displayRegionOptions[idx]}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="filter-section filter-section-source" id="section-source" wx:if="{{_tabIndex !== 0 && sourceOptions && sourceOptions.length > 0}}">
+          <view class="filter-section-title">{{ui.sourceTitle}}</view>
+          <view class="filter-grid filter-grid-source">
+            <view
+              wx:for="{{sourceOptions}}"
+              wx:key="*this"
+              wx:for-index="idx"
+              class="filter-chip {{sourceSelected[item] ? 'filter-chip-active' : ''}}"
+              data-value="{{item}}"
+              bindtap="onPickSource"
+            >
+              <text class="filter-chip-text">{{displaySourceOptions[idx]}}</text>
+            </view>
+          </view>
+        </view>
+        <!-- 底部间距 -->
+        <view class="filter-bottom-spacer"></view>
+      </ui-scroll-view>
+
+      <view class="filter-footer">
+        <view class="btn-secondary" bindtap="onReset">{{ui.clear}}</view>
+        <view class="btn-primary" bindtap="onConfirm">{{ui.confirm}}</view>
+      </view>
+    </view>
+  </view>
+</view>
+

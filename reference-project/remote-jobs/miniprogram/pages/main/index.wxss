@@ -1,0 +1,745 @@
+/** index.wxss - remote jobs list **/
+
+page {
+  background-color: var(--bg-page);
+  height: 100%;
+  overflow: hidden; /* prevent outer page from scrolling */
+  /* hide page-level scrollbars */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+page::-webkit-scrollbar {
+  display: none;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tab-page {
+  width: 100%;
+  height: 100%;
+}
+
+
+
+/* miniprogram/pages/jobs/index.wxss */
+.search-pill {
+  height: 45rpx;
+  padding: 0 12rpx;
+  border-radius: 18rpx;
+  background-color: var(--primary-light);
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  flex: 0 0 auto;
+  width: 84rpx; /* fixed width for both pills (fits '筛选' and 'Filter' + triangle) */
+  justify-content: center;
+}
+
+.search-pill-text {
+  font-size: 22rpx;
+  color: var(--primary-dark);
+  line-height: 1;
+  display: inline-block;
+  max-width: 110rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* single source of truth for the triangle shape + size + position (NO animation) */
+.search-pill-triangle {
+  width: 0;
+  height: 0;
+  border-left: 10rpx solid transparent;
+  border-right: 10rpx solid transparent;
+  border-top: 10rpx solid var(--primary-dark);
+
+  /* size (increase so it's visible) */
+  border-left-width: 8rpx;
+  border-right-width: 8rpx;
+  border-top-width: 8rpx;
+
+  /* position (slightly less vertical offset now that it's bigger) */
+  margin-top: 12rpx;
+  margin-left: 8rpx;
+
+  /* disable any transform animation */
+  transition: none;
+
+  /* rotation (default) */
+  transform: rotate(var(--pill-rot, -45deg));
+}
+
+.search-pill-triangle-up {
+  --pill-rot: 0deg;
+}
+
+/* Restore region dropdown popup styles (mask + dropdown + triangle) */
+
+/* Keep dropdown triangles visible (do not hide .filter-triangle/.filter-triangle-up) */
+.filter-triangle,
+.filter-triangle-up {
+  display: inline-block;
+}
+
+.filter-triangle {
+  width: 0;
+  height: 0;
+  border-left: 10rpx solid transparent;
+  border-right: 10rpx solid transparent;
+  border-top: 10rpx solid var(--primary-dark);
+  transition: transform 0.2s ease;
+}
+
+.filter-triangle-up {
+  transform: rotate(180deg);
+}
+
+/* mask for dropdown */
+.filter-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background-color: transparent;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.filter-mask-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* dropdown list */
+.tab-content-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.filter-dropdown {
+  position: absolute;
+  top: 84rpx;
+  right: 32rpx;
+  width: auto;
+  min-width: 160rpx;
+  z-index: 1000;
+  background-color: var(--bg-card);
+  border-radius: 12rpx;
+  padding: 6rpx;
+  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 10%), 0 2rpx 8rpx rgb(0 0 0 / 8%);
+  border: 1rpx solid rgb(29 78 216 / 10%);
+}
+
+.filter-option {
+  background-color: transparent; /* 默认透明背景 */
+  padding: 18rpx 24rpx; /* Adjust padding for separator */
+  font-size: 26rpx;
+  color: var(--primary-dark); /* 与filter-label相同的深蓝色，保持统一 */
+  transition: background-color 0.2s ease; /* 平滑过渡动画 */
+  cursor: pointer; /* 鼠标指针 */
+  position: relative; /* Needed for pseudo-element positioning */
+}
+
+.filter-option::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 24rpx; /* Horizontal padding */
+  right: 24rpx; /* Horizontal padding */
+  height: 1rpx;
+  background-color: rgb(29 78 216 / 10%); /* Light blue separator */
+}
+
+.filter-option:active {
+  background-color: var(--primary-light); /* 点击时的浅蓝色背景，与filter-toggle呼应 */
+  color: var(--primary-dark); /* 保持蓝色，与按钮文字颜色统一 */
+}
+
+.filter-option:last-child::after {
+  display: none;
+}
+
+/* Save Menu Dropdown (similar to filter-dropdown) */
+.save-menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background-color: transparent;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.save-menu-mask-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.save-menu-dropdown {
+  position: absolute;
+  top: 84rpx;
+  right: 124rpx; /* 对齐到保存按钮右侧：32rpx(page padding) + 84rpx(筛选按钮宽度) + 8rpx(gap) */
+  width: auto;
+  min-width: 200rpx;
+  z-index: 1000;
+  background-color: var(--bg-card);
+  border-radius: 12rpx;
+  padding: 6rpx;
+  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 10%), 0 2rpx 8rpx rgb(0 0 0 / 8%);
+  border: 1rpx solid rgb(29 78 216 / 10%);
+}
+
+.save-menu-option {
+  background-color: transparent;
+  padding: 18rpx 24rpx;
+  font-size: 26rpx;
+  color: var(--primary-dark);
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.save-menu-option::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 24rpx;
+  right: 24rpx;
+  height: 1rpx;
+  background-color: rgb(29 78 216 / 10%);
+}
+
+.save-menu-option:active {
+  background-color: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.save-menu-option:last-child::after {
+  display: none;
+}
+
+.save-menu-option-text {
+  display: block;
+}
+
+.search-bar {
+  margin-bottom: 20rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.jobs-tabs {
+  display: flex;
+  background: var(--bg-card);
+  border-radius: 12rpx;
+  padding: 8rpx;
+  margin: -22rpx 0 17rpx;
+  gap: 8rpx;
+  position: relative;
+}
+
+.tab-slider {
+  position: absolute;
+  top: 8rpx;
+  left: 9.7rpx;
+  width: calc((100% - 32rpx) / 3); /* (100% - 16rpx padding - 16rpx gap) / 3 tabs，与实际tab宽度一致 */
+  height: calc(100% - 16rpx);
+  background: var(--primary-light); /* 主题蓝色背景，与工作标签tag和筛选按钮一致 */
+  border-radius: 8rpx;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 0;
+  /* Enable hardware acceleration for smooth tab switching */
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+}
+
+.tab-slider-0 {
+  transform: translate3d(0, 0, 0);
+}
+
+.tab-slider-1 {
+  transform: translate3d(calc(100% + 8rpx), 0, 0);
+}
+
+.tab-slider-2 {
+  transform: translate3d(calc(200% + 16rpx), 0, 0);
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 10rpx 0;
+  border-radius: 8rpx;
+  font-weight: 600;
+  position: relative;
+  z-index: 1;
+  color: var(--text-sub);
+  transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* When tab is active, show blue text */
+.tab-active {
+  color: var(--primary-dark);
+}
+.jobs-swiper {
+  flex: 1;
+  min-height: 0;
+  /* Enable hardware acceleration for smooth swiper animation */
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+}
+
+/* Ensure swiper and its items fill remaining vertical space so inner scroll works */
+swiper,
+.jobs-swiper,
+swiper-item,
+.job-list-wrapper,
+job-list {
+  height: 100%;
+  min-height: 0;
+  /* Enable hardware acceleration for smooth transitions */
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+}
+
+.search-input {
+  flex: 1;
+  width: auto;
+  height: 64rpx;
+  line-height: 64rpx;
+  border-radius: 18rpx;
+  padding: 0 18rpx;
+  background-color: #EDEDED;
+}
+
+.search-placeholder {
+  color: #9ca3af;
+  font-size: 24rpx;
+  line-height: 64rpx;
+}
+
+.search-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  flex: 0 0 auto;
+}
+
+/* Remove page-level .job-list rules; handled by components/job-list */
+.job-list,
+.job-list-content {
+  /* intentionally left blank */
+}
+
+/* Favorites Full-Screen Drawer (replaces bottom sheet) **/
+
+.favorites-drawer-mask {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 35%);
+  z-index: 2499;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.favorites-drawer-mask-open {
+  opacity: 1;
+}
+
+.favorites-drawer {
+  position: fixed;
+  top: 0;
+  right: -100%;
+  width: 100%;
+  height: 100%;
+  background: #f5f7fb;
+  z-index: 2500;
+  transition: right 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -2rpx 0 10rpx rgb(0 0 0 / 10%);
+}
+
+.favorites-drawer-open {
+  right: 0;
+}
+
+.favorites-header {
+  padding: 40rpx 32rpx 20rpx;
+  border-bottom: 1rpx solid #eee;
+  display: flex;
+  align-items: center;
+  position: relative;
+  background: var(--bg-card);
+}
+
+/* Reuse the same back-hit/back-button idiom as detail page */
+.favorites-header .back-hit {
+  height: 80rpx;
+  width: 96rpx;
+  display: flex;
+  align-items: center;
+}
+
+.favorites-header .back-button {
+  width: 16rpx;
+  height: 16rpx;
+  border-left: 5rpx solid var(--text-main);
+  border-bottom: 5rpx solid var(--text-main);
+  transform: rotate(45deg);
+  margin-left: 40rpx;
+}
+
+.favorites-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.favorites-drawer-list {
+  flex: 1;
+  height: 0;
+  padding: 0 32rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.job-list-wrapper {
+  flex: 1;
+  min-height: 0;
+  /* allow job-list to control scrolling */
+  overflow: visible;
+}
+
+/* Also add bottom padding so the tabbar doesn't cover the last items */
+.job-list-wrapper {
+  box-sizing: border-box;
+}
+
+job-list {
+  /* no custom properties */
+}
+
+/* Featured tab subscription overlay */
+.featured-tab-wrapper {
+  position: relative;
+}
+
+/* Disable pointer events for search-bar and job-list when locked */
+.featured-locked .search-bar,
+.featured-locked .job-list-wrapper {
+  pointer-events: none;
+}
+
+/* Overlay covers search-bar + job-list area */
+.featured-overlay {
+  position: absolute;
+  inset: 0 0%;
+  background:
+      linear-gradient(to right,
+      rgb(245 247 251 / 0%) 0%,
+      rgb(245 247 251 / 0%) 10%,
+      rgb(245 247 251 / 0%) 30%,
+      rgb(245 247 251 / 10%) 50%,
+      rgb(245 247 251 / 0%) 70%,
+      rgb(245 247 251 / 0%) 90%,
+      rgb(245 247 251 / 0%) 100%
+    ),
+    linear-gradient(to bottom,
+      rgb(245 247 251 / 0%) 0%,
+      rgb(245 247 251 / 50%) 5%,
+      rgb(245 247 251 / 60%) 30%,
+      rgb(245 247 251 / 73%) 50%,
+      rgb(245 247 251 / 60%) 70%,
+      rgb(245 247 251 / 50%) 95%,
+      rgb(245 247 251 / 0%) 100%
+    );
+  mask-image: linear-gradient(to right,
+    transparent 0%,
+    transparent 5%,
+    rgb(0 0 0 / 100%) 10%,
+    rgb(0 0 0 / 100%) 90%,
+    transparent 95%,
+    transparent 100%
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.featured-overlay-text {
+  font-size: 28rpx;
+  color: var(--primary-dark);
+  font-weight: 600;
+  padding: 16rpx 32rpx;
+  background: var(--bg-card);
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgb(29 78 216 / 20%);
+  pointer-events: auto;
+}
+
+/* Empty state for favorites tab */
+.empty-favorites {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 10;
+}
+
+.empty-favorites-text {
+  font-size: 28rpx;
+  color: #9ca3af;
+}
+
+/* --- Restore Search Condition Bottom Sheet --- */
+/* 使用公共样式 bottom-sheet, bottom-sheet-mask, bottom-sheet-header, bottom-sheet-content */
+/* 只保留特定样式 */
+
+.restore-sheet-header {
+  /* 使用公共样式 bottom-sheet-header */
+}
+
+.restore-sheet-header-left {
+  /* 使用公共样式 bottom-sheet-header-left */
+}
+
+.restore-sheet-header-right {
+  /* 使用公共样式 bottom-sheet-header-right */
+}
+
+.restore-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding-left: 32rpx;
+}
+
+.restore-header-btn-left {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #2e5fe9;
+  padding: 8rpx 0;
+  line-height: 1;
+}
+
+.restore-header-btn-left:active {
+  opacity: 0.6;
+}
+
+.restore-header-btn {
+  /* 使用公共样式 bottom-sheet-header-btn */
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2e5fe9;
+  padding: 8rpx 12rpx;
+  background: transparent;
+  border-radius: 12rpx;
+  line-height: 1;
+}
+
+.restore-header-btn:active {
+  background: var(--border);
+}
+
+.restore-header-btn-text {
+  /* 供旧代码兼容 */
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2e5fe9;
+}
+
+/* restore-sheet-content 使用公共样式 bottom-sheet-content */
+.restore-sheet-content {
+  padding: 0 0 calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.empty-restore {
+  padding: 120rpx 0;
+  text-align: center;
+}
+
+.empty-restore-text {
+  font-size: 28rpx;
+  color: #9ca3af;
+}
+
+.restore-item {
+  position: relative;
+  padding: 32rpx;
+  margin-bottom: 2rpx;
+  background: var(--bg-card);
+  border-bottom: 1rpx solid var(--border);
+  border-radius: 0;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+}
+
+.restore-item.restore-item-deleting {
+  transform: translate3d(-100%, 0, 0);
+  transform: translate3d(-100%, 0, 0);
+  opacity: 0;
+}
+
+.restore-item.restore-item-collapsing {
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  max-height: 0 !important;
+  overflow: hidden;
+}
+
+.restore-item:active {
+  background: var(--primary-light);
+  border-color: var(--primary-dark);
+}
+
+.restore-item-editing:active {
+  background: #f5f7fb;
+  border-color: transparent;
+}
+
+.restore-item:last-child {
+  margin-bottom: 0;
+}
+
+.restore-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding-right: 50rpx;
+}
+
+.restore-item-delete {
+  position: absolute;
+  top: 50%;
+  right: 20rpx;
+  transform: translate3d(0, -50%, 0);
+  transform: translate3d(0, -50%, 0);
+  width: 48rpx;
+  height: 48rpx;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  backface-visibility: hidden;
+  backface-visibility: hidden;
+  z-index: 10;
+}
+
+.restore-item-delete:active {
+  transform: translate3d(0, -50%, 0) scale3d(0.95, 0.95, 1);
+  transform: translate3d(0, -50%, 0) scale3d(0.95, 0.95, 1);
+}
+
+.restore-item-delete-icon {
+  width: 40rpx;
+  height: 40rpx;
+  display: block;
+}
+
+.restore-item-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.restore-item-desc {
+  font-size: 26rpx;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+
+/* --- Restore Sheet Header Adjustment --- */
+.restore-sheet-header {
+    justify-content: space-between !important;
+    position: relative;
+    height: 88rpx;
+    box-sizing: border-box;
+    padding: 0 32rpx !important;
+}
+
+.restore-sheet-header-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Custom Tab Bar Adaption */
+.custom-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 96rpx;
+  background: var(--bg-card);
+  display: flex;
+  border-top: 1rpx solid var(--divider);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 1000;
+}
+
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-icon {
+  width: 50rpx;
+  height: 50rpx;
+  margin-bottom: 2rpx;
+  padding-top: 10rpx;
+}
+
+.tab-text {
+  font-size: 20rpx;
+  color: var(--text-sub);
+}
+
+.tab-text.active {
+  color: var(--primary);
+  font-weight: bold;
+}
+
+/* Dark mode specific adjustments for tabbar icons if needed */
+@media (prefers-color-scheme: dark) {
+  .tab-icon {
+    /* Optional: Brighten icons if they are too dark */
+    filter: brightness(1.2) contrast(1.1);
+  }
+}
+

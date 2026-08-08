@@ -1,0 +1,32 @@
+
+var formatDate = function(dateStr, formatLang, labelLang) {
+  if (!dateStr || typeof dateStr !== 'string') return dateStr || '';
+  
+  // Use labelLang for 'Present' / '至今'
+  var targetLabelLang = labelLang || formatLang;
+  if (dateStr === '至今' || dateStr === 'Present') {
+    return targetLabelLang === 'English' ? 'Present' : '至今';
+  }
+  
+  // Also handle cases where there's no '-' 
+  if (dateStr.indexOf('-') === -1) {
+    return dateStr;
+  }
+  
+  var parts = dateStr.split('-');
+  if (parts.length < 2) return dateStr;
+  
+  var year = parts[0];
+  var month = parts[1];
+  
+  // Use formatLang for the date structure
+  if (formatLang === 'English') {
+    return month + '/' + year;
+  }
+  // Default to YYYY-MM for Chinese
+  return year + '-' + month;
+};
+
+module.exports = {
+  formatDate: formatDate
+};

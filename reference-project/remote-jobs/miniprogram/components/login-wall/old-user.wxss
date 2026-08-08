@@ -1,0 +1,33 @@
+/* ============================================================ 
+   老用户路径 (Old User Path)
+   逻辑说明：全程“巨星”锁定 (40vw 居中不动)，背景纯色
+   ============================================================ */
+
+/* 1. 强制星星在任何阶段（包括淡出阶段）都保持呼吸态 */
+.login-wall.sm-old .mascot-inner,
+.login-wall.s-login-success .mascot-inner {
+  animation-play-state: running !important;
+}
+
+/* 2. 背景蒙版：老用户路径保持主题色 */
+.login-wall.sm-old.s-login-success .glass-mask {
+  background: var(--bg-card) !important;
+  background-color: var(--bg-card) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: background 1.2s cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+/* 3. 星星强锁定：彻底隔离，忽略所有 s-login/s-loading 的位移规则 */
+.login-wall.sm-old .mascot-container {
+  left: 50vw !important;
+  top: var(--anchor-y) !important;
+  width: 40vw !important;
+  height: 40vw !important;
+  transform: translate3d(-50%, -50%, 0) !important;
+}
+
+/* 4. 登录用户淡出阶段：仅淡出，原位不动 */
+.login-wall.sm-old.s-hidden .mascot-container {
+  transition: opacity 1.3s cubic-bezier(0.55, 0.055, 0.675, 0.19) !important;
+}

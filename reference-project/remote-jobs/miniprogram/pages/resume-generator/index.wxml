@@ -1,0 +1,104 @@
+<view class="page">
+  <ui-feedback id="ui-feedback" />
+  
+  <scroll-view class="form-content" scroll-y="{{true}}">
+    <view class="form-body">
+      <view class="header-section">
+        <text class="header-title">{{ui.title}}</text>
+        <text class="header-subtitle">{{ui.subtitle}}</text>
+      </view>
+
+      <view class="form-item {{shakeField === 'title' ? 'shake' : ''}}">
+        <text class="label">{{ui.jobTitle}}</text>
+        <input 
+          class="input {{validation.title}}" 
+          placeholder="{{ui.jobTitlePlaceholder}}" 
+          placeholder-class="placeholder"
+          value="{{targetJob.title}}" 
+          bindinput="onFieldChange" 
+          data-field="title"
+          cursor-color="{{ui.cursorColor}}"
+          show-confirm-bar="{{false}}"
+        />
+      </view>
+
+      <view class="form-item {{shakeField === 'experience' ? 'shake' : ''}}">
+        <text class="label">{{ui.workYears}}</text>
+        <view class="picker-content {{validation.experience}}" bindtap="openExperiencePicker">
+          <text wx:if="{{targetJob.experience}}">{{targetJob.experience}}</text>
+          <text wx:else class="placeholder">{{ui.workYearsPlaceholder}}</text>
+        </view>
+      </view>
+      
+      <view class="form-item {{shakeField === 'content' ? 'shake' : ''}}">
+        <text class="label">{{ui.jobDescription}}</text>
+        <textarea 
+          class="textarea {{validation.content}}" 
+          placeholder="{{ui.jdPlaceholder}}" 
+          placeholder-class="placeholder"
+          value="{{targetJob.content}}" 
+          bindinput="onFieldChange" 
+          data-field="content"
+          maxlength="-1"
+          auto-height="{{false}}"
+          cursor-color="{{ui.cursorColor}}"
+          show-confirm-bar="{{false}}"
+        ></textarea>
+      </view>
+
+      <!-- AI Message -->
+      <view class="form-item {{shakeField === 'aiMessage' ? 'shake' : ''}}">
+        <view class="header-row">
+          <text class="label" style="margin-bottom: 0;">{{ui.aiMessageLabel}}</text>
+          <view class="sync-btn" bindtap="onSyncResume">
+            <text>🔄</text>
+            <text>{{ui.syncFromProfile}}</text>
+          </view>
+        </view>
+        <textarea 
+          class="textarea {{validation.aiMessage}}" 
+          placeholder="{{ui.aiMessagePlaceholder}}" 
+          placeholder-class="placeholder"
+          value="{{aiMessage}}" 
+          bindinput="onFieldChange" 
+          data-field="aiMessage"
+          maxlength="-1"
+          auto-height="{{false}}"
+          cursor-color="{{ui.cursorColor}}"
+          show-confirm-bar="{{false}}"
+        ></textarea>
+      </view>
+      <view class="bottom-spacer"></view>
+    </view>
+  </scroll-view>
+
+  <ui-dock-button 
+    text="{{ui.confirmGenerate}}" 
+    width="42.5%"
+    disabled="{{!isReady}}"
+    bind:tap="handleSubmit" 
+    bind:disabledTap="onDisabledTap"
+  />
+
+  <!-- 目标岗位年限选择器 (滚轮弹窗) -->
+  <ui-drawer 
+    show="{{showExperiencePicker}}" 
+    title="{{ui.workYears}}" 
+    confirmText="{{ui.confirm}}"
+    bind:close="closeExperiencePicker"
+    bind:confirm="onExperienceConfirm"
+  >
+    <view class="picker-view-container">
+      <picker-view 
+        indicator-style="height: 160rpx;" 
+        style="width: 100%; height: 600rpx;" 
+        value="{{tempExperienceIndex}}" 
+        bindchange="onExperiencePickerChange"
+      >
+        <picker-view-column>
+          <view wx:for="{{experienceRange}}" wx:key="*this" class="picker-column-item">{{item}}</view>
+        </picker-view-column>
+      </picker-view>
+    </view>
+  </ui-drawer>
+</view>

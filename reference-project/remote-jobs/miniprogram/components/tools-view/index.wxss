@@ -1,0 +1,146 @@
+:host {
+  height: 100%;
+  overflow: hidden;
+  display: block;
+}
+
+.page {
+  padding: calc(env(safe-area-inset-top) + 20rpx) 32rpx 32rpx;
+  background-color: var(--bg-page);
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.tools-scroll {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  margin-bottom: 48rpx;
+  padding-left: 15rpx;
+  padding-top: 20rpx;
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 48rpx;
+  font-weight: 700;
+  color: var(--text-main);
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.subtitle {
+  font-size: 28rpx;
+  color: var(--text-sub);
+}
+
+.tools-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+  flex-shrink: 0;
+  padding-bottom: 40rpx;
+}
+
+.tool-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 32rpx;
+  display: flex;
+  align-items: center;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s;
+}
+
+.tool-card:active {
+  transform: scale(0.98);
+  background: var(--border);
+}
+
+.icon-box {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 24rpx;
+}
+
+.icon-box.blue,
+.icon-box.purple,
+.icon-box.green { 
+  background: var(--primary-light); 
+}
+
+.tool-icon {
+  width: 48rpx;
+  height: 48rpx;
+}
+
+.tool-emoji {
+  font-size: 44rpx;
+}
+
+.tool-info {
+  flex: 1;
+}
+
+.tool-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-main);
+  display: block;
+  margin-bottom: 4rpx;
+}
+
+.tool-desc {
+  font-size: 24rpx;
+  color: var(--text-sub);
+}
+
+.drawer-body {
+  padding: 32rpx 32rpx 12rpx;
+}
+
+.form-item {
+  margin-bottom: 32rpx;
+}
+
+.form-item .label {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text-sub);
+  margin-bottom: 16rpx;
+}
+
+.input, .textarea {
+  width: 100%;
+  background: var(--bg-page);
+  border: 2rpx solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  font-size: 28rpx;
+  line-height: 48rpx;
+  color: var(--text-main);
+}
+
+.input {
+  height: 88rpx;
+}
+
+.textarea {
+  height: 320rpx;
+  padding: 24rpx;
+}
+
+.placeholder {
+  font-size: 28rpx;
+  line-height: 48rpx;
+  color: var(--text-holder);
+}

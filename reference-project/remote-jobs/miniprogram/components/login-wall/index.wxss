@@ -1,0 +1,327 @@
+/* 物理隔离：引入子模块 */
+@import "./mascot.wxss";
+@import "./new-user.wxss";
+@import "./old-user.wxss";
+
+/* Global Container */
+.login-wall {
+  --anchor-y: 45.45vh;
+  
+  /* --- 引擎变量默认值 --- */
+  --star-x: 50vw;
+  --star-y: var(--anchor-y);
+  --star-size: 40vw; 
+  --star-opacity: 1;
+  --star-scale: 1;
+  
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 10000;
+  display: none;
+  opacity: 0;
+  background: transparent;
+  /* 背景蒙版淡出：1.5秒 */
+  transition: opacity 1.5s cubic-bezier(0.55, 0.055, 0.675, 0.19);
+}
+
+.login-wall.visible {
+  display: block !important;
+  opacity: 1 !important;
+}
+
+/* 移除 display: none 以便让登录墙能够分步淡出 */
+
+/* --- 基础蒙版属性 --- */
+.glass-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  /* 启动页/登录墙背景色与 Nav/Tab Bar 保持一致，形成沉浸式整体 */
+  background: var(--bg-card); 
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* 平滑过渡背景色与模糊度 */
+  transition: background 0.8s ease, backdrop-filter 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* 核心修复：登录墙阶段，背景回复为纯色，与 Splash 保持一致 */
+.login-wall.s-login .glass-mask,
+.login-wall.s-loading .glass-mask,
+.login-wall.s-success .glass-mask {
+  background: var(--bg-card) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .login-wall.s-login .glass-mask,
+  .login-wall.s-loading .glass-mask,
+  .login-wall.s-success .glass-mask {
+    background: var(--bg-card) !important;
+  }
+}
+
+/* 引导层级：确保淡出过程中层级依然最高 */
+.login-wall.wall-fade-out {
+  pointer-events: none;
+  z-index: 999999 !important;
+}
+
+/* 背景蒙版淡出：在 hidden 阶段启动，由慢到快加速淡出 (Ease-In) */
+.login-wall.s-hidden .glass-mask {
+  opacity: 0 !important;
+  /* 恢复至 2s，并保持陡峭的加速曲线 (Ease-In) */
+  transition: opacity 2s cubic-bezier(0.9, 0, 0.3, 1) !important;
+}
+
+/* 授权成功，整体渐渐淡出 (手动延迟 1.5s 触发) */
+.login-card.hide-all {
+  opacity: 0 !important;
+  pointer-events: none;
+  transform: translate(-50%, -50%) !important;
+  /* 确保淡出过渡平滑，与背景对齐 */
+  transition: opacity 2s cubic-bezier(0.9, 0, 0.3, 1) !important;
+}
+
+
+.splash-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.5s ease;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.splash-content.fade-out {
+  opacity: 0;
+}
+
+
+/* --- Phase 2: Login Card --- */
+.login-card {
+  position: fixed; 
+  left: 50%;
+  top: var(--anchor-y); /* 使用全局锚点变量 */
+  /* 使用 -50% 让卡片自身的中轴线对齐锚点 */
+  transform: translate(-50%, -40%); 
+  
+  width: 78vw; 
+  background: rgba(255, 255, 255, 0.82); 
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  
+  border-radius: 64rpx;
+  padding: 64rpx 48rpx 40rpx 48rpx; /* 减少底部内边距 */
+  box-shadow: 0 40rpx 100rpx rgba(0, 0, 0, 0.15);
+  
+  opacity: 0;
+  transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
+
+.login-card.show {
+  opacity: 1;
+  transform: translate(-50%, -50%); /* 最终落位在 5/11 处 */
+  pointer-events: auto;
+}
+
+/* 授权成功，整体渐渐淡出 (3秒后配合 hidden 触发) */
+.login-card.hide-all {
+  opacity: 0 !important;
+  pointer-events: none;
+  /* 保持在原位淡出，不要位移 */
+  transform: translate(-50%, -50%) !important;
+  /* 确保淡出过渡平滑 */
+  transition: opacity 1.5s cubic-bezier(0.55, 0.055, 0.675, 0.19) !important;
+}
+
+/* 内部内容淡出逻辑 */
+.card-inner-content {
+  opacity: 1;
+  transition: opacity 0.5s ease;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-inner-content.content-fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Provide space for the shared lottie engine */
+.logo-placeholder {
+  width: 140rpx; /* Slightly smaller than canvas to feel snug */
+  height: 140rpx;
+  margin-right: 30rpx;
+  flex-shrink: 0;
+  /* Invisible space */
+}
+
+/* Status Banner */
+.status-banner {
+  height: 0;
+  overflow: hidden;
+  background: #fef2f2;
+  border-radius: 24rpx;
+  margin-bottom: 0;
+  transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  opacity: 0;
+}
+
+.status-banner.active {
+  height: 80rpx;
+  margin-bottom: 30rpx;
+  opacity: 1;
+}
+
+.banner-content {
+  height: 80rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 30rpx;
+}
+
+.banner-text {
+  font-size: 24rpx;
+  color: #991b1b;
+  font-weight: 500;
+}
+
+/* Card Header */
+.card-header {
+  display: flex !important;
+  align-items: center !important;
+  margin-bottom: 30rpx !important; /* 从 50rpx 减少到 30rpx，压缩标题下方间距 */
+  flex-direction: row !important;
+}
+
+.title-group {
+  text-align: left !important;
+}
+
+.main-title {
+  display: block;
+  font-size: 44rpx;
+  font-weight: 800;
+  color: var(--text-main, #1e293b);
+  margin-bottom: 4rpx;
+}
+
+.sub-title {
+  display: block;
+  font-size: 24rpx;
+  color: var(--text-sub, #64748b);
+  font-weight: 500;
+}
+
+/* Dark Mode Overrides for Login Wall */
+@media (prefers-color-scheme: dark) {
+  .login-card {
+    background: rgba(30, 31, 32, 0.9) !important; /* Gemini Surface */
+    box-shadow: 0 40rpx 100rpx rgba(0, 0, 0, 0.6) !important;
+    border: 1rpx solid rgba(255, 255, 255, 0.08);
+  }
+
+  .status-banner {
+    background: rgba(242, 139, 130, 0.15) !important;
+  }
+
+  .banner-text {
+    color: #F87171 !important;
+  }
+
+  .protocol, .auth-desc, .tips-text {
+    color: #8E918F !important;
+  }
+}
+
+/* Form */
+.auth-section {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+  padding: 20rpx 0;
+}
+
+.auth-tips {
+  text-align: center;
+}
+
+.tips-text {
+  font-size: 26rpx;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.phone-btn {
+  gap: 16rpx;
+}
+
+.btn-icon {
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.auth-desc {
+  font-size: 24rpx;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.primary-btn {
+  width: 100% !important;
+  height: 110rpx;
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  color: #ffffff !important;
+  border-radius: 32rpx !important;
+  font-size: 32rpx !important;
+  font-weight: 700 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-top: 0rpx !important;
+  box-shadow: 0 20rpx 40rpx rgba(37, 99, 235, 0.2) !important;
+}
+
+.card-footer {
+  margin-top: 35rpx;
+  padding-bottom: 12rpx;
+  text-align: center;
+}
+
+.protocol {
+  font-size: 22rpx;
+  color: #94a3b8;
+}
+
+/* Animations */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes wave {
+  0%, 80%, 100% { transform: scale(0.8); opacity: 0.3; }
+  40% { transform: scale(1.5); opacity: 1; }
+}
+
+.error-layer {
+  display: none !important;
+}

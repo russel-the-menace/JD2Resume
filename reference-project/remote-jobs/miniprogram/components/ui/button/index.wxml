@@ -1,0 +1,10 @@
+<button 
+  class="ui-button cu-btn {{type}} {{size}} {{round?'round':''}} {{shadow?'shadow':''}} {{block?'block':''}} {{disabled?'disabled':''}} custom-class" 
+  bindtap="onTap" 
+  disabled="{{disabled}}"
+  loading="{{loading}}"
+  open-type="{{openType}}"
+  form-type="{{formType}}"
+>
+  <slot></slot>
+</button>

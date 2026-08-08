@@ -1,0 +1,52 @@
+<!-- Global Container -->
+<view class="login-wall {{_shouldShow ? 'visible' : ''}} {{internalPhase === 'hidden' ? 'wall-fade-out' : ''}} s-{{internalPhase}} sm-{{successMode}} {{authState === 'loading' ? 's-loading' : ''}}" catchtouchmove="preventTouch">
+  
+  <!-- Shared Background Layer -->
+  <view class="glass-mask"></view>
+
+  <!-- Mascot Standalone Engine: 坐标投射物理层 -->
+  <view class="mascot-container {{internalPhase === 'hidden' ? 'frozen' : ''}}">
+    <view class="mascot-inner">
+       <image class="ai-star-view" src="../../assets/icons/ai-star.svg" mode="aspectFit" />
+    </view>
+  </view>
+  
+  <!-- Phase 1: Splash Content -->
+  <view class="splash-content {{internalPhase !== 'splash' ? 'fade-out' : ''}}"></view>
+
+  <!-- Phase 2: Login Card -->
+  <view class="login-card {{internalPhase === 'login' || internalPhase === 'success' ? 'show' : ''}} {{authState === 'success' ? 'hide-all' : ''}}">
+    <view class="card-inner-content {{authState === 'loading' || authState === 'success' ? 'content-fade-out' : ''}}">
+      <view class="card-header">
+        <view class="logo-placeholder"></view>
+        <view class="title-group">
+          <text class="main-title">即刻登陆</text>
+          <text class="sub-title">解锁丝滑求职体验</text>
+        </view>
+      </view>
+
+      <!-- 动态状态提示 Banner -->
+      <view class="status-banner {{bootStatus === 'no-network' || bootStatus === 'server-down' ? 'active' : ''}}">
+        <view class="banner-content">
+          <text class="banner-icon">{{ bootStatus === 'no-network' ? '📶' : '⚙️' }}</text>
+          <text class="banner-text">{{ bootStatus === 'no-network' ? '网络不可用，请检查设置' : '服务器维护中，正在尝试连接...' }}</text>
+        </view>
+      </view>
+
+      <view class="auth-section">
+        <button 
+          class="primary-btn phone-btn" 
+          open-type="getPhoneNumber" 
+          bindgetphonenumber="onGetPhoneNumber"
+          hover-class="btn-hover"
+        >
+          <text>{{authButtonText}}</text>
+        </button>
+      </view>
+
+      <view class="card-footer">
+        <text class="protocol">登录即视为同意《用户协议》与《隐私政策》</text>
+      </view>
+    </view>
+  </view>
+</view>

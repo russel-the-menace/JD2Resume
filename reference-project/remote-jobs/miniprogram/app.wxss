@@ -1,0 +1,348 @@
+/** app.wxss **/
+
+page {
+  /* 核心颜色 Core Colors */
+  --primary: #2E5FE9;
+  --primary-dark: #1D4ED8;
+  --primary-mid: #3B82F6; /* 中间蓝：介于深蓝和浅蓝之间 */
+  --primary-light: #F0F7FF;
+  
+  /* 基础背景与文字 Neutral Colors */
+  --bg-page: #F8FAFC;
+  --bg-main: #F8FAFC;
+  --bg-card: #FFF;
+  --text-main: #1E293B;
+  --text-sub: #64748B;
+  --text-value: #576478; /* 专用于关键数值的深灰色，比 main 浅，比 sub 深 */
+  --text-holder: #94A3B8;
+  
+  /* 分割线与边框 Dividers & Borders */
+  --divider: #E2E8F0;
+  --border: #F1F5F9;
+
+  /* 状态色 Status Colors (可选点缀) */
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+
+  /* 各种渐变 Gradients */
+  --grad-primary: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  --grad-premium: linear-gradient(135deg, #4F7FFF 0%, var(--primary-dark) 100%);
+
+  /* 语义化色块 Semantic Surface Colors */
+  --bg-purple: #F5F3FF;
+  --bg-green: #F0FDF4;
+  --bg-danger: #FEF2F2;
+
+  /* 圆角与阴影 Borders & Shadows */
+  --radius-lg: 40rpx;
+  --radius-md: 24rpx;
+  --radius-sm: 12rpx;
+  --shadow-sm: 0 4rpx 6rpx -1rpx rgb(0 0 0 / 5%);
+  --shadow-md: 0 10rpx 15rpx -3rpx rgb(0 0 0 / 10%);
+}
+
+@media (prefers-color-scheme: dark) {
+  page {
+    /* 核心颜色 Core Colors - Gemini 风格：柔和的高亮蓝 */
+    --primary: #8AB4F8;
+    --primary-dark: #669DF6;
+    --primary-mid: #4285F4;
+    --primary-light: rgba(138, 180, 248, 0.1);
+    
+    /* 基础背景与文字 Neutral Colors - Gemini 灰黑系统 */
+    --bg-page: #131314;     /* Gemini Deep Dark */
+    --bg-main: #131314;
+    --bg-card: #1E1F20;     /* Gemini Surface */
+    --text-main: #E3E3E3;   /* Light Grey text */
+    --text-sub: #C4C7C5;    /* Medium Grey text */
+    --text-value: #E3E3E3;
+    --text-holder: #8E918F;
+    
+    /* 分割线与边框 Dividers & Borders */
+    --divider: #444746;     /* Gemini Border */
+    --border: #1E1F20;
+
+    /* 语义化色块 - 暗色适配 */
+    --bg-purple: rgba(139, 92, 246, 0.1);
+    --bg-green: rgba(34, 197, 94, 0.1);
+    --bg-danger: rgba(242, 139, 130, 0.1);
+
+    /* 状态色 - 调整为更柔和的色值 */
+    --success: #81C995;
+    --warning: #FDD663;
+    --danger: #F28B82;
+
+    /* 阴影 - 暗色模式下应更加深沉并减少弥散 */
+    --shadow-sm: 0 4rpx 6rpx -1rpx rgb(0 0 0 / 50%);
+    --shadow-md: 0 10rpx 15rpx -3rpx rgb(0 0 0 / 70%);
+  }
+}
+
+::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+  color: transparent;
+}
+
+/**
+ * 主题颜色定义（统一使用以下颜色）
+ * Theme Colors:
+ * - 主题蓝色文字/边框: var(--primary-dark)
+ * - 主题蓝色背景: #e5f0ff
+ * - 按钮的背景色: #3B82F6
+ * 
+ * 使用场景：
+ * - 工作标签tag: 背景 #e5f0ff, 文字 var(--primary-dark)
+ * - 筛选按钮: 背景 #e5f0ff, 文字 var(--primary-dark)
+ * - Tab选中状态: 背景 #e5f0ff, 文字 var(--primary-dark)
+ * - 按钮背景色: #3B82F6 (用于生成简历按钮、一键申请按钮、筛选确定按钮等)
+ * - 其他需要强调的元素
+ */
+
+.container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 200rpx 0;
+  box-sizing: border-box;
+}
+
+/* 公共头部样式 - 供 job-detail 和 drawer 组件复用 */
+.detail-header {
+  padding: 40rpx 32rpx 20rpx;
+  border-bottom: 1rpx solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+}
+
+.back-hit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 120rpx;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.back-button {
+  width: 16rpx;
+  height: 16rpx;
+  border-left: 5rpx solid var(--text-main);
+  border-bottom: 5rpx solid var(--text-main);
+  transform: rotate(45deg);
+  margin-left: 40rpx;
+}
+
+.back-button::after {
+  content: '';
+}
+
+/* --- Common Bottom Sheet Styles (复用弹窗样式) --- */
+/* 蒙版样式 */
+.bottom-sheet-mask {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 35%);
+  z-index: 2499;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s step-end;
+  will-change: opacity;
+  backface-visibility: hidden;
+}
+
+.bottom-sheet-mask-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s step-start;
+}
+
+/* 弹窗基础样式 */
+.bottom-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 85vh;
+  background: var(--bg-card);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  transform: translate3d(0, 100%, 0);
+  transform: translate3d(0, 100%, 0);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s step-end;
+  z-index: 2500;
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+  backface-visibility: hidden;
+  backface-visibility: hidden;
+  box-shadow: var(--shadow-sm); /* 添加顶部阴影 */
+  margin: 0;
+  padding: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.bottom-sheet-open {
+  transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s step-start;
+}
+
+/* 弹窗头部基础样式 */
+.bottom-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100rpx;
+  padding: 0 40rpx;
+  margin: 0;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.bottom-sheet-header-left,
+.bottom-sheet-header-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+  height: 100%;
+}
+
+.bottom-sheet-header-right {
+  justify-content: flex-end;
+}
+
+/* 弹窗标题基础样式 */
+.bottom-sheet-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--text-main);
+  text-align: center;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+/* 弹窗头部按钮样式 (供取消、保存等操作复用) */
+.bottom-sheet-header-btn {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--text-sub);
+  padding: 16rpx 24rpx;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bottom-sheet-header-btn.primary {
+  color: var(--primary);
+}
+
+.bottom-sheet-header-btn:active {
+  background: var(--border);
+}
+
+/* 弹窗内容基础样式 */
+.bottom-sheet-content {
+  flex: 1;
+  padding: 0; /* 移除所有默认内边距 */
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* --- Global Button Styles --- */
+.btn-primary {
+  flex: 1;
+  height: 75rpx;
+  background-color: var(--primary-dark);
+  border-radius: var(--radius-md);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 600;
+  border: none;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+}
+
+.btn-primary:active {
+  opacity: 0.8;
+}
+
+.btn-secondary {
+  flex: 1;
+  height: 75rpx;
+  background-color: var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-sub);
+  font-size: 30rpx;
+  font-weight: 600;
+  border: none;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+}
+
+.btn-secondary:active {
+  background-color: #e2e8f0;
+}
+/* End of Button Styles */
+
+/* --- Global Professional UI Elements --- */
+@import "/components/ui/common.wxss";
+
+/* 2. 交互态统一优化 */
+.hover-opacity {
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.active-scale {
+  transform: scale(0.97);
+  transition: transform 0.1s;
+}
+
+/* 4. 工业级分界线 - 用于列表项之间 */
+.ui-divider {
+  position: relative;
+}
+
+.ui-divider:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: var(--divider-gap-left, 40rpx);
+  right: var(--divider-gap-right, 40rpx);
+  height: 1rpx;
+  background: var(--divider);
+  transform: scaleY(0.5);
+  transform-origin: bottom;
+}
+

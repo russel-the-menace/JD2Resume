@@ -1,0 +1,94 @@
+<view class="resume-view-container">
+  
+  <ui-scroll-view scrollY="{{true}}" enableFlex="{{true}}" custom-class="tools-scroll">
+    <view class="header">
+      <text class="title">{{ui.title}}</text>
+      <text class="subtitle">{{ui.subtitle}}</text>
+    </view>
+
+      <view class="tools-grid">
+        <!-- 1. 不用改 -->
+      <view class="tool-card" bindtap="onUploadScreenshot">
+        <view class="icon-box blue">
+          <text class="tool-emoji">📸</text>
+        </view>
+        <view class="tool-info">
+          <text class="tool-name">{{ui.toolScreenshotTitle}}</text>
+          <text class="tool-desc">{{ui.toolScreenshotDesc}}</text>
+        </view>
+        <text class="ui-arrow">❯</text>
+      </view>
+
+      <!-- 2. 文字生成简历 -->
+      <view class="tool-card" bindtap="onTextResumeTap">
+        <view class="icon-box blue">
+          <text class="tool-emoji">✨</text>
+        </view>
+        <view class="tool-info">
+          <text class="tool-name">{{ui.toolTextTitle}}</text>
+          <text class="tool-desc">{{ui.toolTextDesc}}</text>
+        </view>
+        <text class="ui-arrow">❯</text>
+      </view>
+
+      <!-- 3. 不用改 -->
+      <view class="tool-card" bindtap="onRefineOldResume">
+        <view class="icon-box blue">
+          <text class="tool-emoji">📄</text>
+        </view>
+        <view class="tool-info">
+          <text class="tool-name">{{ui.toolRefineTitle}}</text>
+          <text class="tool-desc">{{ui.toolRefineDesc}}</text>
+        </view>
+        <text class="ui-arrow">❯</text>
+      </view>
+    </view>
+  </ui-scroll-view>
+
+  <!-- Resume Refine Drawer (Replaced by Component) -->
+  <file-uploader
+    show="{{showRefineDrawer}}"
+    mode="{{uploaderMode}}"
+    config="{{uploaderConfig}}"
+    bind:close="closeRefineDrawer"
+    bind:success="onUploaderSuccess"
+  />
+
+  <!-- Login Wall & Splash Loader -->
+  
+  <!-- Custom File Preview Modal (Kept only for Screenshot flow) -->
+  <view class="preview-mask {{showPreviewModal ? 'visible' : ''}}" wx:if="{{previewAction === 'screenshot'}}">
+    <view class="preview-container">
+        <view class="preview-header">
+            <text class="preview-title">{{ui.confirmUpload}}</text>
+        </view>
+        
+        <view class="preview-content">
+            <!-- Image Preview -->
+            <image 
+                wx:if="{{previewType === 'image'}}" 
+                src="{{previewPath}}" 
+                mode="aspectFit" 
+                class="file-preview-img"
+            />
+            
+            <!-- PDF Preview (Icon) -->
+            <view wx:else class="file-preview-pdf" bindtap="openPdfPreview">
+                <view class="pdf-icon">📄</view>
+                <text class="pdf-name">{{previewName}}</text>
+                <text class="pdf-tip">{{ui.previewTip}}</text>
+            </view>
+
+            <view class="quota-warning">
+                <text class="warning-icon">⚠️</text>
+                <text class="warning-text">{{ui.screenshotReminder}}</text>
+            </view>
+        </view>
+
+        <view class="preview-footer">
+            <button class="btn-cancel" bindtap="onCancelPreview">{{ui.cancel}}</button>
+            <button class="btn-confirm" bindtap="onConfirmPreview">{{ui.confirmUpload}}</button>
+        </view>
+    </view>
+  </view>
+</view>

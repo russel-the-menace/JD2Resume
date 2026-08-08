@@ -1,0 +1,150 @@
+.ui-drawer-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9998; /* Adapt for custom tab-bar (9000) */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s step-end;
+  will-change: opacity;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.ui-drawer-mask.show {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s ease, visibility 0s step-start;
+}
+
+.ui-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border-radius: 40rpx 40rpx 0 0;
+  z-index: 9999; /* Adapt for custom tab-bar (9000) */
+  transform: translate3d(0, 100%, 0);
+  transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1); /* 更适合高刷屏的 Out-Quad 曲线 */
+  will-change: transform;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
+  
+  /* 极致硬件加速与层隔离 */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
+  -webkit-perspective: 1000;
+  perspective: 1000;
+}
+
+.ui-drawer-container.show {
+  transform: translate3d(0, 0, 0);
+}
+
+.ui-drawer-header {
+  height: 110rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 36rpx;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ui-drawer-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: var(--text-main);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.ui-drawer-header-left, .ui-drawer-header-right {
+  min-width: 80rpx;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  z-index: 5;
+  position: relative;
+}
+
+.ui-drawer-header-right {
+  justify-content: flex-end;
+}
+
+.ui-drawer-close {
+  width: 60rpx;
+  height: 60rpx;
+  background: var(--bg-main);
+  border-radius: 50%;
+  font-size: 32rpx;
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.ui-drawer-close:active {
+  background: var(--divider);
+}
+
+.ui-drawer-close.hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ui-drawer-confirm-btn {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--primary, #2e5fe9);
+  padding: 12rpx 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.ui-drawer-confirm-btn.disabled {
+  color: var(--text-holder, var(--text-holder)); /* text-holder */
+}
+
+.ui-drawer-confirm-btn.loading {
+  opacity: 0.6;
+}
+
+.ui-drawer-loading-icon {
+  width: 32rpx;
+  height: 32rpx;
+  border: 4rpx solid var(--primary, #2e5fe9);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: ui-drawer-spin 0.8s linear infinite;
+}
+
+@keyframes ui-drawer-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ui-drawer-content {
+  flex: 0 1 auto; /* 让内容自适应高度，不强制拉伸 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-overflow-scrolling: touch;
+  /* Fix: Override scroll-view default 100% height to allow auto-sizing */
+  height: auto !important;
+  /* Fix: Ensure scrolling happens when content exceeds limit, instead of stretching parent */
+  max-height: calc(90vh - 110rpx - env(safe-area-inset-bottom));
+}

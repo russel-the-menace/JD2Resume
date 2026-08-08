@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "",
+  "navigationBarTextStyle": "@navTextStyle",
+  "navigationBarBackgroundColor": "@navBackgroundColor",
+  "disableSwipeBack": false,
+  "usingComponents": {
+    "ui-scroll-view": "../../components/ui/scroll-view/index"
+  }
+}
+

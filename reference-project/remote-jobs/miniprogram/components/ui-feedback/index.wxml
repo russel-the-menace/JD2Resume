@@ -1,0 +1,38 @@
+<view class="ui-feedback {{displayVisible ? 'ui-visible' : ''}} {{mask ? 'ui-mask' : ''}}" style="z-index: {{zIndex}};" wx:if="{{innerVisible}}" bindtap="onMaskTap">
+  <view class="ui-content {{type}}" catchtap="onContentTap">
+    <!-- Loading Spinner -->
+    <view wx:if="{{type === 'loading'}}" class="ui-loading-spinner">
+      <view class="ui-spinner-ring"></view>
+    </view>
+    
+    <!-- Status Icons -->
+    <view wx:if="{{type === 'success'}}" class="ui-icon-success">
+      <view class="ui-check"></view>
+    </view>
+    
+    <view wx:if="{{type === 'error'}}" class="ui-icon-error">
+      <view class="ui-error-line ui-error-line-1"></view>
+      <view class="ui-error-line ui-error-line-2"></view>
+    </view>
+
+    <!-- <view wx:if="{{type === 'alert'}}" class="ui-icon-warn">
+      <view class="ui-warn-exclamation"></view>
+    </view> -->
+
+    <!-- Modal Content -->
+    <block wx:if="{{type === 'modal' || type === 'alert'}}">
+      <view class="ui-modal-header">
+        <text class="ui-modal-title" style="{{type === 'alert' ? 'color: #F59E0B' : ''}}">{{title}}</text>
+      </view>
+      <view class="ui-modal-body">
+        <rich-text class="ui-modal-content" nodes="{{modalContent}}"></rich-text>
+      </view>
+      <view class="ui-modal-footer">
+        <view wx:if="{{showCancel}}" class="ui-modal-btn cancel" style="color: {{cancelColor || '#64748B'}}; font-weight: {{emphasis === 'left' ? '600' : '400'}}" bindtap="onCancel">{{cancelText}}</view>
+        <view class="ui-modal-btn confirm" style="color: {{confirmColor || '#2E5FE9'}}; font-weight: {{emphasis === 'right' ? '600' : '400'}}" bindtap="onConfirm">{{confirmText}}</view>
+      </view>
+    </block>
+
+    <text wx:else class="ui-message">{{title}}</text>
+  </view>
+</view>

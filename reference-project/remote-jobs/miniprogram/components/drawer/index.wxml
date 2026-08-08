@@ -1,0 +1,124 @@
+<!--miniprogram/components/drawer/index.wxml-->
+<view wx:if="{{show}}" class="drawer-mask drawer-mask-open" bindtap="onClose"></view>
+
+<view 
+  wx:if="{{show}}"
+  class="drawer-menu {{show ? 'drawer-open' : ''}} {{isSwiping ? 'drawer-swiping' : ''}}"
+  style="transform: translate3d({{drawerTranslateX}}px, 0, 0);"
+  animation="{{animationData}}"
+  bindtouchstart="onTouchStart"
+  catchtouchmove="onTouchMove"
+  bindtouchend="onTouchEnd"
+  catchtap="stopPropagation"
+>
+  <!-- 关闭按钮 -->
+  <view 
+    wx:if="{{closeButtonVisible}}" 
+    class="drawer-close-button {{closeButtonVisible ? 'drawer-close-button-visible' : ''}}"
+    style="top: {{closeButtonTop}}px;"
+    bindtap="onClose"
+  >
+    <view class="drawer-close-icon"></view>
+  </view>
+  
+  <view class="drawer-main">
+    <!-- 左侧导航tab -->
+    <view class="drawer-nav">
+      <view class="drawer-nav-slider drawer-nav-slider-{{currentNavTab}}"></view>
+      <view
+        wx:for="{{navTabs}}"
+        wx:key="key"
+        wx:for-index="idx"
+        class="drawer-nav-item {{currentNavTab === idx ? 'drawer-nav-item-active' : ''}}"
+        data-key="{{item.key}}"
+        data-index="{{idx}}"
+        bindtap="onNavTabTap"
+      >
+        <text class="drawer-nav-text">{{item.label}}</text>
+      </view>
+    </view>
+
+    <view class="drawer-content">
+    <ui-scroll-view 
+      class="drawer-body" 
+      scrollY="{{!isSwiping}}"
+      scrollIntoView="{{scrollIntoView}}"
+      scrollWithAnimation="{{true}}"
+      upperThreshold="0"
+      bounces="{{false}}"
+      bindscroll="onScrollViewScroll"
+    >
+      <view class="drawer-section drawer-section-salary" id="section-salary">
+        <view class="drawer-section-title">{{ui.salaryTitle}}</view>
+        <view class="drawer-grid">
+          <view
+            wx:for="{{salaryOptions}}"
+            wx:key="*this"
+            wx:for-index="idx"
+            class="drawer-chip {{tempValue.salary === item ? 'drawer-chip-active' : ''}}"
+            data-value="{{item}}"
+            bindtap="onPickSalary"
+          >
+            <text class="drawer-chip-text">{{displaySalaryOptions[idx]}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="drawer-section drawer-section-experience" id="section-experience">
+        <view class="drawer-section-title">{{ui.experienceTitle}}</view>
+        <view class="drawer-grid">
+          <view
+            wx:for="{{experienceOptions}}"
+            wx:key="*this"
+            wx:for-index="idx"
+            class="drawer-chip {{tempValue.experience === item ? 'drawer-chip-active' : ''}}"
+            data-value="{{item}}"
+            bindtap="onPickExperience"
+          >
+            <text class="drawer-chip-text">{{displayExperienceOptions[idx]}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="drawer-section drawer-section-region" id="section-region" wx:if="{{tabType !== 0}}">
+        <view class="drawer-section-title">{{ui.regionTitle}}</view>
+        <view class="drawer-grid">
+          <view
+            wx:for="{{regionOptions}}"
+            wx:key="*this"
+            wx:for-index="idx"
+            class="drawer-chip {{tempValue.region === item ? 'drawer-chip-active' : ''}}"
+            data-value="{{item}}"
+            bindtap="onPickRegion"
+          >
+            <text class="drawer-chip-text">{{displayRegionOptions[idx]}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="drawer-section drawer-section-source" id="section-source" wx:if="{{tabType !== 0 && sourceOptions && sourceOptions.length > 0}}">
+        <view class="drawer-section-title">{{ui.sourceTitle}}</view>
+        <view class="drawer-grid drawer-grid-source">
+          <view
+            wx:for="{{sourceOptions}}"
+            wx:key="*this"
+            wx:for-index="idx"
+            class="drawer-chip {{sourceSelected[item] ? 'drawer-chip-active' : ''}}"
+            data-value="{{item}}"
+            bindtap="onPickSource"
+          >
+            <text class="drawer-chip-text">{{displaySourceOptions[idx]}}</text>
+          </view>
+        </view>
+      </view>
+      <!-- 底部间距 -->
+      <view class="drawer-bottom-spacer"></view>
+    </ui-scroll-view>
+
+      <view class="drawer-footer">
+        <view class="btn-secondary" bindtap="onReset">{{ui.clear}}</view>
+        <view class="btn-primary" bindtap="onConfirm">{{ui.confirm}}</view>
+      </view>
+    </view>
+  </view>
+</view>

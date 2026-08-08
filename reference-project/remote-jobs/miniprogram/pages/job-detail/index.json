@@ -1,0 +1,13 @@
+{
+  "navigationBarTitleText": "",
+  "navigationBarTextStyle": "@navTextStyle",
+  "navigationBarBackgroundColor": "@navBackgroundColor",
+  "disableSwipeBack": false,
+  "usingComponents": {
+    "ui-scroll-view": "../../components/ui/scroll-view/index",
+    "ui-drawer": "../../components/ui/drawer/index",
+    "ui-feedback": "../../components/ui-feedback/index",
+    "ui-dock-button": "../../components/ui-dock-button/index"
+  }
+}
+

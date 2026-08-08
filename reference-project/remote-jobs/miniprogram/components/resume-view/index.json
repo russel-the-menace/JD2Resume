@@ -1,0 +1,12 @@
+{
+  "component": true,
+  "usingComponents": {
+    "login-wall": "../login-wall/index",
+    "ui-feedback": "../ui-feedback/index",
+    "ui-button": "../ui/button/index",
+    "ui-card": "../ui/card/index",
+    "ui-drawer": "../ui/drawer/index",
+    "ui-scroll-view": "../ui/scroll-view/index",
+    "file-uploader": "../file-uploader/index"
+  }
+}

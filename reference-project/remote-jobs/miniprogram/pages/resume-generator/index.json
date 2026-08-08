@@ -1,0 +1,8 @@
+{
+  "usingComponents": {
+    "ui-feedback": "../../components/ui-feedback/index",
+    "ui-dock-button": "../../components/ui-dock-button/index",
+    "ui-drawer": "../../components/ui/drawer/index"
+  }
+}
+

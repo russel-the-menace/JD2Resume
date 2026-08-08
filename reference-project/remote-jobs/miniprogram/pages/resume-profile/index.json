@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "",
+  "disableScroll": true,
+  "usingComponents": {
+    "ui-scroll-view": "../../components/ui/scroll-view/index",
+    "ui-drawer": "../../components/ui/drawer/index",
+    "ui-feedback": "../../components/ui-feedback/index",
+    "file-uploader": "../../components/file-uploader/index"
+  }
+}

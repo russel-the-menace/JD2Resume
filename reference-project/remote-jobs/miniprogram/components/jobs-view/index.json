@@ -1,0 +1,10 @@
+{
+  "component": true,
+  "usingComponents": {
+    "job-tab": "../job-tab/index",
+    "ui-drawer": "../ui/drawer/index",
+    "login-wall": "../login-wall/index",
+    "ui-feedback": "../ui-feedback/index"
+  },
+  "styleIsolation": "apply-shared"
+}
