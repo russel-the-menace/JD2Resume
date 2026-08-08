@@ -56,8 +56,11 @@ const desktopPage = await desktop.newPage();
 await attachDiagnostics(desktopPage);
 await desktopPage.goto(baseUrl, { waitUntil: 'networkidle' });
 report.checks.libraryHomeVisible =
-  (await desktopPage.getByRole('heading', { name: 'My resumes' }).isVisible()) &&
+  (await desktopPage.getByLabel('Search resumes').isVisible()) &&
+  (await desktopPage.getByRole('heading', { name: 'My resumes' }).count()) === 0 &&
+  (await desktopPage.getByText('Resume workspace', { exact: true }).count()) === 0 &&
   (await desktopPage.locator('.resume-library-card').count()) === 3;
+report.checks.resumeCardEditButtonRemoved = (await desktopPage.locator('.resume-card-edit').count()) === 0;
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-library-desktop.png') });
 
 await desktopPage.getByRole('button', { name: 'Account menu' }).click();
@@ -67,9 +70,17 @@ const profileDialog = desktopPage.getByRole('dialog', { name: 'Edit personal pro
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-personal-profile-dialog.png') });
 await profileDialog.getByLabel('姓名').fill('张三');
 await profileDialog.getByLabel('性别').selectOption('男');
+await profileDialog.getByLabel('手机号码').fill('13800138000');
+await profileDialog.getByLabel('Email').fill('zhangsan@example.com');
+await profileDialog.getByLabel('所在地').fill('上海');
+await profileDialog.getByLabel('个人简介').fill('专注于复杂产品和高质量用户体验的产品设计师。');
 await profileDialog.getByRole('button', { name: 'English', exact: true }).click();
 await profileDialog.getByLabel('Full name').fill('Alex Zhang');
 await profileDialog.getByLabel('Gender').selectOption('Male');
+await profileDialog.getByLabel('Phone').fill('555-0100');
+await profileDialog.getByLabel('Email').fill('alex@example.com');
+await profileDialog.getByLabel('Location').fill('New York, NY');
+await profileDialog.getByLabel('Professional profile').fill('Product designer focused on high-impact workflows.');
 await profileDialog.getByRole('button', { name: 'Save profile' }).click();
 report.checks.bilingualProfileSaved = await desktopPage.evaluate(() => {
   const profile = JSON.parse(localStorage.getItem('draftline-user-profile-v1'));
@@ -81,6 +92,10 @@ const generatorDialog = desktopPage.getByRole('dialog', { name: 'Generate from j
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-job-description-dialog.png') });
 report.checks.jobDescriptionDialog =
   (await generatorDialog.isVisible()) &&
+  (await generatorDialog.getByRole('button', { name: '粘贴文字' }).isVisible()) &&
+  (await generatorDialog.getByRole('button', { name: '上传图片' }).isVisible()) &&
+  (await generatorDialog.getByRole('button', { name: '上传 PDF' }).isVisible()) &&
+  (await generatorDialog.getByRole('button', { name: '中英文' }).isVisible()) &&
   (await generatorDialog.getByRole('button', { name: 'Generate resume' }).isDisabled());
 await desktopPage.route('**/api/generate-resume', async (route) => {
   await route.fulfill({
@@ -108,7 +123,24 @@ await desktopPage.route('**/api/generate-resume', async (route) => {
     }),
   });
 });
-await generatorDialog.getByLabel('Job description').fill('Lead product designer for a workflow platform. Build clear tools for enterprise teams and partner with engineering.');
+await generatorDialog.getByRole('button', { name: 'English', exact: true }).click();
+await generatorDialog.getByRole('button', { name: '上传图片' }).click();
+await generatorDialog.getByLabel('Upload image').setInputFiles({
+  name: 'job-description.png',
+  mimeType: 'image/png',
+  buffer: Buffer.from('test-image'),
+});
+const imageReady = await generatorDialog.getByRole('button', { name: 'Generate resume' }).isEnabled();
+await generatorDialog.getByRole('button', { name: '上传 PDF' }).click();
+await generatorDialog.getByLabel('Upload PDF').setInputFiles({
+  name: 'job-description.pdf',
+  mimeType: 'application/pdf',
+  buffer: Buffer.from('%PDF-1.4 test'),
+});
+const pdfReady = await generatorDialog.getByRole('button', { name: 'Generate resume' }).isEnabled();
+await generatorDialog.getByRole('button', { name: '粘贴文字' }).click();
+await generatorDialog.getByRole('textbox', { name: 'Job description' }).fill('Lead product designer for a workflow platform. Build clear tools for enterprise teams and partner with engineering.');
+report.checks.generatorSourceModes = imageReady && pdfReady;
 await generatorDialog.getByRole('button', { name: 'Generate resume' }).click();
 await desktopPage.waitForURL(/resume=/);
 report.checks.jobDescriptionGenerated =
@@ -179,7 +211,7 @@ report.checks.librarySearch =
   (await desktopPage.locator('.resume-library-card').count()) === 1 &&
   (await desktopPage.getByText('Jordan Lee - Android Developer', { exact: true }).isVisible());
 await desktopPage.getByLabel('Clear search').click();
-await desktopPage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
+await desktopPage.locator('.resume-library-card').filter({ hasText: 'Jordan Lee - Product Designer' }).click();
 report.checks.librarySelection = await desktopPage.locator('.editor-panel').isVisible();
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-desktop.png') });
 report.checks.modernTypography = await desktopPage.locator('.resume-page.template-modern').evaluate(
@@ -475,7 +507,8 @@ report.checks.previewPositionPersisted = Boolean(
 
 await desktopPage.getByRole('button', { name: 'Back to resumes' }).click();
 report.checks.editorBackToLibrary =
-  (await desktopPage.getByRole('heading', { name: 'My resumes' }).isVisible()) &&
+  (await desktopPage.getByLabel('Search resumes').isVisible()) &&
+  (await desktopPage.getByRole('heading', { name: 'My resumes' }).count()) === 0 &&
   (await desktopPage.getByText('Avery Chen - Product Designer', { exact: true }).isVisible());
 const resumeCountBeforeDuplicate = await desktopPage.locator('.resume-library-card').count();
 await desktopPage.getByRole('button', {
@@ -509,7 +542,7 @@ report.checks.resumeDelete =
   (await desktopPage.locator('.resume-library-card').count()) === resumeCountBeforeDuplicate &&
   !(await desktopPage.getByText('Avery Chen - Product Designer Copy', { exact: true }).isVisible());
 
-await desktopPage.getByRole('button', { name: 'Edit Jordan Lee - Android Developer' }).click();
+await desktopPage.locator('.resume-library-card').filter({ hasText: 'Jordan Lee - Android Developer' }).click();
 report.checks.resumeIsolation =
   (await desktopPage.locator('.resume-name-block p').getByText('Senior Android Developer', { exact: true }).isVisible()) &&
   (await desktopPage.locator('.resume-page.template-compact').isVisible()) &&
@@ -534,7 +567,7 @@ const mobilePage = await mobile.newPage();
 await attachDiagnostics(mobilePage);
 await mobilePage.goto(baseUrl, { waitUntil: 'networkidle' });
 report.checks.mobileLibraryVisible = await mobilePage
-  .getByRole('heading', { name: 'My resumes' })
+  .getByLabel('Search resumes')
   .isVisible();
 await mobilePage.screenshot({ path: join(tmpdir(), 'draftline-playwright-library-mobile.png') });
 await mobilePage.getByRole('button', { name: 'New resume' }).click();
@@ -543,7 +576,7 @@ report.checks.mobileNewResumeDialog =
   (await mobileNewResumeDialog.isVisible()) &&
   (await mobileNewResumeDialog.getByRole('button', { name: 'Save' }).isDisabled());
 await mobileNewResumeDialog.getByRole('button', { name: 'Cancel' }).click();
-await mobilePage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
+await mobilePage.locator('.resume-library-card').filter({ hasText: 'Jordan Lee - Product Designer' }).click();
 report.checks.mobileMetrics = await pageMetrics(mobilePage);
 report.checks.mobileEditVisible = await mobilePage.locator('.editor-panel').isVisible();
 report.checks.mobileResizerHidden = !(await mobilePage.locator('.column-resizer').isVisible());
@@ -569,7 +602,7 @@ await recovery.addInitScript(() => {
 const recoveryPage = await recovery.newPage();
 await attachDiagnostics(recoveryPage);
 await recoveryPage.goto(baseUrl, { waitUntil: 'networkidle' });
-await recoveryPage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
+await recoveryPage.locator('.resume-library-card').filter({ hasText: 'Jordan Lee - Product Designer' }).click();
 report.checks.corruptStorageRecovery =
   (await recoveryPage.getByLabel('Resume name').inputValue()) === 'Jordan Lee - Product Designer' &&
   (await recoveryPage.locator('.resume-page').getByText('Jordan Lee', { exact: true }).isVisible());
@@ -579,7 +612,7 @@ const reorder = await browser.newContext({ viewport: { width: 1440, height: 960 
 const reorderPage = await reorder.newPage();
 await attachDiagnostics(reorderPage);
 await reorderPage.goto(baseUrl, { waitUntil: 'networkidle' });
-await reorderPage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
+await reorderPage.locator('.resume-library-card').filter({ hasText: 'Jordan Lee - Product Designer' }).click();
 const personalDetailsSection = reorderPage.locator('.section-nav-item').filter({ hasText: 'Personal details' });
 const sectionOrderBeforeFixedDrop = await reorderPage.locator('.section-nav-item .section-label').allTextContents();
 await reorderPage.locator('.section-nav-item').filter({ hasText: 'Skills' }).dragTo(personalDetailsSection);

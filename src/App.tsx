@@ -36,7 +36,6 @@ import {
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
-  PencilLine,
   Phone,
   Plus,
   Redo2,
@@ -154,6 +153,7 @@ const USER_PROFILE_STORAGE_KEY = 'draftline-user-profile-v1';
 const STORAGE_VERSION = 1;
 const LIBRARY_VERSION = 2;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
+const MAX_JOB_SOURCE_BYTES = 5 * 1024 * 1024;
 type CssVariables = CSSProperties & Record<`--${string}`, string>;
 
 const sectionSuggestions = [
@@ -275,6 +275,27 @@ const emptyUserProfile = {
   },
 };
 
+const requiredProfileFields = ['fullName', 'gender', 'phone', 'email', 'location', 'summary'];
+
+const profileFieldLabels = {
+  chinese: {
+    fullName: '姓名',
+    gender: '性别',
+    phone: '手机号码',
+    email: '邮箱',
+    location: '所在地',
+    summary: '个人简介',
+  },
+  english: {
+    fullName: 'Full name',
+    gender: 'Gender',
+    phone: 'Phone',
+    email: 'Email',
+    location: 'Location',
+    summary: 'Professional profile',
+  },
+};
+
 function normalizeUserProfile(value) {
   const source = isRecord(value) ? value : {};
   return Object.entries(emptyUserProfile).reduce((profile, [language, fields]) => {
@@ -291,6 +312,15 @@ function loadUserProfile() {
   return normalizeUserProfile(storedJson(USER_PROFILE_STORAGE_KEY));
 }
 
+function readFileAsDataUrl(file): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(typeof reader.result === 'string' ? reader.result : ''));
+    reader.addEventListener('error', () => reject(new Error('The selected file could not be read.')));
+    reader.readAsDataURL(file);
+  });
+}
+
 function profileInitials(profile) {
   const name = profile.chinese.fullName || profile.english.fullName;
   if (!name) return 'JL';
@@ -302,6 +332,11 @@ function profileInitials(profile) {
     .map((part) => part[0])
     .join('')
     .toUpperCase() || 'JL';
+}
+
+function missingProfileFields(profile, language) {
+  const fields = profile?.[language] || {};
+  return requiredProfileFields.filter((field) => !textValue(fields[field]).trim());
 }
 
 function parseWebsiteLink(value) {
@@ -871,49 +906,88 @@ function App() {
     return true;
   }, []);
 
-  const generateResumeFromJobDescription = useCallback(async ({ jobDescription, language }) => {
-    const baseResume = [...libraryRef.current.resumes]
-      .sort((first, second) => second.updatedAt - first.updatedAt)
-      .find((resume) => resume.language === language);
-    const response = await fetch('/api/generate-resume', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jobDescription,
-        language,
-        profile: userProfile[language],
-        baseResume: baseResume?.data || null,
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(textValue(payload.error, 'Unable to generate a resume right now.'));
+  const generateResumeFromJobDescription = useCallback(async ({
+    jobDescription,
+    outputLanguage,
+    sourceType = 'text',
+    sourceFile,
+  }) => {
+    const languages = outputLanguage === 'both' ? ['chinese', 'english'] : [outputLanguage];
+    const incompleteProfiles = languages
+      .map((language) => ({ language, fields: missingProfileFields(userProfile, language) }))
+      .filter(({ fields }) => fields.length);
+    if (incompleteProfiles.length) {
+      throw new Error('Complete the selected personal profile before generating a resume.');
     }
-    if (!isRecord(payload.resume)) {
-      throw new Error('The generated resume could not be read. Please try again.');
+    if (sourceType === 'text' && !jobDescription.trim()) {
+      throw new Error('Enter a job description before generating a resume.');
+    }
+    if (sourceType !== 'text' && !sourceFile) {
+      throw new Error('Choose a source file before generating a resume.');
+    }
+    if (sourceFile && sourceFile.size > MAX_JOB_SOURCE_BYTES) {
+      throw new Error('The source file must be 5 MB or smaller.');
     }
 
-    const data = normalizeResumeData(payload.resume, language);
-    const generatedName = textValue(
-      payload.documentName,
-      `${resumeName(data.basics, language) || (isChineseResume(language) ? '未命名简历' : 'Untitled resume')} - ${data.basics.role || (isChineseResume(language) ? '目标职位' : 'Target role')}`,
-    );
-    const generatedId = resumeId();
-    const snapshot = blankResumeSnapshot({ documentName: generatedName, language });
-    const generatedResume = {
-      id: generatedId,
-      ...snapshot,
-      data,
-      updatedAt: Date.now(),
-    };
+    const sourceData = sourceFile
+      ? await readFileAsDataUrl(sourceFile)
+      : '';
+    const source = sourceData
+      ? {
+          name: sourceFile.name,
+          mimeType: sourceFile.type,
+          data: sourceData.split(',')[1] || '',
+        }
+      : null;
+    const generatedResumes = [];
+
+    for (const language of languages) {
+      const baseResume = [...libraryRef.current.resumes]
+        .sort((first, second) => second.updatedAt - first.updatedAt)
+        .find((resume) => resume.language === language);
+      const response = await fetch('/api/generate-resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobDescription,
+          language,
+          sourceType,
+          source,
+          profile: userProfile[language],
+          baseResume: baseResume?.data || null,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(textValue(payload.error, 'Unable to generate a resume right now.'));
+      }
+      if (!isRecord(payload.resume)) {
+        throw new Error('The generated resume could not be read. Please try again.');
+      }
+
+      const data = normalizeResumeData(payload.resume, language);
+      const generatedName = textValue(
+        payload.documentName,
+        `${resumeName(data.basics, language) || (isChineseResume(language) ? '未命名简历' : 'Untitled resume')} - ${data.basics.role || (isChineseResume(language) ? '目标职位' : 'Target role')}`,
+      );
+      const generatedId = resumeId();
+      const snapshot = blankResumeSnapshot({ documentName: generatedName, language });
+      generatedResumes.push({
+        id: generatedId,
+        ...snapshot,
+        data,
+        updatedAt: Date.now(),
+      });
+    }
+
     const nextLibrary = {
       version: LIBRARY_VERSION,
-      resumes: [generatedResume, ...libraryRef.current.resumes],
+      resumes: [...generatedResumes, ...libraryRef.current.resumes],
     };
     if (!persistLibrary(nextLibrary)) {
       throw new Error('The generated resume could not be saved locally.');
     }
-    openResume(generatedId);
+    openResume(generatedResumes[0].id);
   }, [openResume, persistLibrary, userProfile]);
 
   const selectedResume = library.resumes.find((document) => document.id === selectedResumeId);
@@ -1459,11 +1533,6 @@ function ResumeLibrary({
 
       <main className="library-main">
         <div className="library-heading-row">
-          <div className="library-title-block">
-            <span className="library-kicker">Resume workspace</span>
-            <h1>My resumes</h1>
-            <p>{resumes.length} {resumes.length === 1 ? 'resume' : 'resumes'}</p>
-          </div>
           <label className="library-search">
             <Search size={17} />
             <input
@@ -1555,10 +1624,20 @@ function ResumeLibrary({
 
 function ResumeLibraryCard({ resume, menuOpen, onToggleMenu, onOpen, onDuplicate, onDelete }) {
   return (
-    <article className="resume-library-card">
+    <article
+      className="resume-library-card"
+      onClick={(event) => {
+        if (!(event.target instanceof Element) || !event.target.closest('.resume-card-menu-wrap')) {
+          onOpen();
+        }
+      }}
+    >
       <button
         className="resume-card-preview-button"
-        onClick={onOpen}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen();
+        }}
         aria-label={`Edit ${resume.documentName}`}
       >
         <ResumeCardPreview resume={resume} />
@@ -1570,9 +1649,6 @@ function ResumeLibraryCard({ resume, menuOpen, onToggleMenu, onOpen, onDuplicate
           <span>{formatUpdatedAt(resume.updatedAt)}</span>
         </div>
         <div className="resume-card-commands">
-          <button className="resume-card-edit" onClick={onOpen}>
-            <PencilLine size={14} /> Edit
-          </button>
           <div className="resume-card-menu-wrap">
             <button className="icon-button small" onClick={onToggleMenu} aria-label={`More actions for ${resume.documentName}`} title="More actions">
               <MoreHorizontal size={17} />
@@ -1737,18 +1813,53 @@ function PersonalProfileDialog({ profile, onCancel, onSave }) {
 }
 
 function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
-  const [language, setLanguage] = useState(profile.chinese.fullName ? 'chinese' : 'english');
+  const [inputMode, setInputMode] = useState('text');
+  const [outputLanguage, setOutputLanguage] = useState(profile.chinese.fullName ? 'chinese' : 'english');
   const [jobDescription, setJobDescription] = useState('');
+  const [sourceFile, setSourceFile] = useState(null);
   const [error, setError] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const outputLanguages = outputLanguage === 'both' ? ['chinese', 'english'] : [outputLanguage];
+  const incompleteProfiles = outputLanguages
+    .map((language) => ({ language, fields: missingProfileFields(profile, language) }))
+    .filter(({ fields }) => fields.length);
+  const profileError = incompleteProfiles.length
+    ? incompleteProfiles
+      .map(({ language, fields }) => `${language === 'chinese' ? '中文' : 'English'}: ${fields.map((field) => profileFieldLabels[language][field]).join('、')}`)
+      .join('；')
+    : '';
+  const sourceReady = inputMode === 'text' ? Boolean(jobDescription.trim()) : Boolean(sourceFile);
+  const canGenerate = sourceReady && !profileError && !isGenerating;
+
+  const selectInputMode = (mode) => {
+    setInputMode(mode);
+    setError('');
+  };
+
+  const selectSourceFile = (event) => {
+    const file = event.target.files?.[0] || null;
+    if (file && file.size > MAX_JOB_SOURCE_BYTES) {
+      setSourceFile(null);
+      setError('The source file must be 5 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+    setSourceFile(file);
+    setError('');
+  };
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!jobDescription.trim() || isGenerating) return;
+    if (!canGenerate) return;
     setError('');
     setIsGenerating(true);
     try {
-      await onGenerate({ jobDescription: jobDescription.trim(), language });
+      await onGenerate({
+        jobDescription: jobDescription.trim(),
+        outputLanguage,
+        sourceType: inputMode,
+        sourceFile,
+      });
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : 'Unable to generate a resume right now.');
       setIsGenerating(false);
@@ -1768,42 +1879,99 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
           </button>
         </header>
         <div className="resume-dialog-content profile-dialog-content">
-          <div className="resume-language-selector" role="group" aria-label="Resume language">
+          <div className="generator-input-selector" role="group" aria-label="Job description input method">
             <button
               type="button"
-              className={cx(language === 'chinese' && 'is-selected')}
-              onClick={() => setLanguage('chinese')}
+              className={cx(inputMode === 'text' && 'is-selected')}
+              onClick={() => selectInputMode('text')}
               disabled={isGenerating}
-              aria-pressed={language === 'chinese'}
+              aria-pressed={inputMode === 'text'}
             >
-              中文
+              粘贴文字
             </button>
             <button
               type="button"
-              className={cx(language === 'english' && 'is-selected')}
-              onClick={() => setLanguage('english')}
+              className={cx(inputMode === 'image' && 'is-selected')}
+              onClick={() => selectInputMode('image')}
               disabled={isGenerating}
-              aria-pressed={language === 'english'}
+              aria-pressed={inputMode === 'image'}
             >
-              English
+              上传图片
+            </button>
+            <button
+              type="button"
+              className={cx(inputMode === 'pdf' && 'is-selected')}
+              onClick={() => selectInputMode('pdf')}
+              disabled={isGenerating}
+              aria-pressed={inputMode === 'pdf'}
+            >
+              上传 PDF
             </button>
           </div>
-          <label className="field job-description-field">
-            <span>Job description</span>
-            <textarea
-              value={jobDescription}
-              rows={13}
-              placeholder="Paste the role, responsibilities, and requirements"
-              onChange={(event) => setJobDescription(event.target.value)}
-              disabled={isGenerating}
-              aria-label="Job description"
-            />
-          </label>
+          {inputMode === 'text' ? (
+            <label className="field job-description-field">
+              <span>Job description</span>
+              <textarea
+                value={jobDescription}
+                rows={13}
+                placeholder="Paste the role, responsibilities, and requirements"
+                onChange={(event) => setJobDescription(event.target.value)}
+                disabled={isGenerating}
+                aria-label="Job description"
+              />
+            </label>
+          ) : (
+            <label className="job-source-picker">
+              <Upload size={18} />
+              <span>{inputMode === 'image' ? 'Upload image' : 'Upload PDF'}</span>
+              {sourceFile && <small>{sourceFile.name}</small>}
+              <input
+                type="file"
+                accept={inputMode === 'image' ? 'image/png,image/jpeg,image/webp' : 'application/pdf'}
+                onChange={selectSourceFile}
+                disabled={isGenerating}
+                aria-label={inputMode === 'image' ? 'Upload image' : 'Upload PDF'}
+              />
+            </label>
+          )}
+          <div className="generator-output-group">
+            <span>Resume language</span>
+            <div className="generator-output-selector" role="group" aria-label="Output language">
+              <button
+                type="button"
+                className={cx(outputLanguage === 'chinese' && 'is-selected')}
+                onClick={() => setOutputLanguage('chinese')}
+                disabled={isGenerating}
+                aria-pressed={outputLanguage === 'chinese'}
+              >
+                中文
+              </button>
+              <button
+                type="button"
+                className={cx(outputLanguage === 'english' && 'is-selected')}
+                onClick={() => setOutputLanguage('english')}
+                disabled={isGenerating}
+                aria-pressed={outputLanguage === 'english'}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                className={cx(outputLanguage === 'both' && 'is-selected')}
+                onClick={() => setOutputLanguage('both')}
+                disabled={isGenerating}
+                aria-pressed={outputLanguage === 'both'}
+              >
+                中英文
+              </button>
+            </div>
+          </div>
+          {profileError && <p className="generator-profile-check" role="alert">Complete profile before generating: {profileError}</p>}
           {error && <p className="generator-error" role="alert">{error}</p>}
         </div>
         <footer className="resume-dialog-actions">
           <button className="secondary-button" type="button" onClick={onCancel} disabled={isGenerating}>Cancel</button>
-          <button className="primary-button" type="submit" disabled={!jobDescription.trim() || isGenerating}>
+          <button className="primary-button" type="submit" disabled={!canGenerate}>
             <WandSparkles size={16} />
             {isGenerating ? 'Generating...' : 'Generate resume'}
           </button>
