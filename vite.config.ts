@@ -4,6 +4,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 const MAX_REQUEST_BYTES = 8_000_000;
 const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
 const MIN_TEXT_LENGTH = 20;
+const PROVIDER_TIMEOUT_MS = 120_000;
+const PROVIDER_RETRY_DELAY_MS = 700;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 type Provider = {
@@ -34,6 +36,10 @@ function sendProviderFailure(response: ServerResponse, error: unknown, fallback:
   }
   if (error instanceof Error && error.message === 'PROVIDER_AUTH_FAILED') {
     sendJson(response, 401, { error: 'The configured ChatGPT provider rejected its API key. Update CLOUD_BRIDGE_API_KEY.' });
+    return;
+  }
+  if (error instanceof Error && error.message === 'PROVIDER_TIMEOUT') {
+    sendJson(response, 504, { error: 'The file recognition provider took too long to respond. Please try again.' });
     return;
   }
   sendJson(response, 502, { error: fallback });
@@ -157,37 +163,56 @@ async function requestJsonCompletion(
   attachment: SourceAttachment | null = null,
   maxTokens = 4_000,
 ) {
-  const upstream = await fetch(provider.endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${provider.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: attachment?.sourceType === 'pdf' && provider.pdfModel
-        ? provider.pdfModel
-        : provider.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: modelMessageContent(userPrompt, attachment) },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-      max_tokens: maxTokens,
-    }),
-    signal,
+  const requestBody = JSON.stringify({
+    model: attachment?.sourceType === 'pdf' && provider.pdfModel
+      ? provider.pdfModel
+      : provider.model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: modelMessageContent(userPrompt, attachment) },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.2,
+    max_tokens: maxTokens,
   });
-  if (!upstream.ok) {
-    throw new Error(upstream.status === 401 || upstream.status === 403
-      ? 'PROVIDER_AUTH_FAILED'
-      : 'UPSTREAM_ERROR');
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const upstream = await fetch(provider.endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${provider.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: requestBody,
+        signal,
+      });
+      if (!upstream.ok) {
+        if (upstream.status === 401 || upstream.status === 403) {
+          throw new Error('PROVIDER_AUTH_FAILED');
+        }
+        throw new Error(upstream.status === 408 || upstream.status === 425 || upstream.status === 429 || upstream.status >= 500
+          ? 'UPSTREAM_RETRYABLE'
+          : 'UPSTREAM_ERROR');
+      }
+      const providerData = await upstream.json();
+      const content = providerData?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string') throw new Error('INVALID_UPSTREAM_RESPONSE');
+      const generated = JSON.parse(cleanGeneratedJson(content));
+      if (!generated || typeof generated !== 'object') throw new Error('INVALID_UPSTREAM_RESPONSE');
+      return generated;
+    } catch (error) {
+      lastError = error;
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('PROVIDER_TIMEOUT');
+      }
+      const retryable = error instanceof TypeError ||
+        (error instanceof Error && ['UPSTREAM_RETRYABLE', 'INVALID_UPSTREAM_RESPONSE'].includes(error.message));
+      if (!retryable || attempt === 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, PROVIDER_RETRY_DELAY_MS));
+    }
   }
-  const providerData = await upstream.json();
-  const content = providerData?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string') throw new Error('INVALID_UPSTREAM_RESPONSE');
-  const generated = JSON.parse(cleanGeneratedJson(content));
-  if (!generated || typeof generated !== 'object') throw new Error('INVALID_UPSTREAM_RESPONSE');
-  return generated;
+  throw lastError instanceof Error ? lastError : new Error('UPSTREAM_UNAVAILABLE');
 }
 
 async function requestFromProviders(
@@ -198,7 +223,7 @@ async function requestFromProviders(
   attachment: SourceAttachment | null = null,
 ) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
+  const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
   try {
     const eligibleProviders = attachment
       ? providers.filter((provider) => provider.supportsDirectFileInput)
