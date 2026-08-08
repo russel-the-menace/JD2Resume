@@ -26,6 +26,18 @@ function sendJson(response: ServerResponse, status: number, body: Record<string,
   response.end(JSON.stringify(body));
 }
 
+function sendProviderFailure(response: ServerResponse, error: unknown, fallback: string) {
+  if (error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE') {
+    sendJson(response, 503, { error: 'File imports require a configured ChatGPT-compatible provider.' });
+    return;
+  }
+  if (error instanceof Error && error.message === 'PROVIDER_AUTH_FAILED') {
+    sendJson(response, 401, { error: 'The configured ChatGPT provider rejected its API key. Update CLOUD_BRIDGE_API_KEY.' });
+    return;
+  }
+  sendJson(response, 502, { error: fallback });
+}
+
 function isRecord(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -163,7 +175,11 @@ async function requestJsonCompletion(
     }),
     signal,
   });
-  if (!upstream.ok) throw new Error('UPSTREAM_ERROR');
+  if (!upstream.ok) {
+    throw new Error(upstream.status === 401 || upstream.status === 403
+      ? 'PROVIDER_AUTH_FAILED'
+      : 'UPSTREAM_ERROR');
+  }
   const providerData = await upstream.json();
   const content = providerData?.choices?.[0]?.message?.content;
   if (typeof content !== 'string') throw new Error('INVALID_UPSTREAM_RESPONSE');
@@ -186,15 +202,17 @@ async function requestFromProviders(
       ? providers.filter((provider) => provider.supportsDirectFileInput)
       : providers;
     if (!eligibleProviders.length) throw new Error('DIRECT_FILE_PROVIDER_UNAVAILABLE');
+    let lastError: unknown = null;
     for (const provider of eligibleProviders) {
       try {
         const result = await requestJsonCompletion(provider, systemPrompt, userPrompt, controller.signal, attachment);
         if (validate(result)) return result;
-      } catch {
+      } catch (error) {
+        lastError = error;
         // A configured secondary provider can complete a transient primary-provider failure.
       }
     }
-    throw new Error('UPSTREAM_UNAVAILABLE');
+    throw lastError instanceof Error ? lastError : new Error('UPSTREAM_UNAVAILABLE');
   } finally {
     clearTimeout(timeout);
   }
@@ -270,11 +288,7 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
       );
       sendJson(response, 200, generated);
     } catch (error) {
-      sendJson(response, error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE' ? 503 : 502, {
-        error: error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE'
-          ? 'File imports require a configured ChatGPT-compatible provider.'
-          : 'The resume service is unavailable. Please try again.',
-      });
+      sendProviderFailure(response, error, 'The resume service is unavailable. Please try again.');
     }
   };
 
@@ -300,11 +314,7 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
       );
       sendJson(response, 200, normalizeProfileImportResponse(imported));
     } catch (error) {
-      sendJson(response, error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE' ? 503 : 502, {
-        error: error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE'
-          ? 'File imports require a configured ChatGPT-compatible provider.'
-          : 'The profile import service is unavailable. Please try again.',
-      });
+      sendProviderFailure(response, error, 'The profile import service is unavailable. Please try again.');
     }
   };
 
@@ -350,10 +360,11 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const providers: Provider[] = [];
-  if (env.CLOUD_BRIDGE_API_KEY && env.CLOUD_BRIDGE_API_BASE_URL) {
+  const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://apicn.unifyllm.top';
+  if (env.CLOUD_BRIDGE_API_KEY) {
     providers.push({
       apiKey: env.CLOUD_BRIDGE_API_KEY,
-      endpoint: chatCompletionsEndpoint(env.CLOUD_BRIDGE_API_BASE_URL),
+      endpoint: chatCompletionsEndpoint(cloudBridgeBaseUrl),
       model: env.CLOUD_BRIDGE_MODEL || 'gpt-4.1-mini',
       supportsDirectFileInput: true,
     });
