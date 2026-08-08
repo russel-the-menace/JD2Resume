@@ -21,13 +21,16 @@ import {
   Copy,
   Download,
   Eye,
+  FileUp,
   FileText,
   FolderOpen,
   GraduationCap,
   GripVertical,
   LayoutGrid,
+  KeyRound,
   Link,
   ListChecks,
+  LoaderCircle,
   LogIn,
   Mail,
   MapPin,
@@ -928,6 +931,7 @@ function App() {
   const libraryRef = useRef(initialLibrary);
   const [library, setLibrary] = useState(initialLibrary);
   const [userProfile, setUserProfile] = useState(initialProfile);
+  const [profileImporting, setProfileImporting] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
     const resume = new URLSearchParams(window.location.search).get('resume');
@@ -1020,6 +1024,23 @@ function App() {
       : { ok: false, error: 'This browser could not activate the new account.' };
   }, [accounts, activateAccount]);
 
+  const changePassword = useCallback(({ currentPassword, newPassword }) => {
+    if (currentAccount.password !== currentPassword) {
+      return { ok: false, error: 'Current password is incorrect.' };
+    }
+    if (!newPassword) return { ok: false, error: 'Enter a new password.' };
+    const updatedAccount = { ...currentAccount, password: newPassword };
+    const nextAccounts = accounts.map((account) =>
+      account.id === currentAccount.id ? updatedAccount : account,
+    );
+    if (!writeStoredJson(USER_DATABASE_STORAGE_KEY, { version: 1, accounts: nextAccounts })) {
+      return { ok: false, error: 'This browser could not save the new password.' };
+    }
+    setAccounts(nextAccounts);
+    setCurrentAccount(updatedAccount);
+    return { ok: true };
+  }, [accounts, currentAccount]);
+
   const saveResume = useCallback((id, snapshot) => {
     const current = libraryRef.current;
     const index = current.resumes.findIndex((document) => document.id === id);
@@ -1082,6 +1103,55 @@ function App() {
     setUserProfile(normalized);
     return true;
   }, [accountProfileKey]);
+
+  const runProfileRequest = useCallback(async (path, body) => {
+    setProfileImporting(true);
+    try {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(textValue(payload.error, 'Unable to import personal details right now.'));
+      }
+      if (!['chinese', 'english'].includes(payload.language) || !isRecord(payload.profile)) {
+        throw new Error('The imported personal details could not be read. Please try again.');
+      }
+      return payload;
+    } finally {
+      setProfileImporting(false);
+    }
+  }, []);
+
+  const importProfileFromResume = useCallback(async ({ resumeText, sourceType = 'text', sourceFile }) => {
+    if (sourceType === 'text' && !resumeText.trim()) {
+      throw new Error('Enter resume content before importing personal details.');
+    }
+    if (sourceType !== 'text' && !sourceFile) {
+      throw new Error('Choose a resume file before importing personal details.');
+    }
+    if (sourceFile && sourceFile.size > MAX_JOB_SOURCE_BYTES) {
+      throw new Error('The source file must be 5 MB or smaller.');
+    }
+    const sourceData = sourceFile ? await readFileAsDataUrl(sourceFile) : '';
+    return runProfileRequest('/api/import-profile', {
+      resumeText: resumeText.trim(),
+      sourceType,
+      source: sourceData
+        ? {
+            name: sourceFile.name,
+            mimeType: sourceFile.type,
+            data: sourceData.split(',')[1] || '',
+          }
+        : null,
+    });
+  }, [runProfileRequest]);
+
+  const translateImportedProfile = useCallback((language, profile) =>
+    runProfileRequest('/api/translate-profile', { language, profile }),
+  [runProfileRequest]);
 
   const generateResumeFromJobDescription = useCallback(async ({
     jobDescription,
@@ -1168,9 +1238,17 @@ function App() {
   }, [openResume, persistLibrary, userProfile]);
 
   const selectedResume = library.resumes.find((document) => document.id === selectedResumeId);
-  if (!selectedResume) {
-    return (
-      <ResumeLibrary
+  const appContent = selectedResume ? (
+    <ResumeEditor
+      key={selectedResume.id}
+      resumeId={selectedResume.id}
+      initialResumeState={selectedResume}
+      onResumeChange={saveResume}
+      onBack={returnHome}
+      workspaceStorageKey={accountWorkspaceKey}
+    />
+  ) : (
+    <ResumeLibrary
         resumes={library.resumes}
         onOpen={openResume}
         onCreate={createResume}
@@ -1181,22 +1259,20 @@ function App() {
         onSwitchAccount={switchAccount}
         onLogin={loginAccount}
         onRegister={registerAccount}
+        onChangePassword={changePassword}
         userProfile={userProfile}
         onProfileSave={saveUserProfile}
+        onImportProfile={importProfileFromResume}
+        onTranslateImportedProfile={translateImportedProfile}
         onGenerate={generateResumeFromJobDescription}
-      />
-    );
-  }
+    />
+  );
 
   return (
-    <ResumeEditor
-      key={selectedResume.id}
-      resumeId={selectedResume.id}
-      initialResumeState={selectedResume}
-      onResumeChange={saveResume}
-      onBack={returnHome}
-      workspaceStorageKey={accountWorkspaceKey}
-    />
+    <>
+      {appContent}
+      {profileImporting && <ProfileImportLoadingOverlay />}
+    </>
   );
 }
 
@@ -1641,8 +1717,11 @@ function ResumeLibrary({
   onSwitchAccount,
   onLogin,
   onRegister,
+  onChangePassword,
   userProfile,
   onProfileSave,
+  onImportProfile,
+  onTranslateImportedProfile,
   onGenerate,
 }) {
   const [query, setQuery] = useState('');
@@ -1653,6 +1732,7 @@ function ResumeLibrary({
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [generatorDialogOpen, setGeneratorDialogOpen] = useState(false);
   const visibleResumes = useMemo(() => {
@@ -1725,6 +1805,15 @@ function ResumeLibrary({
                 >
                   <UsersRound size={16} />
                   Switch account
+                </button>
+                <button
+                  onClick={() => {
+                    setPasswordDialogOpen(true);
+                    setAccountMenuOpen(false);
+                  }}
+                >
+                  <KeyRound size={16} />
+                  Change password
                 </button>
               </div>
             )}
@@ -1807,9 +1896,10 @@ function ResumeLibrary({
         <PersonalProfileDialog
           profile={userProfile}
           onCancel={() => setProfileDialogOpen(false)}
-          onSave={(profile) => {
-            if (onProfileSave(profile)) setProfileDialogOpen(false);
-          }}
+          onSave={onProfileSave}
+          onComplete={() => setProfileDialogOpen(false)}
+          onImport={onImportProfile}
+          onTranslateImportedProfile={onTranslateImportedProfile}
         />
       )}
       {generatorDialogOpen && (
@@ -1863,6 +1953,16 @@ function ResumeLibrary({
           onSignIn={() => {
             setRegisterDialogOpen(false);
             setLoginDialogOpen(true);
+          }}
+        />
+      )}
+      {passwordDialogOpen && (
+        <ChangePasswordDialog
+          onCancel={() => setPasswordDialogOpen(false)}
+          onChangePassword={(credentials) => {
+            const result = onChangePassword(credentials);
+            if (result.ok) setPasswordDialogOpen(false);
+            return result;
           }}
         />
       )}
@@ -2072,6 +2172,58 @@ function RegisterDialog({ accounts, onCancel, onRegister, onSignIn }) {
   );
 }
 
+function ChangePasswordDialog({ onCancel, onChangePassword }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [error, setError] = useState('');
+
+  const submit = (event) => {
+    event.preventDefault();
+    if (!currentPassword || !newPassword || !confirmation) return;
+    if (newPassword !== confirmation) {
+      setError('New passwords do not match.');
+      return;
+    }
+    const result = onChangePassword({ currentPassword, newPassword });
+    if (!result.ok) setError(result.error);
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <form
+        className="resume-dialog account-auth-dialog"
+        onSubmit={submit}
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="change-password-title"
+      >
+        <header className="resume-dialog-header account-dialog-header">
+          <div>
+            <span className="dialog-kicker">Local account</span>
+            <h2 id="change-password-title">Change password</h2>
+          </div>
+          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close">
+            <X size={16} />
+          </button>
+        </header>
+        <div className="account-auth-content">
+          <Field label="Current password" type="password" value={currentPassword} onChange={(value) => { setCurrentPassword(value); setError(''); }} />
+          <Field label="New password" type="password" value={newPassword} onChange={(value) => { setNewPassword(value); setError(''); }} />
+          <Field label="Confirm new password" type="password" value={confirmation} onChange={(value) => { setConfirmation(value); setError(''); }} />
+          {error && <p className="account-auth-error" role="alert">{error}</p>}
+        </div>
+        <footer className="account-auth-footer">
+          <button className="primary-button" type="submit" disabled={!currentPassword || !newPassword || !confirmation}>
+            <KeyRound size={16} /> Change password
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
 function NewResumeDialog({ onCancel, onSave }) {
   const [language, setLanguage] = useState('english');
   const [documentName, setDocumentName] = useState('');
@@ -2126,9 +2278,11 @@ function NewResumeDialog({ onCancel, onSave }) {
   );
 }
 
-function PersonalProfileDialog({ profile, onCancel, onSave }) {
+function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport, onTranslateImportedProfile }) {
   const [language, setLanguage] = useState('chinese');
   const [draft, setDraft] = useState(() => normalizeUserProfile(profile));
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importedProfile, setImportedProfile] = useState(null);
   const fields = draft[language];
   const chinese = language === 'chinese';
   const updateField = (field, value) => {
@@ -2140,19 +2294,51 @@ function PersonalProfileDialog({ profile, onCancel, onSave }) {
 
   const submit = (event) => {
     event.preventDefault();
-    onSave(draft);
+    if (onSave(draft)) onComplete();
+  };
+
+  const applyImportedProfile = async (source) => {
+    const imported = await onImport(source);
+    const importedLanguage = imported.language;
+    const normalizedFields = normalizeUserProfile({ [importedLanguage]: imported.profile })[importedLanguage];
+    const nextDraft = {
+      ...draft,
+      [importedLanguage]: normalizedFields,
+    };
+    if (!onSave(nextDraft)) throw new Error('The imported personal details could not be saved locally.');
+    setDraft(nextDraft);
+    setLanguage(importedLanguage);
+    setImportedProfile({ language: importedLanguage, profile: normalizedFields });
+    setImportDialogOpen(false);
+  };
+
+  const syncImportedProfile = async () => {
+    if (!importedProfile) return;
+    const translated = await onTranslateImportedProfile(importedProfile.language, importedProfile.profile);
+    const translatedFields = normalizeUserProfile({ [translated.language]: translated.profile })[translated.language];
+    const nextDraft = {
+      ...draft,
+      [translated.language]: translatedFields,
+    };
+    if (!onSave(nextDraft)) throw new Error('The translated personal details could not be saved locally.');
+    setDraft(nextDraft);
+    setLanguage(translated.language);
+    setImportedProfile(null);
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={onCancel}>
+    <div className="modal-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onCancel();
+    }}>
       <form className="resume-dialog personal-profile-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="personal-profile-title">
         <header className="resume-dialog-header">
           <div>
             <span className="dialog-kicker">Account</span>
             <h2 id="personal-profile-title">Edit personal profile</h2>
           </div>
-          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close">
-            <X size={16} />
+          <button className="secondary-button profile-import-button" type="button" onClick={() => setImportDialogOpen(true)}>
+            <FileUp size={15} />
+            <span>Import from resume</span>
           </button>
         </header>
         <div className="resume-dialog-content profile-dialog-content">
@@ -2214,6 +2400,177 @@ function PersonalProfileDialog({ profile, onCancel, onSave }) {
           <button className="primary-button" type="submit"><Check size={16} /> Save profile</button>
         </footer>
       </form>
+      {importDialogOpen && (
+        <ProfileImportDialog
+          onCancel={() => setImportDialogOpen(false)}
+          onImport={applyImportedProfile}
+        />
+      )}
+      {importedProfile && (
+        <ProfileSyncDialog
+          sourceLanguage={importedProfile.language}
+          onCancel={() => setImportedProfile(null)}
+          onSkip={() => setImportedProfile(null)}
+          onSync={syncImportedProfile}
+        />
+      )}
+    </div>
+  );
+}
+
+function ProfileImportDialog({ onCancel, onImport }) {
+  const [inputMode, setInputMode] = useState('text');
+  const [resumeText, setResumeText] = useState('');
+  const [sourceFile, setSourceFile] = useState(null);
+  const [error, setError] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const sourceReady = inputMode === 'text' ? Boolean(resumeText.trim()) : Boolean(sourceFile);
+
+  const selectInputMode = (mode) => {
+    setInputMode(mode);
+    setError('');
+  };
+
+  const selectSourceFile = (event) => {
+    const file = event.target.files?.[0] || null;
+    if (file && file.size > MAX_JOB_SOURCE_BYTES) {
+      setSourceFile(null);
+      setError('The source file must be 5 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+    setSourceFile(file);
+    setError('');
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!sourceReady || isImporting) return;
+    setError('');
+    setIsImporting(true);
+    try {
+      await onImport({ resumeText: resumeText.trim(), sourceType: inputMode, sourceFile });
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : 'Unable to import personal details right now.');
+      setIsImporting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop nested-modal-backdrop" onMouseDown={onCancel}>
+      <form
+        className="resume-dialog profile-import-dialog"
+        onSubmit={submit}
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-import-title"
+        aria-busy={isImporting}
+      >
+        <header className="resume-dialog-header account-dialog-header">
+          <div>
+            <span className="dialog-kicker">Personal profile</span>
+            <h2 id="profile-import-title">Import from resume</h2>
+          </div>
+          <button className="icon-button small" type="button" onClick={onCancel} disabled={isImporting} aria-label="Close" title="Close">
+            <X size={16} />
+          </button>
+        </header>
+        <div className="resume-dialog-content">
+          <div className="generator-input-selector" role="group" aria-label="Resume import method">
+            <button type="button" className={cx(inputMode === 'text' && 'is-selected')} onClick={() => selectInputMode('text')} disabled={isImporting} aria-pressed={inputMode === 'text'}>Paste text</button>
+            <button type="button" className={cx(inputMode === 'image' && 'is-selected')} onClick={() => selectInputMode('image')} disabled={isImporting} aria-pressed={inputMode === 'image'}>Upload image</button>
+            <button type="button" className={cx(inputMode === 'pdf' && 'is-selected')} onClick={() => selectInputMode('pdf')} disabled={isImporting} aria-pressed={inputMode === 'pdf'}>Upload PDF</button>
+          </div>
+          {inputMode === 'text' ? (
+            <label className="field profile-import-textarea">
+              <span>Resume content</span>
+              <textarea
+                value={resumeText}
+                rows={13}
+                placeholder="Paste the resume content"
+                onChange={(event) => setResumeText(event.target.value)}
+                disabled={isImporting}
+                aria-label="Resume content"
+              />
+            </label>
+          ) : (
+            <label className="job-source-picker">
+              <Upload size={18} />
+              <span>{inputMode === 'image' ? 'Upload image' : 'Upload PDF'}</span>
+              {sourceFile && <small>{sourceFile.name}</small>}
+              <input
+                type="file"
+                accept={inputMode === 'image' ? 'image/png,image/jpeg,image/webp' : 'application/pdf'}
+                onChange={selectSourceFile}
+                disabled={isImporting}
+                aria-label={inputMode === 'image' ? 'Upload image' : 'Upload PDF'}
+              />
+            </label>
+          )}
+          {error && <p className="generator-error" role="alert">{error}</p>}
+        </div>
+        <footer className="resume-dialog-actions">
+          <button className="secondary-button" type="button" onClick={onCancel} disabled={isImporting}>Cancel</button>
+          <button className="primary-button" type="submit" disabled={!sourceReady || isImporting}>
+            <FileUp size={16} />
+            {isImporting ? 'Importing...' : 'Import details'}
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function ProfileSyncDialog({ sourceLanguage, onCancel, onSkip, onSync }) {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [error, setError] = useState('');
+  const targetLanguage = sourceLanguage === 'chinese' ? 'English' : '中文';
+
+  const sync = async () => {
+    if (isSyncing) return;
+    setError('');
+    setIsSyncing(true);
+    try {
+      await onSync();
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to create the second profile right now.');
+      setIsSyncing(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop nested-modal-backdrop" onMouseDown={isSyncing ? undefined : onCancel}>
+      <section className="resume-dialog profile-sync-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="profile-sync-title" aria-busy={isSyncing}>
+        <header className="resume-dialog-header account-dialog-header">
+          <div>
+            <span className="dialog-kicker">Personal profile</span>
+            <h2 id="profile-sync-title">Create {targetLanguage} profile too?</h2>
+          </div>
+          <button className="icon-button small" type="button" onClick={onCancel} disabled={isSyncing} aria-label="Close" title="Close">
+            <X size={16} />
+          </button>
+        </header>
+        {error && <div className="profile-sync-content"><p className="generator-error" role="alert">{error}</p></div>}
+        <footer className="resume-dialog-actions">
+          <button className="secondary-button" type="button" onClick={onSkip} disabled={isSyncing}>Not now</button>
+          <button className="primary-button" type="button" onClick={sync} disabled={isSyncing}>
+            <Sparkles size={16} />
+            {isSyncing ? 'Creating...' : `Create ${targetLanguage} profile`}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function ProfileImportLoadingOverlay() {
+  return (
+    <div className="profile-import-loading" role="status" aria-live="assertive">
+      <div className="profile-import-loading-content">
+        <LoaderCircle size={24} />
+        <strong>Importing personal details</strong>
+      </div>
     </div>
   );
 }
@@ -2235,7 +2592,7 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
       .join('；')
     : '';
   const sourceReady = inputMode === 'text' ? Boolean(jobDescription.trim()) : Boolean(sourceFile);
-  const canGenerate = sourceReady && !profileError && !isGenerating;
+  const canGenerate = sourceReady && !isGenerating;
 
   const selectInputMode = (mode) => {
     setInputMode(mode);
@@ -2257,6 +2614,10 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
   const submit = async (event) => {
     event.preventDefault();
     if (!canGenerate) return;
+    if (profileError) {
+      setError('Complete the selected profile before generating a resume.');
+      return;
+    }
     setError('');
     setIsGenerating(true);
     try {
@@ -2293,7 +2654,7 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
               disabled={isGenerating}
               aria-pressed={inputMode === 'text'}
             >
-              粘贴文字
+              Paste text
             </button>
             <button
               type="button"
@@ -2302,7 +2663,7 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
               disabled={isGenerating}
               aria-pressed={inputMode === 'image'}
             >
-              上传图片
+              Upload image
             </button>
             <button
               type="button"
@@ -2311,7 +2672,7 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
               disabled={isGenerating}
               aria-pressed={inputMode === 'pdf'}
             >
-              上传 PDF
+              Upload PDF
             </button>
           </div>
           {inputMode === 'text' ? (
@@ -2372,7 +2733,6 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
               </button>
             </div>
           </div>
-          {profileError && <p className="generator-profile-check" role="alert">Complete profile before generating: {profileError}</p>}
           {error && <p className="generator-error" role="alert">{error}</p>}
         </div>
         <footer className="resume-dialog-actions">

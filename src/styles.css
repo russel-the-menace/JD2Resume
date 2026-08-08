@@ -150,8 +150,8 @@ button:disabled {
   background: var(--surface-soft);
 }
 
-.account-switcher-dialog,
-.account-auth-dialog {
+.resume-dialog.account-switcher-dialog,
+.resume-dialog.account-auth-dialog {
   width: min(420px, 100%);
 }
 
@@ -275,6 +275,64 @@ button:disabled {
   color: var(--danger);
   font-size: 11px;
   line-height: 1.45;
+}
+
+.profile-import-button {
+  height: 32px;
+  padding: 0 10px;
+}
+
+.resume-dialog.profile-import-dialog {
+  width: min(720px, 100%);
+}
+
+.profile-import-textarea textarea {
+  min-height: 230px;
+}
+
+.resume-dialog.profile-sync-dialog {
+  width: min(440px, 100%);
+}
+
+.profile-sync-content {
+  padding: 20px 20px 0;
+}
+
+.profile-import-loading {
+  position: fixed;
+  z-index: 220;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(28, 31, 29, 0.52);
+  backdrop-filter: blur(4px);
+  cursor: wait;
+}
+
+.profile-import-loading-content {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 54px;
+  padding: 0 18px;
+  color: #fff;
+  background: #2f3832;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  box-shadow: 0 20px 48px rgba(14, 17, 15, 0.32);
+  font-size: 13px;
+}
+
+.profile-import-loading svg {
+  animation: profile-import-spin 900ms linear infinite;
+}
+
+@keyframes profile-import-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .library-main {
@@ -2966,15 +3024,10 @@ button:disabled {
   cursor: pointer;
 }
 
-.generator-profile-check,
 .generator-error {
   margin: -8px 0 0;
   font-size: 11px;
   line-height: 1.45;
-}
-
-.generator-profile-check {
-  color: #88652e;
 }
 
 .generator-error {

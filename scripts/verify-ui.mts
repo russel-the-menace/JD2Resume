@@ -66,7 +66,8 @@ await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-librar
 await desktopPage.getByRole('button', { name: 'Account menu' }).click();
 report.checks.accountMenu =
   (await desktopPage.getByRole('button', { name: 'Edit personal profile' }).isVisible()) &&
-  (await desktopPage.getByRole('button', { name: 'Switch account' }).isVisible());
+  (await desktopPage.getByRole('button', { name: 'Switch account' }).isVisible()) &&
+  (await desktopPage.getByRole('button', { name: 'Change password' }).isVisible());
 await desktopPage.getByRole('button', { name: 'Switch account' }).click();
 const accountSwitcher = desktopPage.getByRole('dialog', { name: 'Switch account' });
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-account-switcher.png') });
@@ -94,6 +95,17 @@ report.checks.localAccountLogin =
   !(await desktopPage.getByRole('dialog', { name: 'Sign in' }).isVisible()) &&
   (await desktopPage.locator('.resume-library-card').count()) === 3;
 await desktopPage.getByRole('button', { name: 'Account menu' }).click();
+await desktopPage.getByRole('button', { name: 'Change password' }).click();
+const changePasswordDialog = desktopPage.getByRole('dialog', { name: 'Change password' });
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-change-password-dialog.png') });
+await changePasswordDialog.getByLabel('Current password').fill('yeatom');
+await changePasswordDialog.getByLabel('New password', { exact: true }).fill('updated-yeatom');
+await changePasswordDialog.getByLabel('Confirm new password').fill('updated-yeatom');
+await changePasswordDialog.getByRole('button', { name: 'Change password', exact: true }).click();
+report.checks.localPasswordChanged = await desktopPage.evaluate(() =>
+  JSON.parse(localStorage.getItem('draftline-user-database-v1')).accounts.find((account) => account.id === 'yeatom').password === 'updated-yeatom',
+);
+await desktopPage.getByRole('button', { name: 'Account menu' }).click();
 await desktopPage.getByRole('button', { name: 'Switch account' }).click();
 await desktopPage.getByRole('dialog', { name: 'Switch account' }).getByRole('button', { name: 'Sign up' }).click();
 const duplicateRegisterDialog = desktopPage.getByRole('dialog', { name: 'Sign up' });
@@ -105,6 +117,64 @@ await duplicateRegisterDialog.getByRole('button', { name: 'Close' }).click();
 await desktopPage.getByRole('button', { name: 'Account menu' }).click();
 await desktopPage.getByRole('button', { name: 'Edit personal profile' }).click();
 const profileDialog = desktopPage.getByRole('dialog', { name: 'Edit personal profile' });
+await desktopPage.route('**/api/import-profile', async (route) => {
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      language: 'chinese',
+      profile: {
+        fullName: '张三',
+        gender: '男',
+        phone: '13800138000',
+        email: 'zhangsan@example.com',
+        location: '上海',
+        wechat: 'zhangsan',
+        linkedin: '',
+        website: 'zhangsan.design',
+        summary: '产品设计师，拥有企业软件设计经验。',
+      },
+    }),
+  });
+});
+await desktopPage.route('**/api/translate-profile', async (route) => {
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      language: 'english',
+      profile: {
+        fullName: 'Zhang San',
+        gender: 'Male',
+        phone: '13800138000',
+        email: 'zhangsan@example.com',
+        location: 'Shanghai',
+        wechat: 'zhangsan',
+        linkedin: '',
+        website: 'zhangsan.design',
+        summary: 'Product designer with enterprise software experience.',
+      },
+    }),
+  });
+});
+await profileDialog.getByRole('button', { name: 'Import from resume' }).click();
+const profileImportDialog = desktopPage.getByRole('dialog', { name: 'Import from resume' });
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-profile-import-dialog.png') });
+report.checks.profileImportDialog =
+  (await profileImportDialog.getByRole('button', { name: 'Paste text' }).isVisible()) &&
+  (await profileImportDialog.getByRole('button', { name: 'Upload image' }).isVisible()) &&
+  (await profileImportDialog.getByRole('button', { name: 'Upload PDF' }).isVisible());
+await profileImportDialog.getByLabel('Resume content').fill('张三是一名产品设计师，居住在上海。邮箱 zhangsan@example.com，电话 13800138000。');
+await profileImportDialog.getByRole('button', { name: 'Import details' }).click();
+await desktopPage.locator('.profile-import-loading').waitFor({ state: 'visible' });
+const profileSyncDialog = desktopPage.getByRole('dialog', { name: 'Create English profile too?' });
+await profileSyncDialog.waitFor({ state: 'visible' });
+await profileSyncDialog.getByRole('button', { name: 'Create English profile' }).click();
+await profileDialog.getByLabel('Full name').waitFor({ state: 'visible' });
+report.checks.profileImportDualLanguage =
+  (await profileDialog.getByLabel('Full name').inputValue()) === 'Zhang San';
+await profileDialog.getByRole('button', { name: '中文', exact: true }).click();
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-personal-profile-dialog.png') });
 await profileDialog.getByLabel('姓名').fill('张三');
 await profileDialog.getByLabel('性别').selectOption('男');
@@ -120,6 +190,8 @@ await profileDialog.getByLabel('Email').fill('alex@example.com');
 await profileDialog.getByLabel('Location').fill('New York, NY');
 await profileDialog.getByLabel('Professional profile').fill('Product designer focused on high-impact workflows.');
 await profileDialog.getByRole('button', { name: 'Save profile' }).click();
+await desktopPage.unroute('**/api/import-profile');
+await desktopPage.unroute('**/api/translate-profile');
 report.checks.bilingualProfileSaved = await desktopPage.evaluate(() => {
   const profile = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-user-profile-v1'));
   return profile?.chinese?.fullName === '张三' && profile?.chinese?.gender === '男' &&
@@ -130,9 +202,9 @@ const generatorDialog = desktopPage.getByRole('dialog', { name: 'Generate from j
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-job-description-dialog.png') });
 report.checks.jobDescriptionDialog =
   (await generatorDialog.isVisible()) &&
-  (await generatorDialog.getByRole('button', { name: '粘贴文字' }).isVisible()) &&
-  (await generatorDialog.getByRole('button', { name: '上传图片' }).isVisible()) &&
-  (await generatorDialog.getByRole('button', { name: '上传 PDF' }).isVisible()) &&
+  (await generatorDialog.getByRole('button', { name: 'Paste text' }).isVisible()) &&
+  (await generatorDialog.getByRole('button', { name: 'Upload image' }).isVisible()) &&
+  (await generatorDialog.getByRole('button', { name: 'Upload PDF' }).isVisible()) &&
   (await generatorDialog.getByRole('button', { name: '中英文' }).isVisible()) &&
   (await generatorDialog.getByRole('button', { name: 'Generate resume' }).isDisabled());
 await desktopPage.route('**/api/generate-resume', async (route) => {
@@ -162,21 +234,21 @@ await desktopPage.route('**/api/generate-resume', async (route) => {
   });
 });
 await generatorDialog.getByRole('button', { name: 'English', exact: true }).click();
-await generatorDialog.getByRole('button', { name: '上传图片' }).click();
+await generatorDialog.getByRole('button', { name: 'Upload image' }).click();
 await generatorDialog.getByLabel('Upload image').setInputFiles({
   name: 'job-description.png',
   mimeType: 'image/png',
   buffer: Buffer.from('test-image'),
 });
 const imageReady = await generatorDialog.getByRole('button', { name: 'Generate resume' }).isEnabled();
-await generatorDialog.getByRole('button', { name: '上传 PDF' }).click();
+await generatorDialog.getByRole('button', { name: 'Upload PDF' }).click();
 await generatorDialog.getByLabel('Upload PDF').setInputFiles({
   name: 'job-description.pdf',
   mimeType: 'application/pdf',
   buffer: Buffer.from('%PDF-1.4 test'),
 });
 const pdfReady = await generatorDialog.getByRole('button', { name: 'Generate resume' }).isEnabled();
-await generatorDialog.getByRole('button', { name: '粘贴文字' }).click();
+await generatorDialog.getByRole('button', { name: 'Paste text' }).click();
 await generatorDialog.getByRole('textbox', { name: 'Job description' }).fill('Lead product designer for a workflow platform. Build clear tools for enterprise teams and partner with engineering.');
 report.checks.generatorSourceModes = imageReady && pdfReady;
 await generatorDialog.getByRole('button', { name: 'Generate resume' }).click();
