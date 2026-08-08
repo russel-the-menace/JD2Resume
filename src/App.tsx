@@ -1079,10 +1079,9 @@ function App() {
   }, [accounts, activateAccount]);
 
   const loginAccount = useCallback(({ username, password }) => {
-    const account = accounts.find((candidate) =>
-      candidate.id === accountIdFor(username) && candidate.password === password,
-    );
-    if (!account) return { ok: false, error: 'Username or password is incorrect.' };
+    const account = accounts.find((candidate) => candidate.id === accountIdFor(username));
+    if (!account) return { ok: false, error: 'This account is not registered yet.' };
+    if (account.password !== password) return { ok: false, error: 'Password is incorrect.' };
     return activateAccount(account)
       ? { ok: true }
       : { ok: false, error: 'This browser could not save the active account.' };
@@ -2193,15 +2192,15 @@ function LoginDialog({ onCancel, onLogin, onSignUp }) {
           </button>
         </header>
         <div className="account-auth-content">
-          <Field label="Username" value={username} onChange={setUsername} />
-          <Field label="Password" type="password" value={password} onChange={setPassword} />
+          <Field label="Username" value={username} onChange={(value) => { setUsername(value); setError(''); }} />
+          <Field label="Password" type="password" value={password} onChange={(value) => { setPassword(value); setError(''); }} />
           {error && <p className="account-auth-error" role="alert">{error}</p>}
         </div>
         <footer className="account-auth-footer">
+          <button className="dialog-link-button" type="button" onClick={onSignUp}>Sign up</button>
           <button className="primary-button" type="submit" disabled={!username.trim() || !password}>
             <LogIn size={16} /> Sign in
           </button>
-          <button className="dialog-link-button" type="button" onClick={onSignUp}>Sign up</button>
         </footer>
       </form>
     </div>
@@ -2252,10 +2251,10 @@ function RegisterDialog({ accounts, onCancel, onRegister, onSignIn }) {
           )}
         </div>
         <footer className="account-auth-footer">
+          <button className="dialog-link-button" type="button" onClick={onSignIn}>Sign in</button>
           <button className="primary-button" type="submit" disabled={!username.trim() || !password || usernameDuplicate}>
             <UserPlus size={16} /> Sign up
           </button>
-          <button className="dialog-link-button" type="button" onClick={onSignIn}>Sign in</button>
         </footer>
       </form>
     </div>
