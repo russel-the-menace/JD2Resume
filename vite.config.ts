@@ -92,14 +92,12 @@ function buildProfileImportPrompt(resumeText: string) {
     resumeText
       ? `Resume text:\n${resumeText}`
       : 'A resume file or image is attached. Read it directly, including the header contact line. Do not rely only on embedded PDF text.',
-    `SUMMARY RULES (IMPORTANT):
-- First look for an explicitly written personal introduction, profile, about, objective, or summary section. If one exists, preserve its meaning and rewrite it concisely in the target language.
-- If no personal introduction exists, generate one from the resume's overall career direction, seniority, industry background, transferable capabilities, and highest-level strengths.
-- A summary is a LinkedIn-style professional introduction, not work experience. Do not copy a single job's responsibility list into it, reproduce bullet points, list a sequence of tasks or platforms, or describe one role in detail.
-- Write 2-3 concise sentences in each language, with an implied third person. Never use 我, 本人, 该候选人, I, or My. Keep detailed duties and metrics in work experience rather than the summary.
-- The summary must contain only: (1) professional identity and direction, (2) 2-3 transferable capabilities, and (3) overall value or working style. Do not name tools, social platforms, employers, individual projects, or a sequence of duties such as collecting, shooting, editing, and distributing content. Use at most one high-level outcome and no more than one number.
-- Prefer this shape: "内容运营负责人，聚焦品牌内容增长与用户运营，具备将内容策略转化为持续业务结果的能力。擅长跨团队协作、数据复盘与内容体系建设，能够持续提升品牌影响力和用户参与度。" This is a style pattern, not text to copy when the facts differ.
-- If the resume contains no reliable basis for a summary, leave it empty instead of inventing claims.`,
+    `SUMMARY EXTRACTION RULES (IMPORTANT):
+- First look for an explicitly written personal introduction, profile, about, objective, or summary section. If one exists, preserve its meaning in summary and translate it for the other language without adding claims.
+- If no such section exists, leave summary empty. A separate writing step will generate it later from the extracted facts.
+- A summary is never a work-experience field. Do not turn responsibilities, bullet points, task sequences, platform lists, or project descriptions into an explicit summary.
+- If no explicit introduction exists, both summary fields must be empty.
+- Add a summarySource field to each profile with exactly "explicit" when an introduction section was found, or "missing" when it was not. This marker is required even though it is not included in the abbreviated schema above.`,
   ].join('\n\n');
   return `You extract personal profile details from a resume. Return valid JSON only. Detect whether the resume is primarily Chinese or English, then provide both a Chinese and an English profile in the same response. Use only explicit resume facts. Never invent a name, gender, contact details, location, social account, website, or summary. Carefully read the phone number and email address even when the PDF text layer is malformed. Preserve exact factual values such as email addresses, phone numbers, websites, and account handles across both profiles. Translate human-readable fields such as names, locations, gender, and summaries when appropriate.\n\nReturn exactly this JSON shape:\n{\n  "language": "chinese or english",\n  "profiles": {\n    "chinese": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    },\n    "english": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    }\n  }\n}\n\nFor Chinese profiles use Chinese values when they are known, including gender values 男, 女, or 其他. For English profiles use English values, including Male, Female, Non-binary, or Prefer not to say only when explicit. Leave unknown fields empty. The summary may be a concise factual synthesis of the resume in its target language.\n\n${sourceInstruction}`;
 }
@@ -109,17 +107,20 @@ function buildProfileTranslationPrompt(sourceLanguage: string, profile: Record<s
   return `You translate a personal profile from ${sourceLanguage} to ${targetLanguage}. Return valid JSON only. Preserve exact factual values such as names, email addresses, phones, websites, and account handles. Translate only human-readable fields such as location and summary when appropriate. Do not invent missing fields.\n\nReturn exactly this JSON shape:\n{\n  "language": "${targetLanguage}",\n  "profile": {\n    "fullName": "string",\n    "gender": "string",\n    "phone": "string",\n    "email": "string",\n    "location": "string",\n    "wechat": "string",\n    "linkedin": "string",\n    "website": "string",\n    "summary": "string"\n  }\n}\n\nSource profile:\n${JSON.stringify(profile)}`;
 }
 
-function buildProfileSummaryPrompt(profiles: Record<string, any>) {
-  return `You are a senior resume writer. Rewrite only the summary fields in the supplied bilingual profiles and return valid JSON only.
+function buildProfileSummaryPrompt(profiles: Record<string, any>, resumeText: string) {
+  const sourceInstruction = resumeText
+    ? `Resume text:\n${resumeText}`
+    : 'The original resume file or image is attached. Read the full document for career facts, but do not invent anything that is not shown.';
+  return `You are the professional summary writer from the puppet-resume workflow. Generate only the missing bilingual personal introductions from the supplied factual profile and resume source, then return valid JSON only.
 
-Write a concise LinkedIn-style professional introduction for each language:
-- Use 2 sentences, with an implied third person. Never use 我, 本人, 该候选人, I, or My.
-- Sentence 1: professional identity, career direction, and domain or seniority.
-- Sentence 2: 2-3 transferable capabilities and the overall value or working style.
-- Do not list work responsibilities, employers, tools, social platforms, project steps, or a sequence such as collecting, shooting, editing, and distributing content.
-- Do not copy bullet points from work experience. Use at most one high-level outcome and no more than one number.
-- Use only facts present in the supplied profiles. Preserve the meaning of an existing concise personal introduction; if it is empty or clearly a work-duty list, synthesize a new summary from the available facts.
-- Chinese output must be Chinese; English output must be English. Keep the two summaries semantically equivalent.
+Follow this exact generation logic:
+- Write two separate paragraphs in each language, separated by a blank line.
+- Paragraph 1 presents the professional identity, career direction, explicit years of experience when available, industry breadth, and core value proposition. Aim for 3-4 resume lines.
+- Paragraph 2 presents high-level outcomes, working methodology, leadership or collaboration style, and transferable strengths. Aim for 2 resume lines.
+- Use an implied first person / third-person-limited style: omit 我, 本人, 该候选人, I, and My. Start directly with phrases such as "拥有...经验" or "深耕...领域".
+- Use only supplied facts. Never invent years, employers, titles, metrics, tools, platforms, or achievements. Do not use decimal years; round only an explicitly stated decimal to an integer.
+- This is a professional About section, not work experience. Do not enumerate responsibilities, copy bullets, name a sequence of tasks, or describe one job in detail. Do not list social platforms or software tools.
+- Chinese output must be Chinese; English output must be English. Keep both versions semantically equivalent.
 
 Return exactly this JSON shape:
 {
@@ -129,8 +130,10 @@ Return exactly this JSON shape:
   }
 }
 
-Supplied profiles:
-${JSON.stringify(profiles)}`;
+Supplied factual profiles (their summaries are intentionally empty because no explicit personal introduction was found):
+${JSON.stringify(profiles)}
+
+${sourceInstruction}`;
 }
 
 function sourceFromInput(input: Record<string, any>, textField: string) {
@@ -383,25 +386,30 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
       );
       const normalized = normalizeProfileImportResponse(imported);
       let result = normalized;
-      try {
-        const summarized = await requestFromProviders(
-          providers,
-          'Return concise bilingual professional summaries as valid JSON. Do not use markdown or add commentary.',
-          buildProfileSummaryPrompt(normalized.profiles),
-          validProfileSummaryResponse,
-          null,
-          1_200,
-          45_000,
-        );
-        result = {
-          ...normalized,
-          profiles: {
-            chinese: { ...normalized.profiles.chinese, summary: summarized.profiles.chinese.summary.trim() },
-            english: { ...normalized.profiles.english, summary: summarized.profiles.english.summary.trim() },
-          },
-        };
-      } catch {
-        // Keep the extracted result available when summary polishing is temporarily unavailable.
+      const extractedProfiles = [normalized.profiles.chinese, normalized.profiles.english];
+      const hasExplicitSummary = extractedProfiles
+        .some((profile) => stringValue(profile.summarySource).trim() === 'explicit');
+      if (!hasExplicitSummary) {
+        try {
+          const summarized = await requestFromProviders(
+            providers,
+            'Return concise bilingual professional summaries as valid JSON. Do not use markdown or add commentary.',
+            buildProfileSummaryPrompt(normalized.profiles, source.text),
+            validProfileSummaryResponse,
+            source.attachment,
+            1_200,
+            45_000,
+          );
+          result = {
+            ...normalized,
+            profiles: {
+              chinese: { ...normalized.profiles.chinese, summary: summarized.profiles.chinese.summary.trim() },
+              english: { ...normalized.profiles.english, summary: summarized.profiles.english.summary.trim() },
+            },
+          };
+        } catch {
+          // Keep the extracted result available when summary generation is temporarily unavailable.
+        }
       }
       sendJson(response, 200, result);
     } catch (error) {
