@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -258,6 +259,11 @@ report.checks.englishGender =
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-markdown-website-link.png') });
 await desktopPage.emulateMedia({ media: 'print' });
 report.checks.printWebsiteLink = await websiteLink.isVisible();
+const exportedPdfPath = join(tmpdir(), 'draftline-playwright-markdown-website-link.pdf');
+await desktopPage.pdf({ path: exportedPdfPath, printBackground: true });
+report.checks.exportedPdfWebsiteLink = (await readFile(exportedPdfPath)).includes(
+  'https://github.com/russel-the-menace',
+);
 await desktopPage.emulateMedia({ media: 'screen' });
 await desktopPage.getByLabel('Upload profile photo').setInputFiles({
   name: 'avatar.png',
