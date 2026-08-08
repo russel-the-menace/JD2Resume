@@ -150,6 +150,7 @@ const EDITOR_WIDTH_STORAGE_KEY = 'draftline-editor-width';
 const RESUME_STORAGE_KEY = 'draftline-resume-state-v1';
 const WORKSPACE_STORAGE_KEY = 'draftline-workspace-preferences-v1';
 const LIBRARY_STORAGE_KEY = 'draftline-resume-library-v2';
+const USER_PROFILE_STORAGE_KEY = 'draftline-user-profile-v1';
 const STORAGE_VERSION = 1;
 const LIBRARY_VERSION = 2;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
@@ -249,6 +250,58 @@ function storedJson(key: string): unknown {
 
 function textValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
+}
+
+const emptyUserProfile = {
+  chinese: {
+    fullName: '',
+    gender: '',
+    phone: '',
+    email: '',
+    location: '',
+    wechat: '',
+    website: '',
+    summary: '',
+  },
+  english: {
+    fullName: '',
+    gender: '',
+    phone: '',
+    email: '',
+    location: '',
+    linkedin: '',
+    website: '',
+    summary: '',
+  },
+};
+
+function normalizeUserProfile(value) {
+  const source = isRecord(value) ? value : {};
+  return Object.entries(emptyUserProfile).reduce((profile, [language, fields]) => {
+    const savedFields = isRecord(source[language]) ? source[language] : {};
+    profile[language] = Object.keys(fields).reduce((result, field) => {
+      result[field] = textValue(savedFields[field]).trim();
+      return result;
+    }, {});
+    return profile;
+  }, {});
+}
+
+function loadUserProfile() {
+  return normalizeUserProfile(storedJson(USER_PROFILE_STORAGE_KEY));
+}
+
+function profileInitials(profile) {
+  const name = profile.chinese.fullName || profile.english.fullName;
+  if (!name) return 'JL';
+  if (/[^\u0000-\u007f]/.test(name)) return name.slice(0, 2);
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'JL';
 }
 
 function parseWebsiteLink(value) {
@@ -704,6 +757,7 @@ function App() {
   const initialLibrary = useMemo(loadResumeLibrary, []);
   const libraryRef = useRef(initialLibrary);
   const [library, setLibrary] = useState(initialLibrary);
+  const [userProfile, setUserProfile] = useState(loadUserProfile);
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
     const resume = new URLSearchParams(window.location.search).get('resume');
@@ -806,6 +860,62 @@ function App() {
     });
   }, [persistLibrary]);
 
+  const saveUserProfile = useCallback((nextProfile) => {
+    const normalized = normalizeUserProfile(nextProfile);
+    try {
+      window.localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(normalized));
+    } catch {
+      return false;
+    }
+    setUserProfile(normalized);
+    return true;
+  }, []);
+
+  const generateResumeFromJobDescription = useCallback(async ({ jobDescription, language }) => {
+    const baseResume = [...libraryRef.current.resumes]
+      .sort((first, second) => second.updatedAt - first.updatedAt)
+      .find((resume) => resume.language === language);
+    const response = await fetch('/api/generate-resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jobDescription,
+        language,
+        profile: userProfile[language],
+        baseResume: baseResume?.data || null,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(textValue(payload.error, 'Unable to generate a resume right now.'));
+    }
+    if (!isRecord(payload.resume)) {
+      throw new Error('The generated resume could not be read. Please try again.');
+    }
+
+    const data = normalizeResumeData(payload.resume, language);
+    const generatedName = textValue(
+      payload.documentName,
+      `${resumeName(data.basics, language) || (isChineseResume(language) ? '未命名简历' : 'Untitled resume')} - ${data.basics.role || (isChineseResume(language) ? '目标职位' : 'Target role')}`,
+    );
+    const generatedId = resumeId();
+    const snapshot = blankResumeSnapshot({ documentName: generatedName, language });
+    const generatedResume = {
+      id: generatedId,
+      ...snapshot,
+      data,
+      updatedAt: Date.now(),
+    };
+    const nextLibrary = {
+      version: LIBRARY_VERSION,
+      resumes: [generatedResume, ...libraryRef.current.resumes],
+    };
+    if (!persistLibrary(nextLibrary)) {
+      throw new Error('The generated resume could not be saved locally.');
+    }
+    openResume(generatedId);
+  }, [openResume, persistLibrary, userProfile]);
+
   const selectedResume = library.resumes.find((document) => document.id === selectedResumeId);
   if (!selectedResume) {
     return (
@@ -815,6 +925,9 @@ function App() {
         onCreate={createResume}
         onDuplicate={duplicateResume}
         onDelete={deleteResume}
+        userProfile={userProfile}
+        onProfileSave={saveUserProfile}
+        onGenerate={generateResumeFromJobDescription}
       />
     );
   }
@@ -1259,11 +1372,23 @@ function formatUpdatedAt(timestamp) {
   }).format(new Date(timestamp))}`;
 }
 
-function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate, onDelete }) {
+function ResumeLibrary({
+  resumes,
+  onOpen,
+  onCreate,
+  onDuplicate,
+  onDelete,
+  userProfile,
+  onProfileSave,
+  onGenerate,
+}) {
   const [query, setQuery] = useState('');
   const [openMenu, setOpenMenu] = useState(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [generatorDialogOpen, setGeneratorDialogOpen] = useState(false);
   const visibleResumes = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return [...resumes]
@@ -1283,6 +1408,9 @@ function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate, onDelete }) {
         if (!(event.target instanceof Element) || !event.target.closest('.resume-card-menu-wrap')) {
           setOpenMenu(null);
         }
+        if (!(event.target instanceof Element) || !event.target.closest('.account-menu-wrap')) {
+          setAccountMenuOpen(false);
+        }
       }}
     >
       <header className="library-topbar">
@@ -1291,11 +1419,41 @@ function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate, onDelete }) {
           <span>Draftline</span>
         </a>
         <div className="library-topbar-actions">
+          <button
+            className="secondary-button library-generate-top"
+            onClick={() => setGeneratorDialogOpen(true)}
+          >
+            <WandSparkles size={16} />
+            <span>Generate from JD</span>
+          </button>
           <button className="primary-button library-create-top" onClick={() => setCreateDialogOpen(true)} aria-label="New resume" title="New resume">
             <Plus size={16} />
             <span>New resume</span>
           </button>
-          <button className="avatar-button" aria-label="Account menu" title="Account menu">JL</button>
+          <div className="account-menu-wrap">
+            <button
+              className="avatar-button"
+              onClick={() => setAccountMenuOpen((current) => !current)}
+              aria-label="Account menu"
+              aria-expanded={accountMenuOpen}
+              title="Account menu"
+            >
+              {profileInitials(userProfile)}
+            </button>
+            {accountMenuOpen && (
+              <div className="account-menu">
+                <button
+                  onClick={() => {
+                    setProfileDialogOpen(true);
+                    setAccountMenuOpen(false);
+                  }}
+                >
+                  <UserRound size={16} />
+                  Edit personal profile
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -1373,6 +1531,22 @@ function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate, onDelete }) {
             onDelete(pendingDelete.id);
             setPendingDelete(null);
           }}
+        />
+      )}
+      {profileDialogOpen && (
+        <PersonalProfileDialog
+          profile={userProfile}
+          onCancel={() => setProfileDialogOpen(false)}
+          onSave={(profile) => {
+            if (onProfileSave(profile)) setProfileDialogOpen(false);
+          }}
+        />
+      )}
+      {generatorDialogOpen && (
+        <JobDescriptionDialog
+          profile={userProfile}
+          onCancel={() => setGeneratorDialogOpen(false)}
+          onGenerate={onGenerate}
         />
       )}
     </div>
@@ -1464,6 +1638,175 @@ function NewResumeDialog({ onCancel, onSave }) {
         <footer className="resume-dialog-actions">
           <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>
           <button className="primary-button" type="submit" disabled={!canSave}>Save</button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function PersonalProfileDialog({ profile, onCancel, onSave }) {
+  const [language, setLanguage] = useState('chinese');
+  const [draft, setDraft] = useState(() => normalizeUserProfile(profile));
+  const fields = draft[language];
+  const chinese = language === 'chinese';
+  const updateField = (field, value) => {
+    setDraft((current) => ({
+      ...current,
+      [language]: { ...current[language], [field]: value },
+    }));
+  };
+
+  const submit = (event) => {
+    event.preventDefault();
+    onSave(draft);
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <form className="resume-dialog personal-profile-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="personal-profile-title">
+        <header className="resume-dialog-header">
+          <div>
+            <span className="dialog-kicker">Account</span>
+            <h2 id="personal-profile-title">Edit personal profile</h2>
+          </div>
+          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close">
+            <X size={16} />
+          </button>
+        </header>
+        <div className="resume-dialog-content profile-dialog-content">
+          <div className="resume-language-selector" role="group" aria-label="Profile language">
+            <button
+              type="button"
+              className={cx(chinese && 'is-selected')}
+              onClick={() => setLanguage('chinese')}
+              aria-pressed={chinese}
+            >
+              中文
+            </button>
+            <button
+              type="button"
+              className={cx(!chinese && 'is-selected')}
+              onClick={() => setLanguage('english')}
+              aria-pressed={!chinese}
+            >
+              English
+            </button>
+          </div>
+          <div className="form-grid two-columns">
+            <Field
+              label={chinese ? '姓名' : 'Full name'}
+              value={fields.fullName}
+              onChange={(value) => updateField('fullName', value)}
+            />
+            <GenderField
+              value={fields.gender}
+              onChange={(value) => updateField('gender', value)}
+              language={language}
+            />
+            <Field label={chinese ? '手机号码' : 'Phone'} value={fields.phone} onChange={(value) => updateField('phone', value)} />
+            <Field label="Email" type="email" value={fields.email} onChange={(value) => updateField('email', value)} />
+            <Field label={chinese ? '所在地' : 'Location'} value={fields.location} onChange={(value) => updateField('location', value)} />
+            <Field
+              label={chinese ? '个人网站' : 'Website'}
+              value={fields.website}
+              placeholder="https://..."
+              onChange={(value) => updateField('website', value)}
+            />
+            <Field
+              label={chinese ? '微信号' : 'LinkedIn'}
+              value={chinese ? fields.wechat : fields.linkedin}
+              onChange={(value) => updateField(chinese ? 'wechat' : 'linkedin', value)}
+            />
+          </div>
+          <label className="field">
+            <span>{chinese ? '个人简介' : 'Professional profile'}</span>
+            <textarea
+              value={fields.summary}
+              rows={5}
+              onChange={(event) => updateField('summary', event.target.value)}
+            />
+          </label>
+        </div>
+        <footer className="resume-dialog-actions">
+          <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>
+          <button className="primary-button" type="submit"><Check size={16} /> Save profile</button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
+  const [language, setLanguage] = useState(profile.chinese.fullName ? 'chinese' : 'english');
+  const [jobDescription, setJobDescription] = useState('');
+  const [error, setError] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!jobDescription.trim() || isGenerating) return;
+    setError('');
+    setIsGenerating(true);
+    try {
+      await onGenerate({ jobDescription: jobDescription.trim(), language });
+    } catch (generationError) {
+      setError(generationError instanceof Error ? generationError.message : 'Unable to generate a resume right now.');
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={isGenerating ? undefined : onCancel}>
+      <form className="resume-dialog job-description-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="job-description-title" aria-busy={isGenerating}>
+        <header className="resume-dialog-header">
+          <div>
+            <span className="dialog-kicker">Resume generator</span>
+            <h2 id="job-description-title">Generate from job description</h2>
+          </div>
+          <button className="icon-button small" type="button" onClick={onCancel} disabled={isGenerating} aria-label="Close" title="Close">
+            <X size={16} />
+          </button>
+        </header>
+        <div className="resume-dialog-content profile-dialog-content">
+          <div className="resume-language-selector" role="group" aria-label="Resume language">
+            <button
+              type="button"
+              className={cx(language === 'chinese' && 'is-selected')}
+              onClick={() => setLanguage('chinese')}
+              disabled={isGenerating}
+              aria-pressed={language === 'chinese'}
+            >
+              中文
+            </button>
+            <button
+              type="button"
+              className={cx(language === 'english' && 'is-selected')}
+              onClick={() => setLanguage('english')}
+              disabled={isGenerating}
+              aria-pressed={language === 'english'}
+            >
+              English
+            </button>
+          </div>
+          <label className="field job-description-field">
+            <span>Job description</span>
+            <textarea
+              value={jobDescription}
+              rows={13}
+              placeholder="Paste the role, responsibilities, and requirements"
+              onChange={(event) => setJobDescription(event.target.value)}
+              disabled={isGenerating}
+              aria-label="Job description"
+            />
+          </label>
+          {error && <p className="generator-error" role="alert">{error}</p>}
+        </div>
+        <footer className="resume-dialog-actions">
+          <button className="secondary-button" type="button" onClick={onCancel} disabled={isGenerating}>Cancel</button>
+          <button className="primary-button" type="submit" disabled={!jobDescription.trim() || isGenerating}>
+            <WandSparkles size={16} />
+            {isGenerating ? 'Generating...' : 'Generate resume'}
+          </button>
         </footer>
       </form>
     </div>

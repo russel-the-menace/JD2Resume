@@ -113,6 +113,44 @@ button:disabled {
   gap: 11px;
 }
 
+.account-menu-wrap {
+  position: relative;
+}
+
+.account-menu {
+  position: absolute;
+  z-index: 45;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 210px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: var(--shadow-lg);
+}
+
+.account-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 9px;
+  color: #3b433d;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-menu button:hover {
+  background: var(--surface-soft);
+}
+
 .library-main {
   width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
@@ -509,6 +547,16 @@ button:disabled {
   background: var(--surface-soft);
 }
 
+.library-generate-top {
+  color: #514a9c;
+  background: var(--violet-soft);
+  border-color: #d8d3f2;
+}
+
+.library-generate-top:hover {
+  border-color: #bcb5e6;
+}
+
 .library-empty {
   display: flex;
   flex-direction: column;
@@ -574,6 +622,15 @@ button:disabled {
   }
 
   .library-create-top span {
+    display: none;
+  }
+
+  .library-generate-top {
+    width: 36px;
+    padding: 0;
+  }
+
+  .library-generate-top span {
     display: none;
   }
 
@@ -2660,6 +2717,49 @@ button:disabled {
   box-shadow: 0 26px 70px rgba(20, 22, 21, 0.24);
 }
 
+.personal-profile-dialog,
+.job-description-dialog {
+  width: min(680px, 100%);
+}
+
+.job-description-dialog {
+  width: min(720px, 100%);
+}
+
+.personal-profile-dialog .resume-dialog-header,
+.job-description-dialog .resume-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dialog-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: #7a837c;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.profile-dialog-content {
+  max-height: min(650px, calc(100vh - 190px));
+  overflow-y: auto;
+}
+
+.job-description-field textarea {
+  min-height: 230px;
+}
+
+.generator-error {
+  margin: -8px 0 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .resume-dialog-header {
   padding: 18px 20px;
   border-bottom: 1px solid var(--line);
@@ -2950,6 +3050,10 @@ button:disabled {
   .avatar-button,
   .save-status {
     display: none;
+  }
+
+  .library-topbar .avatar-button {
+    display: inline-flex;
   }
 
   .brand-mark {

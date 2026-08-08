@@ -60,6 +60,63 @@ report.checks.libraryHomeVisible =
   (await desktopPage.locator('.resume-library-card').count()) === 3;
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-library-desktop.png') });
 
+await desktopPage.getByRole('button', { name: 'Account menu' }).click();
+report.checks.accountMenu = await desktopPage.getByRole('button', { name: 'Edit personal profile' }).isVisible();
+await desktopPage.getByRole('button', { name: 'Edit personal profile' }).click();
+const profileDialog = desktopPage.getByRole('dialog', { name: 'Edit personal profile' });
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-personal-profile-dialog.png') });
+await profileDialog.getByLabel('姓名').fill('张三');
+await profileDialog.getByLabel('性别').selectOption('男');
+await profileDialog.getByRole('button', { name: 'English', exact: true }).click();
+await profileDialog.getByLabel('Full name').fill('Alex Zhang');
+await profileDialog.getByLabel('Gender').selectOption('Male');
+await profileDialog.getByRole('button', { name: 'Save profile' }).click();
+report.checks.bilingualProfileSaved = await desktopPage.evaluate(() => {
+  const profile = JSON.parse(localStorage.getItem('draftline-user-profile-v1'));
+  return profile?.chinese?.fullName === '张三' && profile?.chinese?.gender === '男' &&
+    profile?.english?.fullName === 'Alex Zhang' && profile?.english?.gender === 'Male';
+});
+await desktopPage.getByRole('button', { name: 'Generate from JD' }).click();
+const generatorDialog = desktopPage.getByRole('dialog', { name: 'Generate from job description' });
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-job-description-dialog.png') });
+report.checks.jobDescriptionDialog =
+  (await generatorDialog.isVisible()) &&
+  (await generatorDialog.getByRole('button', { name: 'Generate resume' }).isDisabled());
+await desktopPage.route('**/api/generate-resume', async (route) => {
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      documentName: 'Alex Zhang - Product Designer',
+      resume: {
+        basics: {
+          fullName: 'Alex Zhang',
+          firstName: 'Alex',
+          lastName: 'Zhang',
+          role: 'Lead Product Designer',
+          email: 'alex@example.com',
+          phone: '555-0100',
+          location: 'New York, NY',
+          gender: 'Male',
+          website: 'alex.design',
+        },
+        summary: 'Product designer focused on high-impact workflows.',
+        experience: [],
+        education: [],
+        skills: { expertise: 'Product strategy, Interaction design', tools: 'Figma' },
+      },
+    }),
+  });
+});
+await generatorDialog.getByLabel('Job description').fill('Lead product designer for a workflow platform. Build clear tools for enterprise teams and partner with engineering.');
+await generatorDialog.getByRole('button', { name: 'Generate resume' }).click();
+await desktopPage.waitForURL(/resume=/);
+report.checks.jobDescriptionGenerated =
+  (await desktopPage.getByLabel('Resume name').inputValue()) === 'Alex Zhang - Product Designer' &&
+  (await desktopPage.locator('.resume-page').getByText('Lead Product Designer', { exact: true }).isVisible());
+await desktopPage.unroute('**/api/generate-resume');
+await desktopPage.getByRole('button', { name: 'Back to resumes' }).click();
+
 await desktopPage.getByRole('button', { name: 'New resume' }).click();
 const newResumeDialog = desktopPage.getByRole('dialog', { name: 'New resume' });
 report.checks.newResumeDialog =
