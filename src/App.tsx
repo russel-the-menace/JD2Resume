@@ -28,12 +28,15 @@ import {
   LayoutGrid,
   Link,
   ListChecks,
+  LockKeyhole,
   Mail,
   MapPin,
   Minus,
   MoreHorizontal,
   Palette,
   PanelLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
   PencilLine,
   Phone,
   Plus,
@@ -54,12 +57,14 @@ import {
 
 const initialResume = {
   basics: {
+    fullName: '',
     firstName: 'Jordan',
     lastName: 'Lee',
     role: 'Senior Product Designer',
     email: 'jordan.lee@email.com',
     phone: '(415) 555-0148',
     location: 'San Francisco, CA',
+    gender: 'Male',
     website: 'jordanlee.design',
     photoUrl: '',
   },
@@ -119,6 +124,15 @@ const baseSections = [
   { id: 'skills', label: 'Skills', icon: ListChecks },
 ];
 
+const chineseSectionLabels = {
+  basics: '个人信息',
+  summary: '个人介绍',
+  experience: '工作经历',
+  education: '教育经历',
+  skills: '专业经历',
+  certifications: '证书',
+};
+
 const templateOptions = [
   { id: 'classic', name: 'Classic', detail: 'Traditional' },
   { id: 'modern', name: 'Modern', detail: 'Balanced' },
@@ -170,6 +184,56 @@ const emptyCustomSection = {
   },
 };
 
+const chineseCustomSection = {
+  certifications: {
+    title: '证书',
+    itemTitle: '专业证书',
+    subtitle: '颁发机构，年份',
+    description: '',
+  },
+};
+
+function isChineseResume(language) {
+  return language === 'chinese';
+}
+
+function localizedBaseSections(language) {
+  if (!isChineseResume(language)) return baseSections;
+  return baseSections.map((section) => ({
+    ...section,
+    label: chineseSectionLabels[section.id],
+  }));
+}
+
+function localizedSectionSuggestions(language) {
+  if (!isChineseResume(language)) return sectionSuggestions;
+  return sectionSuggestions.map((section) => ({
+    ...section,
+    label: chineseSectionLabels[section.id] || section.label,
+  }));
+}
+
+function customSectionDefaults(id, language) {
+  if (isChineseResume(language) && chineseCustomSection[id]) {
+    return chineseCustomSection[id];
+  }
+  return emptyCustomSection[id];
+}
+
+function resumeName(basics, language) {
+  if (isChineseResume(language)) {
+    return `${basics.fullName || basics.lastName || ''}${basics.fullName ? '' : basics.firstName || ''}`.trim();
+  }
+  return `${basics.firstName || ''} ${basics.lastName || ''}`.trim();
+}
+
+function resumeInitials(basics, language) {
+  if (isChineseResume(language)) {
+    return resumeName(basics, language).slice(0, 2) || '姓名';
+  }
+  return `${basics.firstName?.[0] || 'Y'}${basics.lastName?.[0] || ''}`;
+}
+
 function isRecord(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -188,16 +252,46 @@ function textValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
 }
 
+function parseWebsiteLink(value) {
+  const raw = textValue(value).trim();
+  if (!raw) return null;
+
+  const markdownMatch = raw.match(/^\[([^\]\r\n]+)\]\s*\((.+)\)$/);
+  const duplicatedMarkdownMatch = raw.match(/^\[([^\]\r\n]+)\]\s*\[[^\]\r\n]*\]\s*\((.+)\)$/);
+  const legacyNamedMatch = raw.match(/^\[([^\]\r\n]+)\]\s*(\S+)$/);
+  const match = markdownMatch || duplicatedMarkdownMatch || legacyNamedMatch;
+  const label = (match ? match[1] : raw).trim();
+  const target = (match ? match[2] : raw).trim().replace(/^<|>$/g, '');
+  const href = /^https?:\/\//i.test(target)
+    ? target
+    : /^[\w.-]+\.[a-z]{2,}(?:[/?#].*)?$/i.test(target)
+      ? `https://${target}`
+      : '';
+
+  if (!label || !href) return null;
+  try {
+    const url = new URL(href);
+    return ['http:', 'https:'].includes(url.protocol)
+      ? { href: url.href, label }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeAccent(value: unknown, fallback = accentOptions[0]) {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
     ? value.toLowerCase()
     : fallback;
 }
 
-function normalizeResumeData(value) {
+function normalizeResumeData(value, language = 'english') {
   const source = isRecord(value) ? value : {};
   const basics = isRecord(source.basics) ? source.basics : {};
   const skills = isRecord(source.skills) ? source.skills : {};
+  const chinese = isChineseResume(language);
+  const storedFullName = textValue(basics.fullName).trim();
+  const migratedChineseName = `${textValue(basics.lastName)}${textValue(basics.firstName)}`.trim();
 
   const experience = Array.isArray(source.experience)
     ? source.experience.filter(isRecord).map((entry, index) => {
@@ -233,12 +327,14 @@ function normalizeResumeData(value) {
 
   return {
     basics: {
-      firstName: textValue(basics.firstName, initialResume.basics.firstName),
-      lastName: textValue(basics.lastName, initialResume.basics.lastName),
+      fullName: chinese ? storedFullName || migratedChineseName : textValue(basics.fullName),
+      firstName: chinese ? '' : textValue(basics.firstName, initialResume.basics.firstName),
+      lastName: chinese ? '' : textValue(basics.lastName, initialResume.basics.lastName),
       role: textValue(basics.role, initialResume.basics.role),
       email: textValue(basics.email, initialResume.basics.email),
       phone: textValue(basics.phone, initialResume.basics.phone),
       location: textValue(basics.location, initialResume.basics.location),
+      gender: textValue(basics.gender, chinese ? '男' : initialResume.basics.gender),
       website: textValue(
         basics.website,
         textValue(basics.linkedin, initialResume.basics.website),
@@ -275,13 +371,14 @@ function normalizeSectionOrder(value, customSections, template = 'modern') {
   const storedOrder = Array.isArray(value)
     ? value.filter((id) => typeof id === 'string' && allowed.has(id))
     : [];
-  return [...new Set([...storedOrder, ...defaultOrder])];
+  const ordered = [...new Set([...storedOrder, ...defaultOrder])];
+  return ['basics', ...ordered.filter((id) => id !== 'basics')];
 }
 
-function normalizeCustomContent(sectionIds, value) {
+function normalizeCustomContent(sectionIds, value, language = 'english') {
   const source = isRecord(value) ? value : {};
   return sectionIds.reduce((result, id) => {
-    const defaults = emptyCustomSection[id];
+    const defaults = customSectionDefaults(id, language);
     const section = isRecord(source[id]) ? source[id] : {};
     result[id] = {
       title: textValue(section.title, defaults.title),
@@ -300,14 +397,15 @@ function loadResumeSnapshot() {
   const template = templateOptions.some((option) => option.id === source.template)
     ? source.template
     : 'modern';
+  const language = source.language === 'chinese' ? 'chinese' : 'english';
   return {
     documentName: textValue(source.documentName, DEFAULT_DOCUMENT_NAME),
-    language: source.language === 'chinese' ? 'chinese' : 'english',
-    data: normalizeResumeData(source.data),
+    language,
+    data: normalizeResumeData(source.data, language),
     template,
     accent: normalizeAccent(source.accent),
     customSections,
-    customContent: normalizeCustomContent(customSections, source.customContent),
+    customContent: normalizeCustomContent(customSections, source.customContent, language),
     sectionOrder: normalizeSectionOrder(source.sectionOrder, customSections, template),
     sectionOrderCustomized: source.sectionOrderCustomized === true,
   };
@@ -429,10 +527,11 @@ function normalizeResumeDocument(value, index) {
     ? source.template
     : 'modern';
   const customSections = normalizeCustomSections(source.customSections);
+  const language = source.language === 'chinese' ? 'chinese' : 'english';
   const snapshot = {
     documentName: textValue(source.documentName, `Resume ${index + 1}`),
-    language: source.language === 'chinese' ? 'chinese' : 'english',
-    data: normalizeResumeData(source.data),
+    language,
+    data: normalizeResumeData(source.data, language),
     template,
     accent: normalizeAccent(source.accent),
     customSections,
@@ -440,7 +539,7 @@ function normalizeResumeDocument(value, index) {
     sectionOrder: normalizeSectionOrder(source.sectionOrder, customSections, template),
     sectionOrderCustomized: source.sectionOrderCustomized === true,
   };
-  snapshot.customContent = normalizeCustomContent(snapshot.customSections, source.customContent);
+  snapshot.customContent = normalizeCustomContent(snapshot.customSections, source.customContent, language);
   return {
     id: textValue(source.id, `resume-${index + 1}`),
     ...snapshot,
@@ -472,25 +571,58 @@ function loadResumeLibrary() {
 function blankResumeSnapshot(
   { documentName, language }: { documentName?: string; language?: string } = {},
 ) {
+  const chinese = isChineseResume(language);
   return {
     documentName: textValue(documentName, 'Untitled resume'),
     language: language === 'chinese' ? 'chinese' : 'english',
     data: normalizeResumeData({
       basics: {
-        firstName: 'Jordan',
-        lastName: 'Lee',
-        role: 'Target role',
-        email: initialResume.basics.email,
-        phone: initialResume.basics.phone,
-        location: initialResume.basics.location,
-        website: initialResume.basics.website,
+        fullName: chinese ? '张晓明' : '',
+        firstName: chinese ? '' : 'Jordan',
+        lastName: chinese ? '' : 'Lee',
+        role: chinese ? '产品设计师' : 'Target role',
+        email: chinese ? 'xiaoming.zhang@email.com' : initialResume.basics.email,
+        phone: chinese ? '138 0000 0000' : initialResume.basics.phone,
+        location: chinese ? '上海，中国' : initialResume.basics.location,
+        gender: chinese ? '男' : initialResume.basics.gender,
+        website: chinese ? '' : initialResume.basics.website,
         photoUrl: initialResume.basics.photoUrl,
       },
-      summary: '',
-      experience: [],
-      education: initialResume.education,
-      skills: { expertise: '', tools: '' },
-    }),
+      summary: chinese
+        ? '拥有 7 年以上产品设计经验，擅长将复杂的业务流程转化为清晰、高效的用户体验。'
+        : '',
+      experience: chinese
+        ? [{
+            id: 1,
+            role: '高级产品设计师',
+            company: '北辰科技',
+            location: '上海，中国',
+            start: '2022 年 3 月',
+            end: '至今',
+            current: true,
+            bullets: [
+              '主导企业分析平台的端到端设计，提升关键任务完成效率。',
+              '建立跨团队设计规范，缩短产品交付周期。',
+            ],
+          }]
+        : [],
+      education: chinese
+        ? [{
+            id: 1,
+            school: '中国美术学院',
+            degree: '交互设计学士',
+            location: '杭州，中国',
+            start: '2015 年',
+            end: '2019 年',
+          }]
+        : initialResume.education,
+      skills: chinese
+        ? {
+            expertise: '产品策略、用户研究、交互设计、原型设计、设计系统',
+            tools: 'Figma、FigJam、Miro、Jira、Notion',
+          }
+        : { expertise: '', tools: '' },
+    }, language),
     template: 'modern',
     accent: accentOptions[0],
     customSections: [],
@@ -553,6 +685,7 @@ function loadWorkspacePreferences(resumeSnapshot, resumeId) {
     mobileMode: ['outline', 'edit', 'preview'].includes(source.mobileMode)
       ? source.mobileMode
       : 'edit',
+    editorCollapsed: source.editorCollapsed === true,
     previewPosition: {
       left: Number.isFinite(Number(storedPosition.left))
         ? Math.max(0, Number(storedPosition.left))
@@ -653,9 +786,9 @@ function App() {
       ...source,
       id: duplicateId,
       documentName: `${source.documentName} Copy`,
-      data: normalizeResumeData(source.data),
+      data: normalizeResumeData(source.data, source.language),
       customSections: [...source.customSections],
-      customContent: normalizeCustomContent(source.customSections, source.customContent),
+      customContent: normalizeCustomContent(source.customSections, source.customContent, source.language),
       sectionOrder: [...source.sectionOrder],
       updatedAt: Date.now(),
     };
@@ -715,6 +848,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
   const [language] = useState(initialResumeState.language);
   const [zoom, setZoom] = useState(initialWorkspaceState.zoom);
   const [editorWidth, setEditorWidth] = useState(initialWorkspaceState.editorWidth);
+  const [editorCollapsed, setEditorCollapsed] = useState(initialWorkspaceState.editorCollapsed);
   const [mobileMode, setMobileMode] = useState(initialWorkspaceState.mobileMode);
   const [templateMenu, setTemplateMenu] = useState(false);
   const [sectionMenu, setSectionMenu] = useState(false);
@@ -794,6 +928,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
               activeSection,
               openExperience,
               mobileMode,
+              editorCollapsed,
               previewPosition,
             },
           },
@@ -802,7 +937,16 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
     } catch {
       // Resume content saving remains independent if preferences exceed browser storage.
     }
-  }, [activeSection, editorWidth, mobileMode, openExperience, previewPosition, resumeId, zoom]);
+  }, [
+    activeSection,
+    editorCollapsed,
+    editorWidth,
+    mobileMode,
+    openExperience,
+    previewPosition,
+    resumeId,
+    zoom,
+  ]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -907,10 +1051,10 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
   }, [data, customSections]);
 
   const sectionDefinitions = [
-    ...baseSections,
+    ...localizedBaseSections(language),
     ...customSections.map((sectionId) => ({
       id: sectionId,
-      label: emptyCustomSection[sectionId].title,
+      label: customContent[sectionId]?.title || customSectionDefaults(sectionId, language).title,
       icon: sectionSuggestions.find((item) => item.id === sectionId)?.icon || Award,
     })),
   ];
@@ -919,22 +1063,23 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
     .filter(Boolean);
 
   const addCustomSection = (id) => {
+    const defaults = customSectionDefaults(id, language);
     if (!customSections.includes(id)) {
       setCustomSections((current) => [...current, id]);
       setSectionOrder((current) => [...current.filter((sectionId) => sectionId !== id), id]);
       setCustomContent((current) => ({
         ...current,
-        [id]: { ...emptyCustomSection[id] },
+        [id]: { ...defaults },
       }));
     }
     setActiveSection(id);
     setSectionMenu(false);
     setMobileMode('edit');
-    setToast(`${emptyCustomSection[id].title} added`);
+    setToast(`${defaults.title} added`);
   };
 
   const reorderSections = (sourceId, targetId) => {
-    if (sourceId === targetId) return;
+    if (sourceId === targetId || sourceId === 'basics' || targetId === 'basics') return;
     setSectionOrder((current) => {
       const sourceIndex = current.indexOf(sourceId);
       const targetIndex = current.indexOf(targetId);
@@ -990,7 +1135,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
       <MobileTabs value={mobileMode} onChange={setMobileMode} />
 
       <main
-        className="workspace"
+        className={cx('workspace', editorCollapsed && 'editor-collapsed')}
         data-mobile-mode={mobileMode}
         style={{ '--editor-width': `${editorWidth}px` } as CssVariables}
       >
@@ -1007,6 +1152,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
           customSections={customSections}
           addCustomSection={addCustomSection}
           onReorder={reorderSections}
+          language={language}
         />
 
         <EditorPanel
@@ -1024,6 +1170,9 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
           setCustomContent={setCustomContent}
           onAi={() => setAiPanel(true)}
           onPreview={() => setMobileMode('preview')}
+          editorCollapsed={editorCollapsed}
+          onToggleCollapsed={() => setEditorCollapsed((current) => !current)}
+          language={language}
         />
 
         <ColumnResizer
@@ -1048,6 +1197,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
           customContent={customContent}
           sectionOrder={sectionOrder}
           sectionOrderCustomized={sectionOrderCustomized}
+          language={language}
         />
       </main>
 
@@ -1315,8 +1465,8 @@ function DeleteResumeDialog({ resume, onCancel, onDelete }) {
 }
 
 function ResumeCardPreview({ resume }) {
-  const name = `${resume.data.basics.firstName} ${resume.data.basics.lastName}`.trim();
-  const initials = `${resume.data.basics.firstName?.[0] || 'Y'}${resume.data.basics.lastName?.[0] || ''}`;
+  const name = resumeName(resume.data.basics, resume.language);
+  const initials = resumeInitials(resume.data.basics, resume.language);
   return (
     <span
       className={cx('resume-card-canvas', `card-template-${resume.template}`)}
@@ -1327,8 +1477,8 @@ function ResumeCardPreview({ resume }) {
           <ProfileAvatar photoUrl={resume.data.basics.photoUrl} initials={initials} className="card-profile-avatar" />
         )}
         <span className="card-paper-header">
-          <strong>{name || 'Your name'}</strong>
-          <small>{resume.data.basics.role || 'Target role'}</small>
+          <strong>{name || (isChineseResume(resume.language) ? '你的姓名' : 'Your name')}</strong>
+          <small>{resume.data.basics.role || (isChineseResume(resume.language) ? '目标职位' : 'Target role')}</small>
         </span>
         <span className="card-paper-body">
           <i className="card-section-label" />
@@ -1559,6 +1709,7 @@ function OutlineSidebar({
   customSections,
   addCustomSection,
   onReorder,
+  language,
 }) {
   const [draggedSectionId, setDraggedSectionId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
@@ -1600,71 +1751,86 @@ function OutlineSidebar({
       </div>
 
       <nav className="section-nav" aria-label="Resume sections">
-        {sections.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            draggable
-            aria-grabbed={draggedSectionId === id}
-            className={cx(
-              'section-nav-item',
-              activeSection === id && 'active',
-              draggedSectionId === id && 'dragging',
-              dropTargetId === id && draggedSectionId !== id && 'drop-target',
-            )}
-            onClick={(event) => {
-              if (ignoreClickRef.current) {
+        {sections.map(({ id, label, icon: Icon }) => {
+          const isFixed = id === 'basics';
+          return (
+            <button
+              key={id}
+              draggable={!isFixed}
+              aria-grabbed={isFixed ? undefined : draggedSectionId === id}
+              className={cx(
+                'section-nav-item',
+                isFixed && 'is-fixed',
+                activeSection === id && 'active',
+                draggedSectionId === id && 'dragging',
+                dropTargetId === id && draggedSectionId !== id && 'drop-target',
+              )}
+              onClick={(event) => {
+                if (ignoreClickRef.current) {
+                  event.preventDefault();
+                  return;
+                }
+                onSelect(id);
+              }}
+              onDragStart={(event) => {
+                if (isFixed) return;
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', id);
+                ignoreClickRef.current = true;
+                setDraggedSectionId(id);
+                setDropTargetId(id);
+              }}
+              onDragOver={(event) => {
+                if (isFixed || !draggedSectionId || draggedSectionId === id) return;
                 event.preventDefault();
-                return;
-              }
-              onSelect(id);
-            }}
-            onDragStart={(event) => {
-              event.dataTransfer.effectAllowed = 'move';
-              event.dataTransfer.setData('text/plain', id);
-              ignoreClickRef.current = true;
-              setDraggedSectionId(id);
-              setDropTargetId(id);
-            }}
-            onDragOver={(event) => {
-              if (!draggedSectionId || draggedSectionId === id) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = 'move';
-              setDropTargetId(id);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              const sourceId = event.dataTransfer.getData('text/plain') || draggedSectionId;
-              if (sourceId) onReorder(sourceId, id);
-              finishDrag();
-            }}
-            onDragEnd={finishDrag}
-          >
-            <GripVertical className="drag-icon" size={15} />
-            <span className="section-icon"><Icon size={16} /></span>
-            <span className="section-label">{label}</span>
-            {baseSections.some((section) => section.id === id) ? (
-              <CheckCircle2 className="complete-icon" size={16} />
-            ) : (
-              <Circle className="complete-icon" size={16} />
-            )}
-          </button>
-        ))}
+                event.dataTransfer.dropEffect = 'move';
+                setDropTargetId(id);
+              }}
+              onDrop={(event) => {
+                if (isFixed) return;
+                event.preventDefault();
+                const sourceId = event.dataTransfer.getData('text/plain') || draggedSectionId;
+                if (sourceId) onReorder(sourceId, id);
+                finishDrag();
+              }}
+              onDragEnd={finishDrag}
+            >
+              {isFixed ? (
+                <span
+                  className="fixed-section-icon"
+                  title={isChineseResume(language) ? '个人信息位置固定' : 'Personal details position is fixed'}
+                >
+                  <LockKeyhole size={14} aria-hidden="true" />
+                </span>
+              ) : (
+                <GripVertical className="drag-icon" size={15} />
+              )}
+              <span className="section-icon"><Icon size={16} /></span>
+              <span className="section-label">{label}</span>
+              {baseSections.some((section) => section.id === id) ? (
+                <CheckCircle2 className="complete-icon" size={16} />
+              ) : (
+                <Circle className="complete-icon" size={16} />
+              )}
+            </button>
+          );
+        })}
       </nav>
 
       <div className="add-section-wrap">
         <button className="add-section-button" onClick={() => setSectionMenu(!sectionMenu)}>
           <Plus size={16} />
-          Add section
+          {isChineseResume(language) ? '添加模块' : 'Add section'}
         </button>
         {sectionMenu && (
           <div className="section-popover">
             <div className="popover-heading">
-              <span>Add to resume</span>
+              <span>{isChineseResume(language) ? '添加到简历' : 'Add to resume'}</span>
               <button className="icon-button small" onClick={() => setSectionMenu(false)} aria-label="Close">
                 <X size={15} />
               </button>
             </div>
-            {sectionSuggestions.map(({ id, label, icon: Icon }) => (
+            {localizedSectionSuggestions(language).map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => addCustomSection(id)}
@@ -1702,15 +1868,30 @@ function EditorPanel({
   setCustomContent,
   onAi,
   onPreview,
+  editorCollapsed,
+  onToggleCollapsed,
+  language,
 }) {
-  const labels = {
-    basics: ['Personal details', 'The essentials'],
-    summary: ['Professional summary', 'Your introduction'],
-    experience: ['Experience', `${data.experience.length} positions`],
-    education: ['Education', `${data.education.length} entry`],
-    skills: ['Skills', 'Core strengths'],
-  };
-  const heading = labels[activeSection] || [customContent[activeSection]?.title || 'Section', 'Custom section'];
+  const labels = isChineseResume(language)
+    ? {
+        basics: ['个人信息', '基本资料'],
+        summary: ['个人介绍', '自我简介'],
+        experience: ['工作经历', `${data.experience.length} 段经历`],
+        education: ['教育经历', `${data.education.length} 条记录`],
+        skills: ['专业经历', '核心能力'],
+      }
+    : {
+        basics: ['Personal details', 'The essentials'],
+        summary: ['Professional summary', 'Your introduction'],
+        experience: ['Experience', `${data.experience.length} positions`],
+        education: ['Education', `${data.education.length} entry`],
+        skills: ['Skills', 'Core strengths'],
+      };
+  const fallback = customSectionDefaults(activeSection, language);
+  const heading = labels[activeSection] || [
+    customContent[activeSection]?.title || fallback?.title || 'Section',
+    isChineseResume(language) ? '自定义模块' : 'Custom section',
+  ];
 
   return (
     <section className="editor-panel">
@@ -1725,6 +1906,14 @@ function EditorPanel({
               <Plus size={16} /> Add
             </button>
           )}
+          <button
+            className="icon-button editor-collapse-button"
+            onClick={onToggleCollapsed}
+            aria-label={editorCollapsed ? 'Expand editor' : 'Collapse editor'}
+            title={editorCollapsed ? 'Expand editor' : 'Collapse editor'}
+          >
+            {editorCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
           <button className="icon-button mobile-preview-button" onClick={onPreview} aria-label="Preview resume">
             <Eye size={18} />
           </button>
@@ -1733,7 +1922,7 @@ function EditorPanel({
 
       <div className="editor-scroll">
         {activeSection === 'basics' && (
-          <BasicsEditor basics={data.basics} onChange={updateBasics} />
+          <BasicsEditor basics={data.basics} onChange={updateBasics} language={language} />
         )}
         {activeSection === 'summary' && (
           <SummaryEditor
@@ -1762,7 +1951,8 @@ function EditorPanel({
         )}
         {!baseSections.some((section) => section.id === activeSection) && (
           <CustomSectionEditor
-            content={customContent[activeSection] || emptyCustomSection[activeSection]}
+            content={customContent[activeSection] || customSectionDefaults(activeSection, language)}
+            language={language}
             onChange={(field, value) =>
               setCustomContent((current) => ({
                 ...current,
@@ -1776,8 +1966,9 @@ function EditorPanel({
   );
 }
 
-function BasicsEditor({ basics, onChange }) {
-  const initials = `${basics.firstName?.[0] || 'Y'}${basics.lastName?.[0] || ''}`;
+function BasicsEditor({ basics, onChange, language }) {
+  const chinese = isChineseResume(language);
+  const initials = resumeInitials(basics, language);
   const uploadPhoto = (event) => {
     const [file] = event.target.files || [];
     if (!file) return;
@@ -1791,41 +1982,52 @@ function BasicsEditor({ basics, onChange }) {
 
   return (
     <div className="form-content">
-      <div className="form-grid two-columns">
-        <Field label="First name" value={basics.firstName} onChange={(value) => onChange('firstName', value)} />
-        <Field label="Last name" value={basics.lastName} onChange={(value) => onChange('lastName', value)} />
-      </div>
+      {chinese ? (
+        <Field label="姓名" value={basics.fullName} onChange={(value) => onChange('fullName', value)} />
+      ) : (
+        <div className="form-grid two-columns">
+          <Field label="First name" value={basics.firstName} onChange={(value) => onChange('firstName', value)} />
+          <Field label="Last name" value={basics.lastName} onChange={(value) => onChange('lastName', value)} />
+        </div>
+      )}
       <div className="profile-photo-field">
-        <span>Profile photo</span>
+        <span>{chinese ? '个人头像' : 'Profile photo'}</span>
         <div className="profile-photo-controls">
           <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="details-avatar" />
-          <label className="avatar-upload" title="Upload profile photo">
+          <label className="avatar-upload" title={chinese ? '上传头像' : 'Upload profile photo'}>
             <Upload size={16} />
-            <input type="file" accept="image/*" onChange={uploadPhoto} aria-label="Upload profile photo" />
+            <input type="file" accept="image/*" onChange={uploadPhoto} aria-label={chinese ? '上传头像' : 'Upload profile photo'} />
           </label>
           {basics.photoUrl && (
             <button
               type="button"
               className="icon-button small"
               onClick={() => onChange('photoUrl', '')}
-              aria-label="Remove profile photo"
-              title="Remove profile photo"
+              aria-label={chinese ? '移除头像' : 'Remove profile photo'}
+              title={chinese ? '移除头像' : 'Remove profile photo'}
             >
               <X size={15} />
             </button>
           )}
         </div>
       </div>
-      <Field label="Professional title" value={basics.role} onChange={(value) => onChange('role', value)} />
+      <Field label={chinese ? '职业标题' : 'Professional title'} value={basics.role} onChange={(value) => onChange('role', value)} />
       <div className="form-grid two-columns">
         <Field label="Email" type="email" value={basics.email} onChange={(value) => onChange('email', value)} />
-        <Field label="Phone" value={basics.phone} onChange={(value) => onChange('phone', value)} />
+        <Field label={chinese ? '电话' : 'Phone'} value={basics.phone} onChange={(value) => onChange('phone', value)} />
       </div>
-      <Field label="Location" value={basics.location} onChange={(value) => onChange('location', value)} />
+      <div className="form-grid two-columns">
+        <Field label={chinese ? '所在地' : 'Location'} value={basics.location} onChange={(value) => onChange('location', value)} />
+        <GenderField
+          value={basics.gender}
+          onChange={(value) => onChange('gender', value)}
+          language={language}
+        />
+      </div>
       <Field
-        label="Personal website"
+        label={chinese ? '个人网站' : 'Personal website'}
         value={basics.website}
-        placeholder="[Website name]https://..."
+        placeholder={chinese ? '[网站名称]https://...' : '[Website name]https://...'}
         onChange={(value) => onChange('website', value)}
       />
     </div>
@@ -2027,14 +2229,15 @@ function SkillsEditor({ skills, updateData }) {
   );
 }
 
-function CustomSectionEditor({ content, onChange }) {
+function CustomSectionEditor({ content, onChange, language }) {
+  const chinese = isChineseResume(language);
   return (
     <div className="form-content">
-      <Field label="Section title" value={content.title} onChange={(value) => onChange('title', value)} />
-      <Field label="Entry title" value={content.itemTitle} onChange={(value) => onChange('itemTitle', value)} />
-      <Field label="Organization or context" value={content.subtitle} onChange={(value) => onChange('subtitle', value)} />
+      <Field label={chinese ? '模块标题' : 'Section title'} value={content.title} onChange={(value) => onChange('title', value)} />
+      <Field label={chinese ? '证书名称' : 'Entry title'} value={content.itemTitle} onChange={(value) => onChange('itemTitle', value)} />
+      <Field label={chinese ? '颁发机构或年份' : 'Organization or context'} value={content.subtitle} onChange={(value) => onChange('subtitle', value)} />
       <label className="field">
-        <span>Description</span>
+        <span>{chinese ? '描述' : 'Description'}</span>
         <textarea value={content.description} rows={5} onChange={(event) => onChange('description', event.target.value)} />
       </label>
     </div>
@@ -2056,6 +2259,35 @@ function Field({ label, value, onChange, type = 'text', disabled = false, placeh
   );
 }
 
+function GenderField({ value, onChange, language }) {
+  const chinese = isChineseResume(language);
+  const options = chinese
+    ? [
+        { value: '', label: '请选择' },
+        { value: '男', label: '男' },
+        { value: '女', label: '女' },
+        { value: '其他', label: '其他' },
+      ]
+    : [
+        { value: '', label: 'Select' },
+        { value: 'Male', label: 'Male' },
+        { value: 'Female', label: 'Female' },
+        { value: 'Non-binary', label: 'Non-binary' },
+        { value: 'Prefer not to say', label: 'Prefer not to say' },
+      ];
+
+  return (
+    <label className="field">
+      <span>{chinese ? '性别' : 'Gender'}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function PreviewPanel({
   data,
   template,
@@ -2072,6 +2304,7 @@ function PreviewPanel({
   customContent,
   sectionOrder,
   sectionOrderCustomized,
+  language,
 }) {
   const [colorMenu, setColorMenu] = useState(false);
   const [profilePageHeight, setProfilePageHeight] = useState(932);
@@ -2191,6 +2424,7 @@ function PreviewPanel({
           sectionOrder={sectionOrder}
           sectionOrderCustomized={sectionOrderCustomized}
           onContentHeightChange={updateProfilePageHeight}
+          language={language}
         />
       </ResumeStage>
     </section>
@@ -2297,6 +2531,9 @@ function ResumeStage({ zoom, setZoom, pageHeight, initialPosition, onPositionCha
   const startDrag = (event) => {
     const element = stageRef.current;
     if (!element || event.button !== 0 || event.pointerType !== 'mouse') return;
+    if (event.target instanceof Element && event.target.closest('a, button, input, textarea, select')) {
+      return;
+    }
     if (
       element.scrollWidth <= element.clientWidth &&
       element.scrollHeight <= element.clientHeight
@@ -2376,10 +2613,19 @@ function ResumePage({
   sectionOrder,
   sectionOrderCustomized,
   onContentHeightChange,
+  language,
 }) {
   const { basics } = data;
-  const initials = `${basics.firstName?.[0] || 'Y'}${basics.lastName?.[0] || ''}`;
+  const initials = resumeInitials(basics, language);
+  const name = resumeName(basics, language);
   const isProfileTemplate = template === 'profile';
+  const contactItems = [
+    { id: 'email', icon: Mail, value: basics.email },
+    { id: 'phone', icon: Phone, value: basics.phone },
+    { id: 'location', icon: MapPin, value: basics.location },
+    { id: 'gender', icon: UserRound, value: basics.gender },
+    { id: 'website', icon: Link, value: basics.website },
+  ].filter((item) => item.value);
   const displayOrder = useMemo(
     () => isProfileTemplate && !sectionOrderCustomized
       ? defaultSectionOrder('profile', customSections)
@@ -2409,6 +2655,7 @@ function ResumePage({
       ref={pageRef}
       className={cx('resume-page', `template-${template}`)}
       style={{ '--resume-accent': accent } as CssVariables}
+      lang={isChineseResume(language) ? 'zh-CN' : 'en'}
     >
       <header className="resume-header">
         {isProfileTemplate && (
@@ -2417,14 +2664,19 @@ function ResumePage({
           </div>
         )}
         <div className="resume-name-block">
-          <h2>{basics.firstName} {basics.lastName}</h2>
+          <h2>{name}</h2>
           <p>{basics.role}</p>
         </div>
         <div className="resume-contact">
-          {basics.email && <span><Mail size={11} />{basics.email}</span>}
-          {basics.phone && <span><Phone size={11} />{basics.phone}</span>}
-          {basics.location && <span><MapPin size={11} />{basics.location}</span>}
-          {basics.website && <span><Link size={11} />{basics.website}</span>}
+          {contactItems.map(({ id, icon: Icon, value }, index) => (
+            <span className="resume-contact-item" key={id} data-contact={id}>
+              <Icon size={11} />
+              {id === 'website' ? <WebsiteLink website={value} /> : value}
+              {isProfileTemplate && index < contactItems.length - 1 && (
+                <i className="contact-separator" aria-hidden="true" />
+              )}
+            </span>
+          ))}
         </div>
       </header>
 
@@ -2436,6 +2688,7 @@ function ResumePage({
             data={data}
             profile={isProfileTemplate}
             customContent={customContent}
+            language={language}
           />
         ))}
       </div>
@@ -2443,38 +2696,49 @@ function ResumePage({
   );
 }
 
-function ResumeContentSection({ sectionId, data, profile, customContent }) {
+function WebsiteLink({ website }) {
+  const link = parseWebsiteLink(website);
+  if (!link) return <>{textValue(website).trim()}</>;
+  return (
+    <a className="resume-website-link" href={link.href} target="_blank" rel="noreferrer">
+      {link.label}
+    </a>
+  );
+}
+
+function ResumeContentSection({ sectionId, data, profile, customContent, language }) {
+  const chinese = isChineseResume(language);
   if (sectionId === 'basics') return null;
   if (sectionId === 'summary') {
     return (
-      <ResumeSection title={profile ? 'Personal Introduction' : 'Profile'} className="profile-section">
+      <ResumeSection title={chinese ? chineseSectionLabels.summary : profile ? 'Personal Introduction' : 'Profile'} className="profile-section">
         <p>{data.summary}</p>
       </ResumeSection>
     );
   }
   if (sectionId === 'education') {
     return (
-      <ResumeSection title="Education" className="education-section">
+      <ResumeSection title={chinese ? chineseSectionLabels.education : 'Education'} className="education-section">
         <EducationEntries items={data.education} profile={profile} />
       </ResumeSection>
     );
   }
   if (sectionId === 'experience') {
     return (
-      <ResumeSection title={profile ? 'Work Experience' : 'Experience'} className="experience-section">
+      <ResumeSection title={chinese ? chineseSectionLabels.experience : profile ? 'Work Experience' : 'Experience'} className="experience-section">
         <ExperienceEntries items={data.experience} profile={profile} />
       </ResumeSection>
     );
   }
   if (sectionId === 'skills') {
     return profile ? (
-      <ResumeSection title="Professional Skills" className="skills-section">
-        <ProfileSkills skills={data.skills} />
+      <ResumeSection title={chinese ? chineseSectionLabels.skills : 'Professional Skills'} className="skills-section">
+        <ProfileSkills skills={data.skills} language={language} />
       </ResumeSection>
     ) : (
-      <ResumeSection title="Skills" className="skills-section">
-        <div className="resume-skill-row"><strong>Expertise</strong><span>{data.skills.expertise}</span></div>
-        <div className="resume-skill-row"><strong>Tools</strong><span>{data.skills.tools}</span></div>
+      <ResumeSection title={chinese ? chineseSectionLabels.skills : 'Skills'} className="skills-section">
+        <div className="resume-skill-row"><strong>{chinese ? '专业领域' : 'Expertise'}</strong><span>{data.skills.expertise}</span></div>
+        <div className="resume-skill-row"><strong>{chinese ? '工具平台' : 'Tools'}</strong><span>{data.skills.tools}</span></div>
       </ResumeSection>
     );
   }
@@ -2482,7 +2746,7 @@ function ResumeContentSection({ sectionId, data, profile, customContent }) {
   const content = customContent[sectionId];
   if (!content) return null;
   return (
-    <ResumeSection title={content.title}>
+    <ResumeSection title={chinese && sectionId === 'certifications' ? chineseSectionLabels.certifications : content.title}>
       <div className="resume-entry compact-entry">
         <div className="resume-entry-heading">
           <div><strong>{content.itemTitle}</strong><span>{content.subtitle}</span></div>
@@ -2538,10 +2802,11 @@ function EducationEntries({ items, profile = false }) {
   ));
 }
 
-function ProfileSkills({ skills }) {
+function ProfileSkills({ skills, language }) {
+  const chinese = isChineseResume(language);
   const categories = [
-    { title: 'Expertise', items: skills.expertise },
-    { title: 'Tools & Platforms', items: skills.tools },
+    { title: chinese ? '专业领域' : 'Expertise', items: skills.expertise },
+    { title: chinese ? '工具平台' : 'Tools & Platforms', items: skills.tools },
   ].map((category) => ({
     ...category,
     items: category.items.split(',').map((item) => item.trim()).filter(Boolean),

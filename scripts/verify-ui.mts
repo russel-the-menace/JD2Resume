@@ -76,6 +76,44 @@ report.checks.newResumeCreated =
       (resume) => resume.documentName === 'Wei Zhang - Product Designer' && resume.language === 'chinese',
     ),
   ));
+await desktopPage.locator('.section-nav-item').filter({ hasText: '个人信息' }).click();
+report.checks.chineseNameUsesSingleField =
+  (await desktopPage.getByLabel('姓名').count()) === 1 &&
+  (await desktopPage.getByLabel('First name').count()) === 0 &&
+  (await desktopPage.getByLabel('Last name').count()) === 0;
+report.checks.chineseGender =
+  (await desktopPage.getByLabel('性别').inputValue()) === '男' &&
+  (await desktopPage.locator('.resume-page .resume-contact [data-contact="gender"]').getByText('男', { exact: true }).isVisible());
+await desktopPage.getByRole('button', { name: /Template/ }).click();
+await desktopPage.getByRole('button', { name: /Profile/ }).click();
+await desktopPage.getByRole('button', { name: '添加模块', exact: true }).click();
+await desktopPage.getByRole('button', { name: /证书/ }).click();
+report.checks.chineseResumeSections =
+  JSON.stringify(await desktopPage.locator('.section-nav-item .section-label').allTextContents()) === JSON.stringify([
+    '个人信息',
+    '个人介绍',
+    '工作经历',
+    '教育经历',
+    '专业经历',
+    '证书',
+  ]) &&
+  JSON.stringify(await desktopPage.locator('.resume-page.template-profile .resume-section h3').allTextContents()) === JSON.stringify([
+    '个人介绍',
+    '教育经历',
+    '工作经历',
+    '专业经历',
+    '证书',
+  ]) &&
+  (await desktopPage.locator('.resume-page.template-profile .resume-name-block h2').textContent()) === '张晓明' &&
+  (await desktopPage.locator('.resume-page.template-profile').getByText('产品设计师', { exact: true }).isVisible());
+report.checks.profileNameDividerStaysWithName = await desktopPage.locator('.resume-page.template-profile').evaluate((element) => {
+  const name = element.querySelector('.resume-name-block h2');
+  const role = element.querySelector('.resume-name-block p');
+  return Boolean(name && role) &&
+    window.getComputedStyle(name, '::after').content === '" - "' &&
+    window.getComputedStyle(role, '::before').content === 'none';
+});
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-chinese-profile-template.png') });
 await desktopPage.getByRole('button', { name: 'Back to resumes' }).click();
 
 await desktopPage.getByLabel('Search resumes').fill('Android');
@@ -117,6 +155,21 @@ report.checks.desktopColumnResize = Boolean(
   editorAfterResize.width < editorBeforeResize.width - 80 &&
   previewAfterResize.width > previewBeforeResize.width + 80,
 );
+const collapseEditor = desktopPage.getByRole('button', { name: 'Collapse editor' });
+await collapseEditor.click();
+const collapsedEditorBox = await editorPanel.boundingBox();
+const expandedPreviewBox = await previewPanel.boundingBox();
+report.checks.editorColumnCollapse = Boolean(
+  collapsedEditorBox && collapsedEditorBox.width < 2 &&
+  expandedPreviewBox && previewAfterResize && expandedPreviewBox.width > previewAfterResize.width + 80,
+);
+report.checks.editorCollapsePersisted = await desktopPage.evaluate(() =>
+  JSON.parse(localStorage.getItem('draftline-workspace-preferences-v1'))?.byResume?.['product-designer']?.editorCollapsed === true,
+);
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-desktop-editor-collapsed.png') });
+await desktopPage.reload({ waitUntil: 'networkidle' });
+report.checks.editorCollapseRestored = await desktopPage.locator('.workspace.editor-collapsed').isVisible();
+await desktopPage.getByRole('button', { name: 'Expand editor' }).click();
 const savedWorkspaceAfterResize = await desktopPage.evaluate(() =>
   JSON.parse(localStorage.getItem('draftline-workspace-preferences-v1')),
 );
@@ -193,6 +246,19 @@ report.checks.profileContentFits = await desktopPage.locator('.resume-page.templ
 await desktopPage.getByRole('button', { name: 'Personal details' }).click();
 report.checks.personalWebsiteField =
   (await desktopPage.getByLabel('Personal website').getAttribute('placeholder')) === '[Website name]https://...';
+await desktopPage.getByLabel('Personal website').fill('[Github]https://github.com/russel-the-menace');
+const websiteLink = desktopPage.locator('.resume-website-link');
+report.checks.markdownWebsiteLink =
+  (await websiteLink.textContent()) === 'Github' &&
+  (await websiteLink.getAttribute('href')) === 'https://github.com/russel-the-menace' &&
+  (await websiteLink.evaluate((element) => window.getComputedStyle(element).textDecorationLine.includes('underline')));
+report.checks.englishGender =
+  (await desktopPage.getByLabel('Gender').inputValue()) === 'Male' &&
+  (await desktopPage.locator('.resume-page .resume-contact [data-contact="gender"]').getByText('Male', { exact: true }).isVisible());
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-markdown-website-link.png') });
+await desktopPage.emulateMedia({ media: 'print' });
+report.checks.printWebsiteLink = await websiteLink.isVisible();
+await desktopPage.emulateMedia({ media: 'screen' });
 await desktopPage.getByLabel('Upload profile photo').setInputFiles({
   name: 'avatar.png',
   mimeType: 'image/png',
@@ -444,6 +510,12 @@ const reorderPage = await reorder.newPage();
 await attachDiagnostics(reorderPage);
 await reorderPage.goto(baseUrl, { waitUntil: 'networkidle' });
 await reorderPage.getByRole('button', { name: 'Edit Jordan Lee - Product Designer' }).click();
+const personalDetailsSection = reorderPage.locator('.section-nav-item').filter({ hasText: 'Personal details' });
+const sectionOrderBeforeFixedDrop = await reorderPage.locator('.section-nav-item .section-label').allTextContents();
+await reorderPage.locator('.section-nav-item').filter({ hasText: 'Skills' }).dragTo(personalDetailsSection);
+report.checks.personalDetailsFixed =
+  (await personalDetailsSection.evaluate((element) => (element as HTMLButtonElement).draggable)) === false &&
+  JSON.stringify(await reorderPage.locator('.section-nav-item .section-label').allTextContents()) === JSON.stringify(sectionOrderBeforeFixedDrop);
 await reorderPage.locator('.section-nav-item').filter({ hasText: 'Skills' }).dragTo(
   reorderPage.locator('.section-nav-item').filter({ hasText: 'Experience' }),
 );

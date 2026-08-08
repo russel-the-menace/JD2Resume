@@ -807,6 +807,46 @@ button:disabled {
   background: var(--surface);
 }
 
+@media (min-width: 901px) {
+  .workspace.editor-collapsed {
+    grid-template-columns: var(--outline-width) 0 0 minmax(var(--preview-min), 1fr);
+  }
+
+  .workspace.editor-collapsed .editor-panel {
+    overflow: visible;
+  }
+
+  .workspace.editor-collapsed .editor-header {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    z-index: 24;
+    min-height: 36px;
+    padding: 0;
+    border: 0;
+  }
+
+  .workspace.editor-collapsed .editor-header > div:first-child,
+  .workspace.editor-collapsed .editor-header .secondary-button,
+  .workspace.editor-collapsed .editor-header .mobile-preview-button,
+  .workspace.editor-collapsed .editor-scroll {
+    display: none;
+  }
+
+  .workspace.editor-collapsed .column-resizer {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .workspace.editor-collapsed .editor-header-actions {
+    padding: 2px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid #d5dad5;
+    border-radius: 6px;
+    box-shadow: var(--shadow-sm);
+  }
+}
+
 .outline-sidebar,
 .editor-panel,
 .preview-panel {
@@ -1003,6 +1043,11 @@ button:disabled {
   opacity: 0;
 }
 
+.fixed-section-icon {
+  justify-self: center;
+  color: #8b948d;
+}
+
 .section-nav-item:hover .drag-icon {
   opacity: 1;
 }
@@ -1176,6 +1221,10 @@ button:disabled {
   gap: 6px;
 }
 
+.editor-collapse-button {
+  flex: 0 0 auto;
+}
+
 .mobile-preview-button {
   display: none;
 }
@@ -1237,6 +1286,7 @@ button:disabled {
 }
 
 .field input,
+.field select,
 .field textarea,
 .summary-textarea,
 .bullet-editor textarea {
@@ -1255,6 +1305,12 @@ button:disabled {
   padding: 0 11px;
 }
 
+.field select {
+  height: 41px;
+  padding: 0 30px 0 11px;
+  appearance: auto;
+}
+
 .field textarea,
 .summary-textarea {
   padding: 11px 12px;
@@ -1262,6 +1318,7 @@ button:disabled {
 }
 
 .field input:hover,
+.field select:hover,
 .field textarea:hover,
 .summary-textarea:hover,
 .bullet-editor textarea:hover {
@@ -1269,6 +1326,7 @@ button:disabled {
 }
 
 .field input:focus,
+.field select:focus,
 .field textarea:focus,
 .summary-textarea:focus,
 .bullet-editor textarea:focus {
@@ -2121,6 +2179,17 @@ button:disabled {
   stroke-width: 1.8;
 }
 
+.resume-website-link {
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.resume-website-link:hover {
+  color: var(--resume-accent);
+}
+
 .resume-body {
   display: flex;
   flex-direction: column;
@@ -2375,7 +2444,7 @@ button:disabled {
   letter-spacing: 0;
 }
 
-.template-profile .resume-name-block p::before {
+.template-profile .resume-name-block h2::after {
   content: ' - ';
 }
 
@@ -2419,21 +2488,16 @@ button:disabled {
 .template-profile .resume-contact span {
   position: relative;
   gap: 4px;
-  padding: 0 10px;
+  padding: 0;
 }
 
-.template-profile .resume-contact span:first-child {
-  padding-left: 0;
-}
-
-.template-profile .resume-contact span + span::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
+.template-profile .resume-contact .contact-separator {
+  display: block;
+  flex: 0 0 1px;
   width: 1px;
+  height: 13px;
+  margin-left: 6px;
   background: #c0c6c8;
-  content: '';
 }
 
 .template-profile .resume-contact svg {
@@ -2983,6 +3047,10 @@ button:disabled {
 
   .mobile-preview-button {
     display: inline-flex;
+  }
+
+  .editor-collapse-button {
+    display: none;
   }
 
   .editor-scroll {
