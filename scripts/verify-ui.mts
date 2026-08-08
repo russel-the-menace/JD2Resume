@@ -64,7 +64,45 @@ report.checks.resumeCardEditButtonRemoved = (await desktopPage.locator('.resume-
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-library-desktop.png') });
 
 await desktopPage.getByRole('button', { name: 'Account menu' }).click();
-report.checks.accountMenu = await desktopPage.getByRole('button', { name: 'Edit personal profile' }).isVisible();
+report.checks.accountMenu =
+  (await desktopPage.getByRole('button', { name: 'Edit personal profile' }).isVisible()) &&
+  (await desktopPage.getByRole('button', { name: 'Switch account' }).isVisible());
+await desktopPage.getByRole('button', { name: 'Switch account' }).click();
+const accountSwitcher = desktopPage.getByRole('dialog', { name: 'Switch account' });
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-account-switcher.png') });
+report.checks.accountSwitcher =
+  (await accountSwitcher.isVisible()) &&
+  (await accountSwitcher.locator('.account-list-item').first().getByText('yeatom', { exact: true }).isVisible()) &&
+  (await accountSwitcher.getByRole('button', { name: 'Sign in' }).isVisible()) &&
+  (await accountSwitcher.getByRole('button', { name: 'Sign up' }).isVisible());
+await accountSwitcher.getByRole('button', { name: 'Sign up' }).click();
+const registerDialog = desktopPage.getByRole('dialog', { name: 'Sign up' });
+await registerDialog.getByLabel('Username').fill('qa-local-account');
+await registerDialog.getByLabel('Password').fill('local-password');
+await registerDialog.getByRole('button', { name: 'Sign up', exact: true }).click();
+report.checks.localAccountRegistered =
+  !(await desktopPage.getByRole('dialog', { name: 'Sign up' }).isVisible()) &&
+  (await desktopPage.getByText('No resumes found', { exact: true }).isVisible());
+await desktopPage.getByRole('button', { name: 'Account menu' }).click();
+await desktopPage.getByRole('button', { name: 'Switch account' }).click();
+await desktopPage.getByRole('dialog', { name: 'Switch account' }).getByRole('button', { name: 'Sign in' }).click();
+const loginDialog = desktopPage.getByRole('dialog', { name: 'Sign in' });
+await loginDialog.getByLabel('Username').fill('yeatom');
+await loginDialog.getByLabel('Password').fill('yeatom');
+await loginDialog.getByRole('button', { name: 'Sign in', exact: true }).click();
+report.checks.localAccountLogin =
+  !(await desktopPage.getByRole('dialog', { name: 'Sign in' }).isVisible()) &&
+  (await desktopPage.locator('.resume-library-card').count()) === 3;
+await desktopPage.getByRole('button', { name: 'Account menu' }).click();
+await desktopPage.getByRole('button', { name: 'Switch account' }).click();
+await desktopPage.getByRole('dialog', { name: 'Switch account' }).getByRole('button', { name: 'Sign up' }).click();
+const duplicateRegisterDialog = desktopPage.getByRole('dialog', { name: 'Sign up' });
+await duplicateRegisterDialog.getByLabel('Username').fill('yeatom');
+report.checks.duplicateUsernameWarning = await duplicateRegisterDialog
+  .getByText('This username is already in use.', { exact: true })
+  .isVisible();
+await duplicateRegisterDialog.getByRole('button', { name: 'Close' }).click();
+await desktopPage.getByRole('button', { name: 'Account menu' }).click();
 await desktopPage.getByRole('button', { name: 'Edit personal profile' }).click();
 const profileDialog = desktopPage.getByRole('dialog', { name: 'Edit personal profile' });
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-personal-profile-dialog.png') });
@@ -83,7 +121,7 @@ await profileDialog.getByLabel('Location').fill('New York, NY');
 await profileDialog.getByLabel('Professional profile').fill('Product designer focused on high-impact workflows.');
 await profileDialog.getByRole('button', { name: 'Save profile' }).click();
 report.checks.bilingualProfileSaved = await desktopPage.evaluate(() => {
-  const profile = JSON.parse(localStorage.getItem('draftline-user-profile-v1'));
+  const profile = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-user-profile-v1'));
   return profile?.chinese?.fullName === '张三' && profile?.chinese?.gender === '男' &&
     profile?.english?.fullName === 'Alex Zhang' && profile?.english?.gender === 'Male';
 });
@@ -162,7 +200,7 @@ await newResumeDialog.getByRole('button', { name: 'Save' }).click();
 report.checks.newResumeCreated =
   (await desktopPage.getByLabel('Resume name').inputValue()) === 'Wei Zhang - Product Designer' &&
   (await desktopPage.evaluate(() =>
-    JSON.parse(localStorage.getItem('draftline-resume-library-v2')).resumes.some(
+    JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-resume-library-v2')).resumes.some(
       (resume) => resume.documentName === 'Wei Zhang - Product Designer' && resume.language === 'chinese',
     ),
   ));
@@ -258,7 +296,7 @@ report.checks.editorColumnCollapse = Boolean(
   expandedPreviewBox && previewAfterResize && expandedPreviewBox.width > previewAfterResize.width + 80,
 );
 report.checks.editorCollapsePersisted = await desktopPage.evaluate(() =>
-  JSON.parse(localStorage.getItem('draftline-workspace-preferences-v1'))?.byResume?.['product-designer']?.editorCollapsed === true,
+  JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-workspace-preferences-v1'))?.byResume?.['product-designer']?.editorCollapsed === true,
 );
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-desktop-editor-collapsed.png') });
 await desktopPage.reload({ waitUntil: 'networkidle' });
@@ -266,7 +304,7 @@ report.checks.editorCollapseRestored = await desktopPage.locator('.workspace.edi
 await desktopPage.getByRole('button', { name: 'Expand editor' }).click();
 await desktopPage.waitForTimeout(280);
 const savedWorkspaceAfterResize = await desktopPage.evaluate(() =>
-  JSON.parse(localStorage.getItem('draftline-workspace-preferences-v1')),
+  JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-workspace-preferences-v1')),
 );
 const savedEditorWidth = Number(savedWorkspaceAfterResize?.editorWidth);
 await desktopPage.reload({ waitUntil: 'networkidle' });
@@ -479,7 +517,7 @@ await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-deskto
 
 await desktopPage.waitForTimeout(300);
 const savedWorkspaceBeforeReload = await desktopPage.evaluate(() =>
-  JSON.parse(localStorage.getItem('draftline-workspace-preferences-v1')),
+  JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-workspace-preferences-v1')),
 );
 await desktopPage.reload({ waitUntil: 'networkidle' });
 await desktopPage.waitForTimeout(300);

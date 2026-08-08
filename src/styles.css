@@ -150,6 +150,133 @@ button:disabled {
   background: var(--surface-soft);
 }
 
+.account-switcher-dialog,
+.account-auth-dialog {
+  width: min(420px, 100%);
+}
+
+.account-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.account-switcher-content,
+.account-auth-content {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.account-list {
+  display: grid;
+  gap: 6px;
+}
+
+.account-list-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 9px 10px;
+  color: #3f4942;
+  text-align: left;
+  background: #fff;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.account-list-item:hover,
+.account-list-item.is-current {
+  background: var(--surface-soft);
+  border-color: var(--line);
+}
+
+.account-list-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.account-list-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.account-list-copy strong {
+  overflow: hidden;
+  color: #2f3731;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-list-copy small {
+  color: #7b847d;
+  font-size: 10px;
+}
+
+.account-list-item > svg {
+  color: var(--accent);
+}
+
+.account-dialog-footer,
+.account-auth-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.dialog-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 9px;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.dialog-link-button:hover {
+  background: var(--accent-soft);
+}
+
+.account-auth-footer {
+  flex-wrap: wrap;
+}
+
+.account-auth-footer .dialog-link-button {
+  margin-left: 4px;
+}
+
+.account-auth-error {
+  margin: -3px 0 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .library-main {
   width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
