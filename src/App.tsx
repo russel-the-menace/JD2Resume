@@ -707,6 +707,15 @@ function storedValueExists(key) {
   }
 }
 
+function removeStoredValue(key) {
+  try {
+    window.localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeAccountDatabase(value) {
   const source = isRecord(value) && Array.isArray(value.accounts) ? value.accounts : [];
   const accounts = source.reduce((result, entry) => {
@@ -783,6 +792,7 @@ function migrateLegacyAccountData(accounts) {
   if (storedValueExists(ACCOUNT_MIGRATION_STORAGE_KEY)) return;
   const defaultAccount = accounts.find((account) => account.id === DEFAULT_ACCOUNT.id);
   if (!defaultAccount) return;
+  let migrationSucceeded = true;
 
   const libraryKey = accountStorageKey(defaultAccount.id, LIBRARY_STORAGE_KEY);
   const profileKey = accountStorageKey(defaultAccount.id, USER_PROFILE_STORAGE_KEY);
@@ -795,28 +805,44 @@ function migrateLegacyAccountData(accounts) {
     Array.isArray(legacyStoredLibrary.resumes) &&
     legacyStoredLibrary.resumes.length > 0;
   if (!storedValueExists(libraryKey) || (!scopedHasResumes && legacyStorageHasResumes)) {
-    writeStoredJson(libraryKey, legacyStorageHasResumes ? legacyLibrary : loadResumeLibrary(LIBRARY_STORAGE_KEY));
+    migrationSucceeded = writeStoredJson(
+      libraryKey,
+      legacyStorageHasResumes ? legacyLibrary : loadResumeLibrary(LIBRARY_STORAGE_KEY),
+    ) && migrationSucceeded;
   }
   const scopedProfile = loadUserProfile(profileKey);
   const legacyProfile = loadUserProfile(USER_PROFILE_STORAGE_KEY);
   if (!storedValueExists(profileKey) || !hasProfileData(scopedProfile) ||
     (hasProfileData(legacyProfile) && !hasMeaningfulProfileData(scopedProfile, defaultAccount.username))) {
-    writeStoredJson(profileKey, hasProfileData(legacyProfile)
-      ? legacyProfile
-      : profileForUsername(defaultAccount.username));
+    migrationSucceeded = writeStoredJson(
+      profileKey,
+      hasProfileData(legacyProfile) ? legacyProfile : profileForUsername(defaultAccount.username),
+    ) && migrationSucceeded;
   }
   const scopedWorkspace = storedJson(workspaceKey);
   const legacyWorkspace = storedJson(WORKSPACE_STORAGE_KEY);
   if (!storedValueExists(workspaceKey) || (!hasWorkspaceData(scopedWorkspace) && hasWorkspaceData(legacyWorkspace))) {
     const legacyEditorWidth = Number(window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY));
-    writeStoredJson(workspaceKey, hasWorkspaceData(legacyWorkspace)
-      ? legacyWorkspace
-      : {
-          version: STORAGE_VERSION,
-          editorWidth: Number.isFinite(legacyEditorWidth) ? legacyEditorWidth : DEFAULT_EDITOR_WIDTH,
-          byResume: {},
-        });
+    migrationSucceeded = writeStoredJson(
+      workspaceKey,
+      hasWorkspaceData(legacyWorkspace)
+        ? legacyWorkspace
+        : {
+            version: STORAGE_VERSION,
+            editorWidth: Number.isFinite(legacyEditorWidth) ? legacyEditorWidth : DEFAULT_EDITOR_WIDTH,
+            byResume: {},
+          },
+    ) && migrationSucceeded;
   }
+  if (!migrationSucceeded) return;
+  const legacyKeys = [
+    EDITOR_WIDTH_STORAGE_KEY,
+    RESUME_STORAGE_KEY,
+    WORKSPACE_STORAGE_KEY,
+    LIBRARY_STORAGE_KEY,
+    USER_PROFILE_STORAGE_KEY,
+  ];
+  if (!legacyKeys.every(removeStoredValue)) return;
   writeStoredJson(ACCOUNT_MIGRATION_STORAGE_KEY, { version: 1, completedAt: Date.now() });
 }
 

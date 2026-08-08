@@ -758,7 +758,14 @@ report.checks.legacyAccountDataRecovered =
 report.checks.legacyAccountDataScoped = await legacyAccountRecoveryPage.evaluate(() => {
   const library = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-resume-library-v2'));
   const profile = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-user-profile-v1'));
-  return library.resumes.length === 1 && profile.chinese.fullName === '张三';
+  return library.resumes.length === 1 &&
+    profile.chinese.fullName === '张三' &&
+    localStorage.getItem('draftline-account-migration-v1') !== null &&
+    localStorage.getItem('draftline-resume-library-v2') === null &&
+    localStorage.getItem('draftline-user-profile-v1') === null &&
+    localStorage.getItem('draftline-workspace-preferences-v1') === null &&
+    localStorage.getItem('draftline-editor-width') === null &&
+    localStorage.getItem('draftline-resume-state-v1') === null;
 });
 await legacyAccountRecovery.close();
 
