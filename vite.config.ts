@@ -355,8 +355,8 @@ export default defineConfig(({ mode }) => {
     providers.push({
       apiKey: env.CLOUD_BRIDGE_API_KEY,
       endpoint: chatCompletionsEndpoint(cloudBridgeBaseUrl),
-      model: env.CLOUD_BRIDGE_MODEL || 'gpt-4.1-mini',
-      pdfModel: env.CLOUD_BRIDGE_PDF_MODEL || 'gemini-2.5-flash',
+      model: env.CLOUD_BRIDGE_MODEL || 'gpt-5.6-terra',
+      pdfModel: env.CLOUD_BRIDGE_PDF_MODEL || 'gpt-5.6-terra',
       supportsDirectFileInput: true,
     });
   }
