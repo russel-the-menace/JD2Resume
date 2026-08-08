@@ -74,6 +74,7 @@ await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-accoun
 report.checks.accountSwitcher =
   (await accountSwitcher.isVisible()) &&
   (await accountSwitcher.locator('.account-list-item').first().getByText('yeatom', { exact: true }).isVisible()) &&
+  (await accountSwitcher.locator('.account-list-avatar').first().textContent()) === 'Y' &&
   (await accountSwitcher.getByRole('button', { name: 'Sign in' }).isVisible()) &&
   (await accountSwitcher.getByRole('button', { name: 'Sign up' }).isVisible());
 await accountSwitcher.getByRole('button', { name: 'Sign up' }).click();
@@ -218,6 +219,8 @@ report.checks.bilingualProfileSaved = await desktopPage.evaluate(() => {
   return profile?.chinese?.fullName === '张三' && profile?.chinese?.gender === '男' &&
     profile?.english?.fullName === 'Alex Zhang' && profile?.english?.gender === 'Male';
 });
+report.checks.accountAvatarUsesUsername =
+  (await desktopPage.getByRole('button', { name: 'Account menu' }).textContent()) === 'Y';
 await desktopPage.getByRole('button', { name: 'Generate from JD' }).click();
 const generatorDialog = desktopPage.getByRole('dialog', { name: 'Generate from job description' });
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-job-description-dialog.png') });
@@ -773,7 +776,7 @@ await legacyAccountRecoveryPage.goto(baseUrl, { waitUntil: 'networkidle' });
 report.checks.legacyAccountDataRecovered =
   (await legacyAccountRecoveryPage.locator('.resume-library-card').count()) === 1 &&
   (await legacyAccountRecoveryPage.getByText('Legacy resume', { exact: true }).isVisible()) &&
-  (await legacyAccountRecoveryPage.getByRole('button', { name: 'Account menu' }).textContent()) === '张三';
+  (await legacyAccountRecoveryPage.getByRole('button', { name: 'Account menu' }).textContent()) === 'Y';
 report.checks.legacyAccountDataScoped = await legacyAccountRecoveryPage.evaluate(() => {
   const library = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-resume-library-v2'));
   const profile = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-user-profile-v1'));

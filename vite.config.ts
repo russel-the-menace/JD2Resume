@@ -1,16 +1,22 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 const MAX_REQUEST_BYTES = 8_000_000;
 const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
-const MIN_SOURCE_TEXT_LENGTH = 20;
+const MIN_TEXT_LENGTH = 20;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 type Provider = {
   apiKey: string;
   endpoint: string;
   model: string;
+};
+
+type SourceAttachment = {
+  sourceType: 'image' | 'pdf';
+  name: string;
+  mimeType: string;
+  data: string;
 };
 
 function sendJson(response: ServerResponse, status: number, body: Record<string, unknown>) {
@@ -52,12 +58,15 @@ function buildResumePrompt(input: Record<string, any>) {
   return `You are a precise resume editor. Return valid JSON only.\n\nCreate a ${language} resume tailored to the job description. Use only factual information from the supplied profile and base resume. Do not invent employers, job titles, dates, degrees, certifications, metrics, skills, contact data, or achievements. You may reorganize and rewrite the supplied facts for relevance and clarity. When a required factual field is absent, return an empty string or an empty array.\n\nReturn exactly this JSON shape:\n{\n  "documentName": "string",\n  "resume": {\n    "basics": { "fullName": "string", "firstName": "string", "lastName": "string", "role": "string", "email": "string", "phone": "string", "location": "string", "gender": "string", "website": "string", "photoUrl": "string" },\n    "summary": "string",\n    "experience": [{ "id": 1, "role": "string", "company": "string", "location": "string", "start": "string", "end": "string", "current": false, "bullets": ["string"] }],\n    "education": [{ "id": 1, "school": "string", "degree": "string", "location": "string", "start": "string", "end": "string" }],\n    "skills": { "expertise": "comma-separated string", "tools": "comma-separated string" }\n  }\n}\n\nInput JSON:\n${JSON.stringify({
     profile: input.profile || {},
     baseResume: input.baseResume || {},
-    jobDescription: input.jobDescription,
+    jobDescription: input.jobDescription || 'Read the attached job description source directly.',
   })}`;
 }
 
 function buildProfileImportPrompt(resumeText: string) {
-  return `You extract personal profile details from a resume. Return valid JSON only. Detect whether the resume is primarily Chinese or English, then provide both a Chinese and an English profile in the same response. Use only explicit resume facts. Never invent a name, gender, contact details, location, social account, website, or summary. Preserve exact factual values such as email addresses, phone numbers, websites, and account handles across both profiles. Translate human-readable fields such as names, locations, gender, and summaries when appropriate.\n\nReturn exactly this JSON shape:\n{\n  "language": "chinese or english",\n  "profiles": {\n    "chinese": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    },\n    "english": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    }\n  }\n}\n\nFor Chinese profiles use Chinese values when they are known, including gender values 男, 女, or 其他. For English profiles use English values, including Male, Female, Non-binary, or Prefer not to say only when explicit. Leave unknown fields empty. The summary may be a concise factual synthesis of the resume in its target language.\n\nResume text:\n${resumeText}`;
+  const sourceInstruction = resumeText
+    ? `Resume text:\n${resumeText}`
+    : 'A resume file or image is attached. Read it directly, including the header contact line. Do not rely only on embedded PDF text.';
+  return `You extract personal profile details from a resume. Return valid JSON only. Detect whether the resume is primarily Chinese or English, then provide both a Chinese and an English profile in the same response. Use only explicit resume facts. Never invent a name, gender, contact details, location, social account, website, or summary. Carefully read the phone number and email address even when the PDF text layer is malformed. Preserve exact factual values such as email addresses, phone numbers, websites, and account handles across both profiles. Translate human-readable fields such as names, locations, gender, and summaries when appropriate.\n\nReturn exactly this JSON shape:\n{\n  "language": "chinese or english",\n  "profiles": {\n    "chinese": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    },\n    "english": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    }\n  }\n}\n\nFor Chinese profiles use Chinese values when they are known, including gender values 男, 女, or 其他. For English profiles use English values, including Male, Female, Non-binary, or Prefer not to say only when explicit. Leave unknown fields empty. The summary may be a concise factual synthesis of the resume in its target language.\n\n${sourceInstruction}`;
 }
 
 function buildProfileTranslationPrompt(sourceLanguage: string, profile: Record<string, any>) {
@@ -65,12 +74,12 @@ function buildProfileTranslationPrompt(sourceLanguage: string, profile: Record<s
   return `You translate a personal profile from ${sourceLanguage} to ${targetLanguage}. Return valid JSON only. Preserve exact factual values such as names, email addresses, phones, websites, and account handles. Translate only human-readable fields such as location and summary when appropriate. Do not invent missing fields.\n\nReturn exactly this JSON shape:\n{\n  "language": "${targetLanguage}",\n  "profile": {\n    "fullName": "string",\n    "gender": "string",\n    "phone": "string",\n    "email": "string",\n    "location": "string",\n    "wechat": "string",\n    "linkedin": "string",\n    "website": "string",\n    "summary": "string"\n  }\n}\n\nSource profile:\n${JSON.stringify(profile)}`;
 }
 
-async function extractSourceText(input: Record<string, any>, textField: string, ocrLanguage = 'eng') {
+function sourceFromInput(input: Record<string, any>, textField: string) {
   const sourceType = stringValue(input.sourceType) || 'text';
   if (sourceType === 'text') {
     const sourceText = stringValue(input[textField]).trim();
-    if (sourceText.length < MIN_SOURCE_TEXT_LENGTH) throw new Error('INVALID_TEXT');
-    return sourceText;
+    if (sourceText.length < MIN_TEXT_LENGTH) throw new Error('INVALID_TEXT');
+    return { text: sourceText, attachment: null };
   }
   if (!['image', 'pdf'].includes(sourceType) || !isRecord(input.source)) {
     throw new Error('INVALID_SOURCE');
@@ -82,23 +91,45 @@ async function extractSourceText(input: Record<string, any>, textField: string, 
   const sourceBuffer = Buffer.from(encoded, 'base64');
   if (!sourceBuffer.length || sourceBuffer.length > MAX_SOURCE_BYTES) throw new Error('INVALID_SOURCE');
 
-  let extracted = '';
   if (sourceType === 'pdf') {
     if (mimeType !== 'application/pdf' || !sourceBuffer.subarray(0, 4).equals(Buffer.from('%PDF'))) {
       throw new Error('INVALID_SOURCE');
     }
-    const document = await pdfParse(sourceBuffer);
-    extracted = stringValue(document.text);
   } else {
     if (!ALLOWED_IMAGE_TYPES.has(mimeType)) throw new Error('INVALID_SOURCE');
-    const { recognize } = await import('tesseract.js');
-    const result = await recognize(sourceBuffer, ocrLanguage);
-    extracted = stringValue(result.data.text);
   }
+  return {
+    text: '',
+    attachment: {
+      sourceType: sourceType as SourceAttachment['sourceType'],
+      name: stringValue(input.source.name).trim() || `source.${sourceType === 'pdf' ? 'pdf' : 'png'}`,
+      mimeType,
+      data: encoded,
+    } satisfies SourceAttachment,
+  };
+}
 
-  const sourceText = extracted.replace(/\u0000/g, '').trim();
-  if (sourceText.length < MIN_SOURCE_TEXT_LENGTH) throw new Error('EMPTY_SOURCE');
-  return sourceText;
+function modelMessageContent(userPrompt: string, attachment: SourceAttachment | null) {
+  if (!attachment) return userPrompt;
+  const content: Record<string, any>[] = [{ type: 'text', text: userPrompt }];
+  if (attachment.sourceType === 'image') {
+    content.push({
+      type: 'image_url',
+      image_url: {
+        url: `data:${attachment.mimeType};base64,${attachment.data}`,
+        detail: 'high',
+      },
+    });
+  } else {
+    content.push({
+      type: 'file',
+      file: {
+        filename: attachment.name,
+        file_data: `data:application/pdf;base64,${attachment.data}`,
+      },
+    });
+  }
+  return content;
 }
 
 async function requestJsonCompletion(
@@ -106,6 +137,7 @@ async function requestJsonCompletion(
   systemPrompt: string,
   userPrompt: string,
   signal: AbortSignal,
+  attachment: SourceAttachment | null = null,
   maxTokens = 4_000,
 ) {
   const upstream = await fetch(provider.endpoint, {
@@ -118,7 +150,7 @@ async function requestJsonCompletion(
       model: provider.model,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: modelMessageContent(userPrompt, attachment) },
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2,
@@ -140,13 +172,14 @@ async function requestFromProviders(
   systemPrompt: string,
   userPrompt: string,
   validate: (value: any) => boolean,
+  attachment: SourceAttachment | null = null,
 ) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
   try {
     for (const provider of providers) {
       try {
-        const result = await requestJsonCompletion(provider, systemPrompt, userPrompt, controller.signal);
+        const result = await requestJsonCompletion(provider, systemPrompt, userPrompt, controller.signal, attachment);
         if (validate(result)) return result;
       } catch {
         // A configured secondary provider can complete a transient primary-provider failure.
@@ -209,17 +242,12 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
       sendJson(response, 400, { error: 'Choose a valid resume language.' });
       return;
     }
+    let source;
     try {
-      input.jobDescription = await extractSourceText(
-        input,
-        'jobDescription',
-        input.language === 'chinese' ? 'chi_sim+eng' : 'eng',
-      );
+      source = sourceFromInput(input, 'jobDescription');
     } catch (error) {
       sendJson(response, 400, {
-        error: error instanceof Error && error.message === 'EMPTY_SOURCE'
-          ? 'No readable job description was found in that file.'
-          : 'Provide a valid job description or source file.',
+        error: 'Provide a valid job description or source file.',
       });
       return;
     }
@@ -227,8 +255,9 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
       const generated = await requestFromProviders(
         providers,
         'Return a complete resume as valid JSON. Do not use markdown or add commentary.',
-        buildResumePrompt(input),
+        buildResumePrompt({ ...input, jobDescription: source.text }),
         (value) => isRecord(value) && isRecord(value.resume),
+        source.attachment,
       );
       sendJson(response, 200, generated);
     } catch {
@@ -239,14 +268,12 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
   const profileImportHandler = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     const input = await parseInput(request, response, next);
     if (!input) return;
-    let resumeText = '';
+    let source;
     try {
-      resumeText = await extractSourceText(input, 'resumeText', 'chi_sim+eng');
+      source = sourceFromInput(input, 'resumeText');
     } catch (error) {
       sendJson(response, 400, {
-        error: error instanceof Error && error.message === 'EMPTY_SOURCE'
-          ? 'No readable resume content was found in that file.'
-          : 'Provide valid resume content or a source file.',
+        error: 'Provide valid resume content or a source file.',
       });
       return;
     }
@@ -254,8 +281,9 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
       const imported = await requestFromProviders(
         providers,
         'Return extracted personal profile details as valid JSON. Do not use markdown or add commentary.',
-        buildProfileImportPrompt(resumeText),
+        buildProfileImportPrompt(source.text),
         validProfileImportResponse,
+        source.attachment,
       );
       sendJson(response, 200, normalizeProfileImportResponse(imported));
     } catch {

@@ -337,9 +337,9 @@ function readFileAsDataUrl(file): Promise<string> {
   });
 }
 
-function profileInitials(profile) {
-  const name = profile.chinese.fullName || profile.english.fullName;
-  if (!name) return 'JL';
+function accountInitials(username) {
+  const name = normalizedUsername(username);
+  if (!name) return '??';
   if (/[^\u0000-\u007f]/.test(name)) return name.slice(0, 2);
   return name
     .split(/\s+/)
@@ -347,7 +347,7 @@ function profileInitials(profile) {
     .slice(0, 2)
     .map((part) => part[0])
     .join('')
-    .toUpperCase() || 'JL';
+    .toUpperCase() || '??';
 }
 
 function missingProfileFields(profile, language) {
@@ -1334,6 +1334,7 @@ function App() {
       key={selectedResume.id}
       resumeId={selectedResume.id}
       initialResumeState={selectedResume}
+      accountUsername={currentAccount.username}
       onResumeChange={saveResume}
       onBack={returnHome}
       workspaceStorageKey={accountWorkspaceKey}
@@ -1366,7 +1367,7 @@ function App() {
   );
 }
 
-function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack, workspaceStorageKey }) {
+function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeChange, onBack, workspaceStorageKey }) {
   const initialWorkspaceState = useMemo(
     () => loadWorkspacePreferences(initialResumeState, resumeId, workspaceStorageKey),
     [initialResumeState, resumeId, workspaceStorageKey],
@@ -1688,6 +1689,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack, wo
         onAi={() => setAiPanel(true)}
         onReset={resetDemo}
         onBack={onBack}
+        accountUsername={accountUsername}
       />
 
       <MobileTabs value={mobileMode} onChange={setMobileMode} />
@@ -1873,7 +1875,7 @@ function ResumeLibrary({
               aria-expanded={accountMenuOpen}
               title="Account menu"
             >
-              {profileInitials(userProfile)}
+              {accountInitials(currentAccount.username)}
             </button>
             {accountMenuOpen && (
               <div className="account-menu">
@@ -2136,7 +2138,7 @@ function AccountSwitcherDialog({ accounts, currentAccount, onCancel, onSwitch, o
                 onClick={() => onSwitch(account.id)}
                 aria-current={account.id === currentAccount.id ? 'page' : undefined}
               >
-                <span className="account-list-avatar">{account.username.slice(0, 1).toUpperCase()}</span>
+                <span className="account-list-avatar">{accountInitials(account.username)}</span>
                 <span className="account-list-copy">
                   <strong>{account.username}</strong>
                   {account.id === currentAccount.id && <small>Current account</small>}
@@ -3012,6 +3014,7 @@ function TopBar({
   onAi,
   onReset,
   onBack,
+  accountUsername,
 }) {
   return (
     <header className="topbar">
@@ -3063,7 +3066,7 @@ function TopBar({
           <Download size={16} />
           <span>Export PDF</span>
         </button>
-        <button className="avatar-button" aria-label="Account menu" title="Account menu">JL</button>
+        <button className="avatar-button" aria-label="Account menu" title="Account menu">{accountInitials(accountUsername)}</button>
       </div>
     </header>
   );
