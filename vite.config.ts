@@ -34,6 +34,11 @@ function stringValue(value: unknown) {
   return typeof value === 'string' ? value : '';
 }
 
+function base64ByteLength(value: string) {
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  return Math.floor((value.length * 3) / 4) - padding;
+}
+
 async function readJsonBody(request: IncomingMessage) {
   let body = '';
   for await (const chunk of request) {
@@ -89,11 +94,10 @@ function sourceFromInput(input: Record<string, any>, textField: string) {
   const mimeType = stringValue(input.source.mimeType).toLowerCase();
   const encoded = stringValue(input.source.data);
   if (!encoded || !/^[a-z0-9+/]+={0,2}$/i.test(encoded)) throw new Error('INVALID_SOURCE');
-  const sourceBuffer = Buffer.from(encoded, 'base64');
-  if (!sourceBuffer.length || sourceBuffer.length > MAX_SOURCE_BYTES) throw new Error('INVALID_SOURCE');
+  if (base64ByteLength(encoded) > MAX_SOURCE_BYTES) throw new Error('INVALID_SOURCE');
 
   if (sourceType === 'pdf') {
-    if (mimeType !== 'application/pdf' || !sourceBuffer.subarray(0, 4).equals(Buffer.from('%PDF'))) {
+    if (mimeType !== 'application/pdf') {
       throw new Error('INVALID_SOURCE');
     }
   } else {
