@@ -159,6 +159,7 @@ const USER_PROFILE_STORAGE_KEY = 'draftline-user-profile-v1';
 const USER_DATABASE_STORAGE_KEY = 'draftline-user-database-v1';
 const CURRENT_ACCOUNT_STORAGE_KEY = 'draftline-current-account-v1';
 const ACCOUNT_STORAGE_PREFIX = 'draftline-account-data-v1';
+const ACCOUNT_MIGRATION_STORAGE_KEY = 'draftline-account-migration-v1';
 const DEFAULT_ACCOUNT = {
   id: 'yeatom',
   username: 'yeatom',
@@ -727,29 +728,88 @@ function normalizeAccountDatabase(value) {
   return { version: 1, accounts };
 }
 
-function initializeAccountData(accountId, migrateLegacyData = false) {
-  const libraryKey = accountStorageKey(accountId, LIBRARY_STORAGE_KEY);
-  const profileKey = accountStorageKey(accountId, USER_PROFILE_STORAGE_KEY);
-  const workspaceKey = accountStorageKey(accountId, WORKSPACE_STORAGE_KEY);
+function profileForUsername(username) {
+  const profile = normalizeUserProfile(null) as any;
+  const name = normalizedUsername(username);
+  profile.chinese.fullName = name;
+  profile.english.fullName = name;
+  return profile;
+}
 
+function hasProfileData(profile) {
+  return Object.values(normalizeUserProfile(profile)).some((fields) =>
+    Object.values(fields).some((value) => textValue(value).trim()),
+  );
+}
+
+function hasMeaningfulProfileData(profile, username) {
+  const normalized = normalizeUserProfile(profile);
+  const generatedName = normalizedUsername(username);
+  return Object.values(normalized).some((fields) =>
+    Object.entries(fields).some(([field, value]) => {
+      const text = textValue(value).trim();
+      return Boolean(text) && !(field === 'fullName' && text === generatedName);
+    }),
+  );
+}
+
+function hasWorkspaceData(workspace) {
+  if (!isRecord(workspace)) return false;
+  return Object.keys(isRecord(workspace.byResume) ? workspace.byResume : {}).length > 0 ||
+    Number(workspace.editorWidth) !== DEFAULT_EDITOR_WIDTH;
+}
+
+function initializeAccountData(account) {
+  const libraryKey = accountStorageKey(account.id, LIBRARY_STORAGE_KEY);
+  const profileKey = accountStorageKey(account.id, USER_PROFILE_STORAGE_KEY);
+  const workspaceKey = accountStorageKey(account.id, WORKSPACE_STORAGE_KEY);
   if (!storedValueExists(libraryKey)) {
-    writeStoredJson(
-      libraryKey,
-      migrateLegacyData ? loadResumeLibrary(LIBRARY_STORAGE_KEY) : emptyResumeLibrary(),
-    );
+    writeStoredJson(libraryKey, emptyResumeLibrary());
   }
-  if (!storedValueExists(profileKey)) {
-    writeStoredJson(
-      profileKey,
-      migrateLegacyData ? loadUserProfile(USER_PROFILE_STORAGE_KEY) : normalizeUserProfile(null),
-    );
+  const scopedProfile = loadUserProfile(profileKey);
+  if (!storedValueExists(profileKey) || !hasProfileData(scopedProfile)) {
+    writeStoredJson(profileKey, profileForUsername(account.username));
   }
   if (!storedValueExists(workspaceKey)) {
-    const legacyWorkspace = migrateLegacyData ? storedJson(WORKSPACE_STORAGE_KEY) : null;
-    const legacyEditorWidth = migrateLegacyData
-      ? Number(window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY))
-      : NaN;
-    writeStoredJson(workspaceKey, isRecord(legacyWorkspace)
+    writeStoredJson(workspaceKey, {
+      version: STORAGE_VERSION,
+      editorWidth: DEFAULT_EDITOR_WIDTH,
+      byResume: {},
+    });
+  }
+}
+
+function migrateLegacyAccountData(accounts) {
+  if (storedValueExists(ACCOUNT_MIGRATION_STORAGE_KEY)) return;
+  const defaultAccount = accounts.find((account) => account.id === DEFAULT_ACCOUNT.id);
+  if (!defaultAccount) return;
+
+  const libraryKey = accountStorageKey(defaultAccount.id, LIBRARY_STORAGE_KEY);
+  const profileKey = accountStorageKey(defaultAccount.id, USER_PROFILE_STORAGE_KEY);
+  const workspaceKey = accountStorageKey(defaultAccount.id, WORKSPACE_STORAGE_KEY);
+  const scopedLibrary = storedJson(libraryKey);
+  const legacyStoredLibrary = storedJson(LIBRARY_STORAGE_KEY);
+  const legacyLibrary = loadResumeLibrary(LIBRARY_STORAGE_KEY);
+  const scopedHasResumes = isRecord(scopedLibrary) && Array.isArray(scopedLibrary.resumes) && scopedLibrary.resumes.length > 0;
+  const legacyStorageHasResumes = isRecord(legacyStoredLibrary) &&
+    Array.isArray(legacyStoredLibrary.resumes) &&
+    legacyStoredLibrary.resumes.length > 0;
+  if (!storedValueExists(libraryKey) || (!scopedHasResumes && legacyStorageHasResumes)) {
+    writeStoredJson(libraryKey, legacyStorageHasResumes ? legacyLibrary : loadResumeLibrary(LIBRARY_STORAGE_KEY));
+  }
+  const scopedProfile = loadUserProfile(profileKey);
+  const legacyProfile = loadUserProfile(USER_PROFILE_STORAGE_KEY);
+  if (!storedValueExists(profileKey) || !hasProfileData(scopedProfile) ||
+    (hasProfileData(legacyProfile) && !hasMeaningfulProfileData(scopedProfile, defaultAccount.username))) {
+    writeStoredJson(profileKey, hasProfileData(legacyProfile)
+      ? legacyProfile
+      : profileForUsername(defaultAccount.username));
+  }
+  const scopedWorkspace = storedJson(workspaceKey);
+  const legacyWorkspace = storedJson(WORKSPACE_STORAGE_KEY);
+  if (!storedValueExists(workspaceKey) || (!hasWorkspaceData(scopedWorkspace) && hasWorkspaceData(legacyWorkspace))) {
+    const legacyEditorWidth = Number(window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY));
+    writeStoredJson(workspaceKey, hasWorkspaceData(legacyWorkspace)
       ? legacyWorkspace
       : {
           version: STORAGE_VERSION,
@@ -757,6 +817,7 @@ function initializeAccountData(accountId, migrateLegacyData = false) {
           byResume: {},
         });
   }
+  writeStoredJson(ACCOUNT_MIGRATION_STORAGE_KEY, { version: 1, completedAt: Date.now() });
 }
 
 function initializeAccountDatabase() {
@@ -769,9 +830,8 @@ function initializeAccountDatabase() {
   if (!hasDatabase || JSON.stringify(savedDatabase) !== JSON.stringify(database)) {
     writeStoredJson(USER_DATABASE_STORAGE_KEY, database);
   }
-  if (!hasDatabase) {
-    initializeAccountData(DEFAULT_ACCOUNT.id, true);
-  }
+  migrateLegacyAccountData(database.accounts);
+  database.accounts.forEach((account) => initializeAccountData(account));
   const savedCurrentId = textValue(window.localStorage.getItem(CURRENT_ACCOUNT_STORAGE_KEY));
   const currentAccount = database.accounts.find((account) => account.id === savedCurrentId)
     || database.accounts[0];
@@ -971,7 +1031,7 @@ function App() {
   }, []);
 
   const activateAccount = useCallback((account) => {
-    initializeAccountData(account.id);
+    initializeAccountData(account);
     const nextLibrary = loadResumeLibrary(accountStorageKey(account.id, LIBRARY_STORAGE_KEY), false);
     const nextProfile = loadUserProfile(accountStorageKey(account.id, USER_PROFILE_STORAGE_KEY));
     try {
@@ -1017,7 +1077,7 @@ function App() {
     if (!writeStoredJson(USER_DATABASE_STORAGE_KEY, { version: 1, accounts: nextAccounts })) {
       return { ok: false, error: 'This browser could not save the new account.' };
     }
-    initializeAccountData(account.id);
+    initializeAccountData(account);
     setAccounts(nextAccounts);
     return activateAccount(account)
       ? { ok: true }

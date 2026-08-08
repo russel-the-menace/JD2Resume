@@ -84,6 +84,8 @@ await registerDialog.getByRole('button', { name: 'Sign up', exact: true }).click
 report.checks.localAccountRegistered =
   !(await desktopPage.getByRole('dialog', { name: 'Sign up' }).isVisible()) &&
   (await desktopPage.getByText('No resumes found', { exact: true }).isVisible());
+report.checks.emptyProfileUsesUsername =
+  (await desktopPage.getByRole('button', { name: 'Account menu' }).textContent()) === 'Q';
 await desktopPage.getByRole('button', { name: 'Account menu' }).click();
 await desktopPage.getByRole('button', { name: 'Switch account' }).click();
 await desktopPage.getByRole('dialog', { name: 'Switch account' }).getByRole('button', { name: 'Sign in' }).click();
@@ -712,6 +714,53 @@ await mobilePage.getByRole('button', { name: 'Add section' }).click();
 report.checks.addSectionMenu = await mobilePage.getByText('Add to resume').isVisible();
 await mobilePage.screenshot({ path: join(tmpdir(), 'draftline-playwright-mobile-outline.png') });
 await mobile.close();
+
+const legacyAccountRecovery = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+await legacyAccountRecovery.addInitScript(() => {
+  localStorage.setItem('draftline-user-database-v1', JSON.stringify({
+    version: 1,
+    accounts: [{ id: 'yeatom', username: 'yeatom', password: 'yeatom', createdAt: 0 }],
+  }));
+  localStorage.setItem('draftline-current-account-v1', 'yeatom');
+  localStorage.setItem('draftline-resume-library-v2', JSON.stringify({
+    version: 2,
+    resumes: [{
+      id: 'legacy-resume',
+      documentName: 'Legacy resume',
+      language: 'english',
+      data: {
+        basics: {
+          firstName: 'Legacy',
+          lastName: 'User',
+          role: 'Designer',
+          email: 'legacy@example.com',
+        },
+      },
+    }],
+  }));
+  localStorage.setItem('draftline-user-profile-v1', JSON.stringify({
+    chinese: { fullName: '张三', gender: '男', phone: '13800138000', email: 'zhangsan@example.com' },
+    english: {},
+  }));
+  localStorage.setItem('draftline-account-data-v1:yeatom:draftline-resume-library-v2', JSON.stringify({ version: 2, resumes: [] }));
+  localStorage.setItem('draftline-account-data-v1:yeatom:draftline-user-profile-v1', JSON.stringify({
+    chinese: { fullName: 'yeatom' },
+    english: { fullName: 'yeatom' },
+  }));
+});
+const legacyAccountRecoveryPage = await legacyAccountRecovery.newPage();
+await attachDiagnostics(legacyAccountRecoveryPage);
+await legacyAccountRecoveryPage.goto(baseUrl, { waitUntil: 'networkidle' });
+report.checks.legacyAccountDataRecovered =
+  (await legacyAccountRecoveryPage.locator('.resume-library-card').count()) === 1 &&
+  (await legacyAccountRecoveryPage.getByText('Legacy resume', { exact: true }).isVisible()) &&
+  (await legacyAccountRecoveryPage.getByRole('button', { name: 'Account menu' }).textContent()) === '张三';
+report.checks.legacyAccountDataScoped = await legacyAccountRecoveryPage.evaluate(() => {
+  const library = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-resume-library-v2'));
+  const profile = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-user-profile-v1'));
+  return library.resumes.length === 1 && profile.chinese.fullName === '张三';
+});
+await legacyAccountRecovery.close();
 
 const recovery = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 await recovery.addInitScript(() => {
