@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import type { CSSProperties } from 'react';
 import {
   AlignLeft,
   ArrowLeft,
@@ -139,6 +140,7 @@ const LIBRARY_STORAGE_KEY = 'draftline-resume-library-v2';
 const STORAGE_VERSION = 1;
 const LIBRARY_VERSION = 2;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
+type CssVariables = CSSProperties & Record<`--${string}`, string>;
 
 const sectionSuggestions = [
   { id: 'projects', label: 'Projects', icon: LayoutGrid },
@@ -168,11 +170,11 @@ const emptyCustomSection = {
   },
 };
 
-function isRecord(value) {
+function isRecord(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function storedJson(key) {
+function storedJson(key: string): unknown {
   if (typeof window === 'undefined') return null;
   try {
     const value = window.localStorage.getItem(key);
@@ -182,11 +184,11 @@ function storedJson(key) {
   }
 }
 
-function textValue(value, fallback = '') {
+function textValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
 }
 
-function normalizeAccent(value, fallback = accentOptions[0]) {
+function normalizeAccent(value: unknown, fallback = accentOptions[0]) {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
     ? value.toLowerCase()
     : fallback;
@@ -199,7 +201,7 @@ function normalizeResumeData(value) {
 
   const experience = Array.isArray(source.experience)
     ? source.experience.filter(isRecord).map((entry, index) => {
-        const fallback = initialResume.experience[index] || {};
+        const fallback = initialResume.experience[index] || initialResume.experience[0];
         return {
           id: Number.isFinite(Number(entry.id)) ? Number(entry.id) : index + 1,
           role: textValue(entry.role, fallback.role),
@@ -467,7 +469,9 @@ function loadResumeLibrary() {
   };
 }
 
-function blankResumeSnapshot({ documentName, language } = {}) {
+function blankResumeSnapshot(
+  { documentName, language }: { documentName?: string; language?: string } = {},
+) {
   return {
     documentName: textValue(documentName, 'Untitled resume'),
     language: language === 'chinese' ? 'chinese' : 'english',
@@ -988,7 +992,7 @@ function ResumeEditor({ resumeId, initialResumeState, onResumeChange, onBack }) 
       <main
         className="workspace"
         data-mobile-mode={mobileMode}
-        style={{ '--editor-width': `${editorWidth}px` }}
+        style={{ '--editor-width': `${editorWidth}px` } as CssVariables}
       >
         <OutlineSidebar
           sections={sections}
@@ -1101,7 +1105,9 @@ function ResumeLibrary({ resumes, onOpen, onCreate, onDuplicate, onDelete }) {
     <div
       className="library-shell"
       onMouseDown={(event) => {
-        if (!event.target.closest('.resume-card-menu-wrap')) setOpenMenu(null);
+        if (!(event.target instanceof Element) || !event.target.closest('.resume-card-menu-wrap')) {
+          setOpenMenu(null);
+        }
       }}
     >
       <header className="library-topbar">
@@ -1312,7 +1318,10 @@ function ResumeCardPreview({ resume }) {
   const name = `${resume.data.basics.firstName} ${resume.data.basics.lastName}`.trim();
   const initials = `${resume.data.basics.firstName?.[0] || 'Y'}${resume.data.basics.lastName?.[0] || ''}`;
   return (
-    <span className={cx('resume-card-canvas', `card-template-${resume.template}`)} style={{ '--card-accent': resume.accent }}>
+    <span
+      className={cx('resume-card-canvas', `card-template-${resume.template}`)}
+      style={{ '--card-accent': resume.accent } as CssVariables}
+    >
       <span className="resume-card-paper">
         {resume.template === 'profile' && (
           <ProfileAvatar photoUrl={resume.data.basics.photoUrl} initials={initials} className="card-profile-avatar" />
@@ -1753,7 +1762,6 @@ function EditorPanel({
         )}
         {!baseSections.some((section) => section.id === activeSection) && (
           <CustomSectionEditor
-            id={activeSection}
             content={customContent[activeSection] || emptyCustomSection[activeSection]}
             onChange={(field, value) =>
               setCustomContent((current) => ({
@@ -2397,7 +2405,11 @@ function ResumePage({
   ]);
 
   return (
-    <article ref={pageRef} className={cx('resume-page', `template-${template}`)} style={{ '--resume-accent': accent }}>
+    <article
+      ref={pageRef}
+      className={cx('resume-page', `template-${template}`)}
+      style={{ '--resume-accent': accent } as CssVariables}
+    >
       <header className="resume-header">
         {isProfileTemplate && (
           <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="resume-profile-avatar" />
@@ -2545,7 +2557,7 @@ function ProfileSkills({ skills }) {
   );
 }
 
-function ResumeSection({ title, children, className }) {
+function ResumeSection({ title, children, className = '' }) {
   return (
     <section className={cx('resume-section', className)}>
       <h3>{title}</h3>

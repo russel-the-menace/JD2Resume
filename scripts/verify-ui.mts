@@ -2,6 +2,21 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+import type { Page } from 'playwright-core';
+
+type PageMetrics = {
+  innerWidth: number;
+  scrollWidth: number;
+  innerHeight: number;
+  scrollHeight: number;
+};
+
+type UiCheck = boolean | PageMetrics;
+type UiReport = {
+  consoleErrors: string[];
+  pageErrors: string[];
+  checks: Record<string, UiCheck>;
+};
 
 const baseUrl = process.env.DRAFTLINE_URL || 'http://127.0.0.1:4173/';
 const chromeCandidates = [
@@ -17,16 +32,16 @@ if (!executablePath) {
 }
 
 const browser = await chromium.launch({ headless: true, executablePath });
-const report = { consoleErrors: [], pageErrors: [], checks: {} };
+const report: UiReport = { consoleErrors: [], pageErrors: [], checks: {} };
 
-async function attachDiagnostics(page) {
+async function attachDiagnostics(page: Page) {
   page.on('console', (message) => {
     if (message.type() === 'error') report.consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => report.pageErrors.push(error.message));
 }
 
-async function pageMetrics(page) {
+async function pageMetrics(page: Page): Promise<PageMetrics> {
   return page.evaluate(() => ({
     innerWidth: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
@@ -137,6 +152,13 @@ const profileHeadings = await desktopPage.locator('.resume-page.template-profile
 report.checks.profileTemplateSwitch =
   (await desktopPage.locator('.resume-page.template-profile').isVisible()) &&
   (await desktopPage.locator('.resume-profile-avatar').isVisible());
+report.checks.profileAvatarReduced = await desktopPage.locator('.resume-profile-avatar').evaluate(
+  (element) => {
+    const style = window.getComputedStyle(element);
+    return style.width === '70px' && style.height === '70px';
+  },
+);
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-profile-template.png') });
 report.checks.profileReferenceFont = await desktopPage.locator('.resume-page.template-profile').evaluate(
   (element) => {
     const fontFamily = window.getComputedStyle(element).fontFamily;
@@ -437,7 +459,7 @@ await browser.close();
 const failedChecks = Object.entries(report.checks)
   .filter(([, value]) => value === false)
   .map(([key]) => key);
-const mobileMetrics = report.checks.mobileMetrics;
+const mobileMetrics = report.checks.mobileMetrics as PageMetrics;
 if (mobileMetrics.scrollWidth > mobileMetrics.innerWidth) {
   failedChecks.push('mobileHorizontalOverflow');
 }
