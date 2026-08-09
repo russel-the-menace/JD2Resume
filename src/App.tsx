@@ -272,22 +272,44 @@ const emptyUserProfile = {
   chinese: {
     fullName: '',
     gender: '',
+    birthday: '',
     phone: '',
+    phoneEn: '',
     email: '',
     location: '',
     wechat: '',
+    whatsapp: '',
+    telegram: '',
+    linkedin: '',
     website: '',
+    photoUrl: '',
     summary: '',
+    educations: [],
+    workExperiences: [],
+    skills: [],
+    certificates: [],
+    aiMessage: '',
   },
   english: {
     fullName: '',
     gender: '',
+    birthday: '',
     phone: '',
+    phoneEn: '',
     email: '',
     location: '',
     linkedin: '',
+    wechat: '',
+    whatsapp: '',
+    telegram: '',
     website: '',
+    photoUrl: '',
     summary: '',
+    educations: [],
+    workExperiences: [],
+    skills: [],
+    certificates: [],
+    aiMessage: '',
   },
 };
 
@@ -314,14 +336,161 @@ const profileFieldLabels = {
 
 function normalizeUserProfile(value) {
   const source = isRecord(value) ? value : {};
-  return Object.entries(emptyUserProfile).reduce((profile, [language, fields]) => {
-    const savedFields = isRecord(source[language]) ? source[language] : {};
-    profile[language] = Object.keys(fields).reduce((result, field) => {
-      result[field] = textValue(savedFields[field]).trim();
-      return result;
-    }, {});
+  return Object.entries(emptyUserProfile).reduce((profile, [language]) => {
+    const legacyLanguage = language === 'chinese' ? 'zh' : 'en';
+    const savedFields = isRecord(source[language])
+      ? source[language]
+      : isRecord(source[legacyLanguage])
+        ? source[legacyLanguage]
+        : {};
+    profile[language] = normalizeProfileLanguage(savedFields, language);
     return profile;
   }, {});
+}
+
+function profileEntryId(prefix, index = 0) {
+  return `${prefix}-${Date.now().toString(36)}-${index}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function normalizeStringList(value) {
+  return Array.isArray(value)
+    ? value.map((item) => textValue(item).trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeProfileEducation(value, index = 0) {
+  const source = isRecord(value) ? value : {};
+  return {
+    id: textValue(source.id, profileEntryId('education', index)),
+    school: textValue(source.school).trim(),
+    schoolEn: textValue(source.schoolEn || source.school_en).trim(),
+    schoolCn: textValue(source.schoolCn || source.school_cn).trim(),
+    countryChinese: textValue(source.countryChinese || source.country_chinese).trim(),
+    countryEnglish: textValue(source.countryEnglish || source.country_english).trim(),
+    degree: textValue(source.degree).trim(),
+    studyType: textValue(source.studyType || source.study_type).trim(),
+    major: textValue(source.major).trim(),
+    majorEn: textValue(source.majorEn || source.major_en).trim(),
+    startDate: textValue(source.startDate || source.startTime).trim(),
+    endDate: textValue(source.endDate || source.endTime || source.graduationDate).trim(),
+    description: textValue(source.description).trim(),
+  };
+}
+
+function normalizeProfileWorkExperience(value, index = 0) {
+  const source = isRecord(value) ? value : {};
+  return {
+    id: textValue(source.id, profileEntryId('work', index)),
+    company: textValue(source.company).trim(),
+    jobTitle: textValue(source.jobTitle || source.role).trim(),
+    businessDirection: textValue(source.businessDirection).trim(),
+    workContent: textValue(source.workContent || source.description).trim(),
+    startDate: textValue(source.startDate || source.startTime).trim(),
+    endDate: textValue(source.endDate || source.endTime).trim(),
+  };
+}
+
+function normalizeProfileLanguage(value, language) {
+  const source = isRecord(value) ? value : {};
+  const phone = textValue(source.phone || (language === 'english' ? source.phoneEn || source.phone_en : '')).trim();
+  return {
+    fullName: textValue(source.fullName || source.name).trim(),
+    gender: textValue(source.gender).trim(),
+    birthday: textValue(source.birthday).trim(),
+    phone,
+    phoneEn: textValue(source.phoneEn || source.phone_en || (language === 'english' ? phone : '')).trim(),
+    email: textValue(source.email).trim(),
+    location: textValue(source.location || source.city).trim(),
+    wechat: textValue(source.wechat).trim(),
+    linkedin: textValue(source.linkedin).trim(),
+    whatsapp: textValue(source.whatsapp).trim(),
+    telegram: textValue(source.telegram).trim(),
+    website: textValue(source.website).trim(),
+    photoUrl: textValue(source.photoUrl || source.photo).trim(),
+    summary: textValue(source.summary).trim(),
+    educations: Array.isArray(source.educations)
+      ? source.educations.map(normalizeProfileEducation)
+      : [],
+    workExperiences: Array.isArray(source.workExperiences)
+      ? source.workExperiences.map(normalizeProfileWorkExperience)
+      : [],
+    skills: normalizeStringList(source.skills),
+    certificates: normalizeStringList(source.certificates),
+    aiMessage: textValue(source.aiMessage).trim(),
+  };
+}
+
+const fallbackProfileUniversities = [
+  { id: 'tsinghua', chinese_name: '清华大学', english_name: 'Tsinghua University', country_chinese: '中国', country_english: 'China' },
+  { id: 'pku', chinese_name: '北京大学', english_name: 'Peking University', country_chinese: '中国', country_english: 'China' },
+  { id: 'sjtu', chinese_name: '上海交通大学', english_name: 'Shanghai Jiao Tong University', country_chinese: '中国', country_english: 'China' },
+  { id: 'fudan', chinese_name: '复旦大学', english_name: 'Fudan University', country_chinese: '中国', country_english: 'China' },
+  { id: 'zju', chinese_name: '浙江大学', english_name: 'Zhejiang University', country_chinese: '中国', country_english: 'China' },
+  { id: 'nju', chinese_name: '南京大学', english_name: 'Nanjing University', country_chinese: '中国', country_english: 'China' },
+  { id: 'ustc', chinese_name: '中国科学技术大学', english_name: 'University of Science and Technology of China', country_chinese: '中国', country_english: 'China' },
+  { id: 'stanford', chinese_name: '斯坦福大学', english_name: 'Stanford University', country_chinese: '美国', country_english: 'United States' },
+  { id: 'mit', chinese_name: '麻省理工学院', english_name: 'Massachusetts Institute of Technology', country_chinese: '美国', country_english: 'United States' },
+  { id: 'berkeley', chinese_name: '加州大学伯克利分校', english_name: 'University of California, Berkeley', country_chinese: '美国', country_english: 'United States' },
+];
+
+const fallbackProfileMajors = [
+  { id: 'cs', chinese_name: '计算机科学与技术', english_name: 'Computer Science and Technology', level: 'Bachelor' },
+  { id: 'software', chinese_name: '软件工程', english_name: 'Software Engineering', level: 'Bachelor' },
+  { id: 'information-management', chinese_name: '信息管理与信息系统', english_name: 'Information Management and Information Systems', level: 'Bachelor' },
+  { id: 'interaction-design', chinese_name: '交互设计', english_name: 'Interaction Design', level: 'Bachelor' },
+  { id: 'industrial-design', chinese_name: '工业设计', english_name: 'Industrial Design', level: 'Bachelor' },
+  { id: 'visual-communication', chinese_name: '视觉传达设计', english_name: 'Visual Communication Design', level: 'Bachelor' },
+  { id: 'business', chinese_name: '工商管理', english_name: 'Business Administration', level: 'Bachelor' },
+  { id: 'marketing', chinese_name: '市场营销', english_name: 'Marketing', level: 'Bachelor' },
+  { id: 'finance', chinese_name: '金融学', english_name: 'Finance', level: 'Bachelor' },
+  { id: 'data-science', chinese_name: '数据科学与大数据技术', english_name: 'Data Science and Big Data Technology', level: 'Master' },
+];
+
+function profileDirectoryMatches(items, keyword, level = '') {
+  const normalized = textValue(keyword).trim().toLowerCase();
+  const candidates = items.filter((item) => {
+    const matchesLevel = !level || !item.level || item.level === level;
+    if (!matchesLevel) return false;
+    if (!normalized) return true;
+    return `${item.chinese_name || ''} ${item.english_name || ''}`.toLowerCase().includes(normalized);
+  });
+  return candidates
+    .sort((a, b) => {
+      const aText = `${a.chinese_name || ''} ${a.english_name || ''}`.toLowerCase();
+      const bText = `${b.chinese_name || ''} ${b.english_name || ''}`.toLowerCase();
+      const aStarts = aText.startsWith(normalized);
+      const bStarts = bText.startsWith(normalized);
+      if (aStarts !== bStarts) return aStarts ? -1 : 1;
+      return aText.length - bText.length;
+    })
+    .slice(0, 10);
+}
+
+const profileDegreeOptions = {
+  chinese: ['大专', '本科', '硕士', '博士', '其他'],
+  english: ['Associate', 'Bachelor', 'Master', 'PhD', 'Other'],
+};
+
+const profileStudyTypeOptions = {
+  chinese: ['全日制', '非全日制'],
+  english: ['Full-time', 'Part-time'],
+};
+
+function majorLevelForDegree(degree) {
+  const value = textValue(degree).toLowerCase();
+  if (value.includes('本科') || value.includes('bachelor')) return 'Bachelor';
+  if (value.includes('硕士') || value.includes('master')) return 'Master';
+  if (value.includes('博士') || value.includes('phd') || value.includes('doctor')) return 'PhD';
+  return '';
+}
+
+function profileDateValue(value) {
+  const match = textValue(value).match(/^(\d{4})-(\d{1,2})$/);
+  return match ? { year: match[1], month: String(match[2]).padStart(2, '0') } : { year: '', month: '' };
+}
+
+function profileDateRangeInvalid(startDate, endDate) {
+  return Boolean(startDate && endDate && !['Present', '至今'].includes(endDate) && startDate > endDate);
 }
 
 function loadUserProfile(storageKey = USER_PROFILE_STORAGE_KEY) {
@@ -1189,6 +1358,30 @@ function App() {
     return true;
   }, [accountProfileKey]);
 
+  const searchProfileDirectory = useCallback(async ({ type, keyword, level = '' }) => {
+    const endpoint = type === 'major' ? '/api/searchMajors' : '/api/searchUniversities';
+    const fallback = type === 'major' ? fallbackProfileMajors : fallbackProfileUniversities;
+    const localResults = profileDirectoryMatches(fallback, keyword, level);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 2500);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword, ...(level ? { level } : {}) }),
+        signal: controller.signal,
+      });
+      if (!response.ok) return localResults;
+      const payload = await response.json().catch(() => ({}));
+      const items = payload?.result?.items;
+      return Array.isArray(items) && items.length ? items.slice(0, 10) : localResults;
+    } catch {
+      return localResults;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }, []);
+
   const runProfileRequest = useCallback(async (path, body) => {
     setProfileImporting(true);
     try {
@@ -1354,6 +1547,7 @@ function App() {
         userProfile={userProfile}
         onProfileSave={saveUserProfile}
         onImportProfile={importProfileFromResume}
+        onSearchDirectory={searchProfileDirectory}
         onGenerate={generateResumeFromJobDescription}
     />
   );
@@ -1812,6 +2006,7 @@ function ResumeLibrary({
   userProfile,
   onProfileSave,
   onImportProfile,
+  onSearchDirectory,
   onGenerate,
 }) {
   const [query, setQuery] = useState('');
@@ -1989,6 +2184,7 @@ function ResumeLibrary({
           onSave={onProfileSave}
           onComplete={() => setProfileDialogOpen(false)}
           onImport={onImportProfile}
+          onSearchDirectory={onSearchDirectory}
         />
       )}
       {generatorDialogOpen && (
@@ -2367,11 +2563,125 @@ function NewResumeDialog({ onCancel, onSave }) {
   );
 }
 
-function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport }) {
+function splitProfileDegree(value) {
+  const match = textValue(value).match(/^(.+?)\s*\((.+?)\)$/);
+  return match ? { degree: match[1].trim(), studyType: match[2].trim() } : { degree: textValue(value).trim(), studyType: '' };
+}
+
+function ProfileSectionHeader({ title, actionLabel = '', onAction = undefined }) {
+  return (
+    <div className="profile-section-heading">
+      <h3>{title}</h3>
+      {actionLabel && <button className="dialog-link-button profile-section-action" type="button" onClick={onAction}><Plus size={14} /> {actionLabel}</button>}
+    </div>
+  );
+}
+
+function ProfilePickerButton({ label, value, placeholder, onClick }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <button className={cx('profile-picker-trigger', !value && 'is-placeholder')} type="button" onClick={onClick}>
+        <span>{value || placeholder}</span>
+        <ChevronDown size={15} />
+      </button>
+    </label>
+  );
+}
+
+function ProfileDirectoryPicker({ type, language, keyword, results, loading, onKeywordChange, onSelect, onUseTypedValue, onCancel }) {
+  const chinese = language === 'chinese';
+  const university = type === 'university';
+  const title = university ? (chinese ? '选择学校' : 'Choose university') : (chinese ? '选择专业' : 'Choose major');
+  const placeholder = university ? (chinese ? '搜索学校名称' : 'Search university') : (chinese ? '搜索专业名称' : 'Search major');
+  return (
+    <div className="modal-backdrop profile-picker-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onCancel();
+    }}>
+      <section className="resume-dialog profile-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-picker-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="resume-dialog-header account-dialog-header">
+          <div>
+            <span className="dialog-kicker">{university ? 'Institution library' : 'Major library'}</span>
+            <h2 id="profile-picker-title">{title}</h2>
+          </div>
+          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
+        </header>
+        <div className="profile-picker-content">
+          <label className="library-search profile-picker-search">
+            <Search size={16} />
+            <input autoFocus value={keyword} onChange={(event) => onKeywordChange(event.target.value)} placeholder={placeholder} aria-label={placeholder} />
+          </label>
+          {loading && <p className="profile-picker-status">Searching...</p>}
+          {!loading && !results.length && <p className="profile-picker-status">{chinese ? '没有匹配结果，可直接使用当前输入。' : 'No matches. You can use the current input.'}</p>}
+          <div className="profile-picker-list" role="listbox" aria-label={title}>
+            {results.map((item) => {
+              const primary = chinese ? item.chinese_name : item.english_name || item.chinese_name;
+              const secondary = chinese ? item.english_name : item.chinese_name;
+              return (
+                <button className="profile-picker-option" key={item.id || `${item.chinese_name}-${item.english_name}`} type="button" role="option" onClick={() => onSelect(item)}>
+                  <span><strong>{primary || (chinese ? '未命名' : 'Untitled')}</strong>{secondary && <small>{secondary}</small>}</span>
+                  {university && (chinese ? item.country_chinese : item.country_english) && <small>{chinese ? item.country_chinese : item.country_english}</small>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <footer className="resume-dialog-actions">
+          <button className="secondary-button" type="button" onClick={onCancel}>{chinese ? '取消' : 'Cancel'}</button>
+          <button className="primary-button" type="button" onClick={onUseTypedValue} disabled={!keyword.trim()}>{chinese ? '使用当前输入' : 'Use current input'}</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function ProfileWheelPicker({ title, chinese, columns, allowPresent, onPresent, onConfirm, onCancel }) {
+  const [selection, setSelection] = useState(() => Object.fromEntries(columns.map((column) => [column.id, column.value || column.options[0] || ''])));
+  const update = (id, value) => setSelection((current) => ({ ...current, [id]: value }));
+  return (
+    <div className="modal-backdrop profile-picker-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onCancel();
+    }}>
+      <section className="resume-dialog profile-wheel-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-wheel-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="resume-dialog-header account-dialog-header">
+          <h2 id="profile-wheel-title">{title}</h2>
+          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
+        </header>
+        <div className="profile-wheel-content">
+          <div className="profile-wheel-columns">
+            {columns.map((column) => (
+              <label className="profile-wheel-column" key={column.id}>
+                <span>{column.label}</span>
+                <select value={selection[column.id]} onChange={(event) => update(column.id, event.target.value)} aria-label={column.label}>
+                  {column.options.map((option) => <option value={option} key={option}>{option}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+          {allowPresent && <button className="dialog-link-button profile-present-button" type="button" onClick={onPresent}>{chinese ? '设为至今' : 'Set to present'}</button>}
+        </div>
+        <footer className="resume-dialog-actions">
+          <button className="secondary-button" type="button" onClick={onCancel}>{chinese ? '取消' : 'Cancel'}</button>
+          <button className="primary-button" type="button" onClick={() => onConfirm(selection)}>{chinese ? '保存' : 'Save'}</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport, onSearchDirectory }) {
   const [language, setLanguage] = useState('chinese');
   const [draft, setDraft] = useState(() => normalizeUserProfile(profile));
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importedProfile, setImportedProfile] = useState(null);
+  const [educationEditor, setEducationEditor] = useState(null);
+  const [workEditor, setWorkEditor] = useState(null);
+  const [entryError, setEntryError] = useState('');
+  const [directoryPicker, setDirectoryPicker] = useState(null);
+  const [directoryKeyword, setDirectoryKeyword] = useState('');
+  const [directoryResults, setDirectoryResults] = useState([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [wheelPicker, setWheelPicker] = useState(null);
   const fields = draft[language];
   const chinese = language === 'chinese';
   const updateField = (field, value) => {
@@ -2381,8 +2691,185 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
     }));
   };
 
+  useEffect(() => {
+    if (!directoryPicker) return undefined;
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setDirectoryLoading(true);
+      const results = onSearchDirectory
+        ? await onSearchDirectory({
+            type: directoryPicker.type,
+            keyword: directoryKeyword,
+            level: directoryPicker.type === 'major' ? majorLevelForDegree(educationEditor?.degree) : '',
+          })
+        : profileDirectoryMatches(
+            directoryPicker.type === 'major' ? fallbackProfileMajors : fallbackProfileUniversities,
+            directoryKeyword,
+            directoryPicker.type === 'major' ? majorLevelForDegree(educationEditor?.degree) : '',
+          );
+      if (active) {
+        setDirectoryResults(Array.isArray(results) ? results : []);
+        setDirectoryLoading(false);
+      }
+    }, 180);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [directoryKeyword, directoryPicker, educationEditor?.degree, onSearchDirectory]);
+
+  const openDirectoryPicker = (type) => {
+    if (!educationEditor) return;
+    setDirectoryPicker({ type });
+    setDirectoryKeyword(type === 'university' ? educationEditor.school : educationEditor.major);
+    setDirectoryResults([]);
+  };
+
+  const selectDirectoryItem = (item) => {
+    if (!directoryPicker) return;
+    if (directoryPicker.type === 'university') {
+      setEducationEditor((current) => ({
+        ...current,
+        school: chinese ? item.chinese_name || item.english_name : item.english_name || item.chinese_name,
+        schoolEn: item.english_name || '',
+        schoolCn: item.chinese_name || '',
+        countryChinese: item.country_chinese || '',
+        countryEnglish: item.country_english || '',
+      }));
+    } else {
+      setEducationEditor((current) => ({
+        ...current,
+        major: chinese ? item.chinese_name || item.english_name : item.english_name || item.chinese_name,
+        majorEn: item.english_name || '',
+      }));
+    }
+    setDirectoryPicker(null);
+  };
+
+  const useTypedDirectoryValue = () => {
+    if (!directoryPicker || !directoryKeyword.trim()) return;
+    setEducationEditor((current) => directoryPicker.type === 'university'
+      ? { ...current, school: directoryKeyword.trim(), schoolCn: chinese ? directoryKeyword.trim() : current.schoolCn }
+      : { ...current, major: directoryKeyword.trim() });
+    setDirectoryPicker(null);
+  };
+
+  const openEducationEditor = (index = -1) => {
+    const source = index >= 0 ? fields.educations[index] : normalizeProfileEducation({});
+    const degree = splitProfileDegree(source.degree);
+    setEntryError('');
+    setEducationEditor({
+      index,
+      ...source,
+      degree: degree.degree,
+      studyType: source.studyType || degree.studyType,
+    });
+    setWorkEditor(null);
+  };
+
+  const saveEducation = () => {
+    if (!educationEditor.school.trim()) return setEntryError(chinese ? '请填写学校。' : 'Enter a school.');
+    if (!educationEditor.degree.trim()) return setEntryError(chinese ? '请选择学历。' : 'Choose a degree.');
+    if (!educationEditor.major.trim()) return setEntryError(chinese ? '请填写专业。' : 'Enter a major.');
+    if (!educationEditor.startDate) return setEntryError(chinese ? '请选择入学时间。' : 'Choose a start date.');
+    if (!educationEditor.endDate) return setEntryError(chinese ? '请选择毕业时间。' : 'Choose an end date.');
+    if (profileDateRangeInvalid(educationEditor.startDate, educationEditor.endDate)) return setEntryError(chinese ? '入学时间不能晚于毕业时间。' : 'The start date cannot be after the end date.');
+    setDraft((current) => {
+      const educations = [...current[language].educations];
+      const { index, ...entry } = educationEditor;
+      const nextEntry = { ...entry, degree: entry.degree.trim(), studyType: entry.studyType.trim() };
+      if (index < 0) educations.push(nextEntry);
+      else educations[index] = nextEntry;
+      return { ...current, [language]: { ...current[language], educations } };
+    });
+    setEducationEditor(null);
+    setEntryError('');
+  };
+
+  const deleteEducation = (index) => updateField('educations', fields.educations.filter((_, itemIndex) => itemIndex !== index));
+
+  const openWorkEditor = (index = -1) => {
+    const source = index >= 0 ? fields.workExperiences[index] : normalizeProfileWorkExperience({});
+    setEntryError('');
+    setWorkEditor({ index, ...source });
+    setEducationEditor(null);
+  };
+
+  const saveWork = () => {
+    if (!workEditor.company.trim()) return setEntryError(chinese ? '请填写公司名称。' : 'Enter a company.');
+    if (!workEditor.jobTitle.trim()) return setEntryError(chinese ? '请填写职位名称。' : 'Enter a job title.');
+    if (!workEditor.startDate) return setEntryError(chinese ? '请选择开始时间。' : 'Choose a start date.');
+    if (!workEditor.endDate) return setEntryError(chinese ? '请选择结束时间。' : 'Choose an end date.');
+    if (profileDateRangeInvalid(workEditor.startDate, workEditor.endDate)) return setEntryError(chinese ? '开始时间不能晚于结束时间。' : 'The start date cannot be after the end date.');
+    setDraft((current) => {
+      const workExperiences = [...current[language].workExperiences];
+      const { index, ...entry } = workEditor;
+      if (index < 0) workExperiences.push(entry);
+      else workExperiences[index] = entry;
+      return { ...current, [language]: { ...current[language], workExperiences } };
+    });
+    setWorkEditor(null);
+    setEntryError('');
+  };
+
+  const deleteWork = (index) => updateField('workExperiences', fields.workExperiences.filter((_, itemIndex) => itemIndex !== index));
+
+  const openDegreePicker = () => {
+    if (!educationEditor) return;
+    const options = profileDegreeOptions[language];
+    const studyOptions = profileStudyTypeOptions[language];
+    setWheelPicker({
+      type: 'degree',
+      columns: [
+        { id: 'degree', label: chinese ? '学历' : 'Degree', options, value: educationEditor.degree || options[0] },
+        ...(chinese ? [{ id: 'studyType', label: '学习形式', options: studyOptions, value: educationEditor.studyType || studyOptions[0] }] : []),
+      ],
+    });
+  };
+
+  const openDatePicker = (target, value, allowPresent = false) => {
+    const parsed = profileDateValue(value);
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({ length: 81 }, (_, index) => String(currentYear + 10 - index));
+    const months = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
+    setWheelPicker({
+      type: 'date',
+      target,
+      allowPresent,
+      columns: [
+        { id: 'year', label: chinese ? '年份' : 'Year', options: years, value: parsed.year || String(currentYear) },
+        { id: 'month', label: chinese ? '月份' : 'Month', options: months, value: parsed.month || '09' },
+      ],
+    });
+  };
+
+  const confirmWheel = (values) => {
+    if (!wheelPicker) return;
+    if (wheelPicker.type === 'degree') {
+      setEducationEditor((current) => ({ ...current, degree: values.degree, studyType: values.studyType || '' }));
+    } else if (wheelPicker.target === 'birthday') {
+      updateField('birthday', `${values.year}-${values.month}`);
+    } else if (wheelPicker.target.startsWith('education.')) {
+      setEducationEditor((current) => ({ ...current, [wheelPicker.target.split('.')[1]]: `${values.year}-${values.month}` }));
+    } else {
+      setWorkEditor((current) => ({ ...current, [wheelPicker.target.split('.')[1]]: `${values.year}-${values.month}` }));
+    }
+    setWheelPicker(null);
+  };
+
+  const setPresent = () => {
+    if (!wheelPicker) return;
+    if (wheelPicker.target.startsWith('education.')) setEducationEditor((current) => ({ ...current, endDate: chinese ? '至今' : 'Present' }));
+    if (wheelPicker.target.startsWith('work.')) setWorkEditor((current) => ({ ...current, endDate: chinese ? '至今' : 'Present' }));
+    setWheelPicker(null);
+  };
+
   const submit = (event) => {
     event.preventDefault();
+    if (educationEditor || workEditor) {
+      setEntryError(chinese ? '请先保存或取消当前编辑项。' : 'Save or cancel the current entry first.');
+      return;
+    }
     if (onSave(draft)) onComplete();
   };
 
@@ -2391,10 +2878,7 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
     const importedLanguage = imported.language;
     const importedProfiles = normalizeUserProfile(imported.profiles);
     const normalizedFields = importedProfiles[importedLanguage];
-    const nextDraft = {
-      ...draft,
-      [importedLanguage]: normalizedFields,
-    };
+    const nextDraft = { ...draft, [importedLanguage]: normalizedFields };
     if (!onSave(nextDraft)) throw new Error('The imported personal details could not be saved locally.');
     setDraft(nextDraft);
     setLanguage(importedLanguage);
@@ -2406,104 +2890,141 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
     if (!importedProfile) return;
     const targetLanguage = importedProfile.language === 'chinese' ? 'english' : 'chinese';
     const translatedFields = importedProfile.profiles[targetLanguage];
-    const nextDraft = {
-      ...draft,
-      [targetLanguage]: translatedFields,
-    };
+    const nextDraft = { ...draft, [targetLanguage]: translatedFields };
     if (!onSave(nextDraft)) throw new Error('The imported personal details could not be saved locally.');
     setDraft(nextDraft);
     setLanguage(targetLanguage);
     setImportedProfile(null);
   };
 
+  const addListItem = (field) => updateField(field, [...fields[field], '']);
+  const updateListItem = (field, index, value) => updateField(field, fields[field].map((item, itemIndex) => itemIndex === index ? value : item));
+  const removeListItem = (field, index) => updateField(field, fields[field].filter((_, itemIndex) => itemIndex !== index));
+  const showPhoto = fields.photoUrl;
+
   return (
     <div className="modal-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onCancel();
     }}>
       <form className="resume-dialog personal-profile-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="personal-profile-title">
-        <header className="resume-dialog-header">
+        <header className="resume-dialog-header personal-profile-header">
           <div>
             <span className="dialog-kicker">Account</span>
             <h2 id="personal-profile-title">Edit personal profile</h2>
           </div>
-          <button className="secondary-button profile-import-button" type="button" onClick={() => setImportDialogOpen(true)}>
-            <FileUp size={15} />
-            <span>Import from resume</span>
-          </button>
+          <div className="profile-header-actions">
+            <button className="secondary-button profile-import-button" type="button" onClick={() => setImportDialogOpen(true)}><FileUp size={15} /><span>Import from resume</span></button>
+            <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
+          </div>
         </header>
         <div className="resume-dialog-content profile-dialog-content">
           <div className="resume-language-selector" role="group" aria-label="Profile language">
-            <button
-              type="button"
-              className={cx(chinese && 'is-selected')}
-              onClick={() => setLanguage('chinese')}
-              aria-pressed={chinese}
-            >
-              中文
-            </button>
-            <button
-              type="button"
-              className={cx(!chinese && 'is-selected')}
-              onClick={() => setLanguage('english')}
-              aria-pressed={!chinese}
-            >
-              English
-            </button>
+            <button type="button" className={cx(chinese && 'is-selected')} onClick={() => { setLanguage('chinese'); setEducationEditor(null); setWorkEditor(null); }} aria-pressed={chinese}>中文</button>
+            <button type="button" className={cx(!chinese && 'is-selected')} onClick={() => { setLanguage('english'); setEducationEditor(null); setWorkEditor(null); }} aria-pressed={!chinese}>English</button>
           </div>
-          <div className="form-grid two-columns">
-            <Field
-              label={chinese ? '姓名' : 'Full name'}
-              value={fields.fullName}
-              onChange={(value) => updateField('fullName', value)}
-            />
-            <GenderField
-              value={fields.gender}
-              onChange={(value) => updateField('gender', value)}
-              language={language}
-            />
-            <Field label={chinese ? '手机号码' : 'Phone'} value={fields.phone} onChange={(value) => updateField('phone', value)} />
-            <Field label="Email" type="email" value={fields.email} onChange={(value) => updateField('email', value)} />
-            <Field label={chinese ? '所在地' : 'Location'} value={fields.location} onChange={(value) => updateField('location', value)} />
-            <Field
-              label={chinese ? '个人网站' : 'Website'}
-              value={fields.website}
-              placeholder="https://..."
-              onChange={(value) => updateField('website', value)}
-            />
-            <Field
-              label={chinese ? '微信号' : 'LinkedIn'}
-              value={chinese ? fields.wechat : fields.linkedin}
-              onChange={(value) => updateField(chinese ? 'wechat' : 'linkedin', value)}
-            />
-          </div>
-          <label className="field">
-            <span>{chinese ? '个人简介' : 'Professional profile'}</span>
-            <textarea
-              value={fields.summary}
-              rows={5}
-              onChange={(event) => updateField('summary', event.target.value)}
-            />
-          </label>
+
+          <section className="profile-section-block">
+            <ProfileSectionHeader title={chinese ? '基本信息' : 'Personal information'} />
+            <div className="profile-photo-row">
+              <div className="profile-photo-preview">{showPhoto ? <img src={showPhoto} alt="" /> : <span>{fields.fullName?.slice(0, 2) || '头像'}</span>}</div>
+              <label className="secondary-button profile-photo-upload">
+                <Upload size={15} /> {chinese ? '上传头像' : 'Upload photo'}
+                <input type="file" accept="image/*" onChange={async (event) => { const file = event.target.files?.[0]; if (file) updateField('photoUrl', await readFileAsDataUrl(file)); event.target.value = ''; }} />
+              </label>
+              {showPhoto && <button className="dialog-link-button profile-remove-photo" type="button" onClick={() => updateField('photoUrl', '')}>{chinese ? '移除' : 'Remove'}</button>}
+            </div>
+            <div className="form-grid two-columns">
+              <Field label={chinese ? '姓名' : 'Full name'} value={fields.fullName} onChange={(value) => updateField('fullName', value)} />
+              <GenderField value={fields.gender} onChange={(value) => updateField('gender', value)} language={language} />
+              {chinese && <ProfilePickerButton label="出生年月" value={fields.birthday} placeholder="请选择出生年月" onClick={() => openDatePicker('birthday', fields.birthday)} />}
+              <Field label={chinese ? '所在地' : 'Location'} value={fields.location} onChange={(value) => updateField('location', value)} />
+            </div>
+          </section>
+
+          <section className="profile-section-block">
+            <ProfileSectionHeader title={chinese ? '联系方式' : 'Contact information'} />
+            <div className="form-grid two-columns">
+              <Field label={chinese ? '手机号码' : 'Phone'} value={fields.phone} onChange={(value) => updateField('phone', value)} />
+              {fields.phoneEn && fields.phoneEn !== fields.phone && <Field label={chinese ? '国际手机号' : 'International phone'} value={fields.phoneEn} onChange={(value) => updateField('phoneEn', value)} />}
+              <Field label="Email" type="email" value={fields.email} onChange={(value) => updateField('email', value)} />
+              {chinese ? <Field label="微信号" value={fields.wechat} onChange={(value) => updateField('wechat', value)} /> : <Field label="LinkedIn" value={fields.linkedin} onChange={(value) => updateField('linkedin', value)} />}
+              <Field label={chinese ? '个人网站' : 'Website'} value={fields.website} placeholder="https://..." onChange={(value) => updateField('website', value)} />
+              {!chinese && <Field label="WhatsApp" value={fields.whatsapp} onChange={(value) => updateField('whatsapp', value)} />}
+              {!chinese && <Field label="Telegram" value={fields.telegram} onChange={(value) => updateField('telegram', value)} />}
+            </div>
+          </section>
+
+          <section className="profile-section-block">
+            <ProfileSectionHeader title={chinese ? '教育经历' : 'Education'} actionLabel={chinese ? '添加教育经历' : 'Add education'} onAction={() => openEducationEditor()} />
+            {fields.educations.length === 0 && !educationEditor && <p className="profile-empty-state">{chinese ? '暂无教育经历' : 'No education added yet.'}</p>}
+            <div className="profile-entry-list">
+              {fields.educations.map((education, index) => <article className="profile-entry-card" key={education.id || index}>
+                <div className="profile-entry-card-copy"><strong>{education.school || (chinese ? '未填写学校' : 'School not entered')}</strong><span>{[education.degree, education.studyType && `(${education.studyType})`, education.major].filter(Boolean).join(' · ')}</span><small>{[education.startDate, education.endDate].filter(Boolean).join(' - ')}</small></div>
+                <div className="profile-entry-card-actions"><button className="icon-button small" type="button" onClick={() => openEducationEditor(index)} aria-label={`${chinese ? '编辑教育经历' : 'Edit education'} ${index + 1}`} title="Edit"><Settings2 size={15} /></button><button className="icon-button small" type="button" onClick={() => deleteEducation(index)} aria-label={`${chinese ? '删除教育经历' : 'Delete education'} ${index + 1}`} title="Delete"><Trash2 size={15} /></button></div>
+              </article>)}
+            </div>
+            {educationEditor && <div className="profile-entry-editor">
+              <div className="profile-editor-heading"><strong>{educationEditor.index < 0 ? (chinese ? '添加教育经历' : 'Add education') : (chinese ? '编辑教育经历' : 'Edit education')}</strong><button className="icon-button small" type="button" onClick={() => { setEducationEditor(null); setEntryError(''); }} aria-label="Close" title="Close"><X size={15} /></button></div>
+              <div className="form-grid two-columns">
+                <ProfilePickerButton label={chinese ? '学校' : 'School'} value={educationEditor.school} placeholder={chinese ? '选择或输入学校' : 'Select or enter university'} onClick={() => openDirectoryPicker('university')} />
+                <ProfilePickerButton label={chinese ? '学历' : 'Degree'} value={[educationEditor.degree, educationEditor.studyType && `(${educationEditor.studyType})`].filter(Boolean).join(' ')} placeholder={chinese ? '请选择学历' : 'Select degree'} onClick={openDegreePicker} />
+                <ProfilePickerButton label={chinese ? '专业' : 'Major'} value={educationEditor.major} placeholder={chinese ? '选择或输入专业' : 'Select or enter major'} onClick={() => openDirectoryPicker('major')} />
+                <ProfilePickerButton label={chinese ? '入学时间' : 'Start date'} value={educationEditor.startDate} placeholder={chinese ? '请选择入学时间' : 'Choose start date'} onClick={() => openDatePicker('education.startDate', educationEditor.startDate)} />
+                <ProfilePickerButton label={chinese ? '毕业时间' : 'End date'} value={educationEditor.endDate} placeholder={chinese ? '请选择毕业时间' : 'Choose end date'} onClick={() => openDatePicker('education.endDate', educationEditor.endDate, true)} />
+              </div>
+              <label className="field"><span>{chinese ? '在校描述' : 'Description'} <small>({chinese ? '选填' : 'Optional'})</small></span><textarea rows={3} maxLength={500} value={educationEditor.description} onChange={(event) => setEducationEditor((current) => ({ ...current, description: event.target.value }))} placeholder={chinese ? '主要课程、荣誉奖励等' : 'Main courses, honors, etc.'} /></label>
+              {entryError && <p className="account-auth-error" role="alert">{entryError}</p>}
+              <div className="profile-editor-actions"><button className="secondary-button" type="button" onClick={() => setEducationEditor(null)}>{chinese ? '取消' : 'Cancel'}</button><button className="primary-button" type="button" onClick={saveEducation}><Check size={15} /> {chinese ? '保存教育经历' : 'Save education'}</button></div>
+            </div>}
+          </section>
+
+          <section className="profile-section-block">
+            <ProfileSectionHeader title={chinese ? '工作经历' : 'Work experience'} actionLabel={chinese ? '添加工作经历' : 'Add work experience'} onAction={() => openWorkEditor()} />
+            {fields.workExperiences.length === 0 && !workEditor && <p className="profile-empty-state">{chinese ? '暂无工作经历' : 'No work experience added yet.'}</p>}
+            <div className="profile-entry-list">
+              {fields.workExperiences.map((work, index) => <article className="profile-entry-card" key={work.id || index}>
+                <div className="profile-entry-card-copy"><strong>{work.company || (chinese ? '未填写公司' : 'Company not entered')}</strong><span>{work.jobTitle}</span><small>{[work.startDate, work.endDate].filter(Boolean).join(' - ')}</small></div>
+                <div className="profile-entry-card-actions"><button className="icon-button small" type="button" onClick={() => openWorkEditor(index)} aria-label={`${chinese ? '编辑工作经历' : 'Edit work experience'} ${index + 1}`} title="Edit"><Settings2 size={15} /></button><button className="icon-button small" type="button" onClick={() => deleteWork(index)} aria-label={`${chinese ? '删除工作经历' : 'Delete work experience'} ${index + 1}`} title="Delete"><Trash2 size={15} /></button></div>
+              </article>)}
+            </div>
+            {workEditor && <div className="profile-entry-editor">
+              <div className="profile-editor-heading"><strong>{workEditor.index < 0 ? (chinese ? '添加工作经历' : 'Add work experience') : (chinese ? '编辑工作经历' : 'Edit work experience')}</strong><button className="icon-button small" type="button" onClick={() => { setWorkEditor(null); setEntryError(''); }} aria-label="Close" title="Close"><X size={15} /></button></div>
+              <div className="form-grid two-columns">
+                <Field label={chinese ? '公司名称' : 'Company'} value={workEditor.company} onChange={(value) => setWorkEditor((current) => ({ ...current, company: value }))} />
+                <Field label={chinese ? '职位名称' : 'Job title'} value={workEditor.jobTitle} onChange={(value) => setWorkEditor((current) => ({ ...current, jobTitle: value }))} />
+                <ProfilePickerButton label={chinese ? '开始时间' : 'Start date'} value={workEditor.startDate} placeholder={chinese ? '请选择开始时间' : 'Choose start date'} onClick={() => openDatePicker('work.startDate', workEditor.startDate)} />
+                <ProfilePickerButton label={chinese ? '结束时间' : 'End date'} value={workEditor.endDate} placeholder={chinese ? '请选择结束时间' : 'Choose end date'} onClick={() => openDatePicker('work.endDate', workEditor.endDate, true)} />
+              </div>
+              <label className="field"><span>{chinese ? '工作内容' : 'Work content'} <small>({chinese ? '选填' : 'Optional'})</small></span><textarea rows={3} maxLength={1000} value={workEditor.workContent} onChange={(event) => setWorkEditor((current) => ({ ...current, workContent: event.target.value }))} placeholder={chinese ? '简要描述主要工作内容，AI 会做参考' : 'Briefly describe responsibilities'} /></label>
+              <label className="field"><span>{chinese ? '业务方向' : 'Business direction'} <small>({chinese ? '选填' : 'Optional'})</small></span><textarea rows={2} maxLength={200} value={workEditor.businessDirection} onChange={(event) => setWorkEditor((current) => ({ ...current, businessDirection: event.target.value }))} placeholder={chinese ? '简要描述公司的业务方向，AI 会做参考' : 'Brief description of company business'} /></label>
+              {entryError && <p className="account-auth-error" role="alert">{entryError}</p>}
+              <div className="profile-editor-actions"><button className="secondary-button" type="button" onClick={() => setWorkEditor(null)}>{chinese ? '取消' : 'Cancel'}</button><button className="primary-button" type="button" onClick={saveWork}><Check size={15} /> {chinese ? '保存工作经历' : 'Save work experience'}</button></div>
+            </div>}
+          </section>
+
+          <section className="profile-section-block">
+            <ProfileSectionHeader title={chinese ? '专业技能' : 'Skills'} actionLabel={chinese ? '添加技能' : 'Add skill'} onAction={() => addListItem('skills')} />
+            <div className="profile-list-editor">{fields.skills.length === 0 && <p className="profile-empty-state">{chinese ? '暂无技能' : 'No skills added yet.'}</p>}{fields.skills.map((skill, index) => <div className="profile-list-editor-row" key={`skill-${index}`}><input aria-label={`${chinese ? '技能' : 'Skill'} ${index + 1}`} value={skill} placeholder={chinese ? '如：TypeScript' : 'e.g. TypeScript'} onChange={(event) => updateListItem('skills', index, event.target.value)} /><button className="icon-button small" type="button" onClick={() => removeListItem('skills', index)} aria-label={`${chinese ? '删除技能' : 'Delete skill'} ${index + 1}`} title="Delete"><Trash2 size={14} /></button></div>)}</div>
+          </section>
+
+          <section className="profile-section-block">
+            <ProfileSectionHeader title={chinese ? '证书' : 'Certificates'} actionLabel={chinese ? '添加证书' : 'Add certificate'} onAction={() => addListItem('certificates')} />
+            <div className="profile-list-editor">{fields.certificates.length === 0 && <p className="profile-empty-state">{chinese ? '暂无证书' : 'No certificates added yet.'}</p>}{fields.certificates.map((certificate, index) => <div className="profile-list-editor-row" key={`certificate-${index}`}><input aria-label={`${chinese ? '证书' : 'Certificate'} ${index + 1}`} value={certificate} placeholder={chinese ? '如：CET-6' : 'e.g. CET-6'} onChange={(event) => updateListItem('certificates', index, event.target.value)} /><button className="icon-button small" type="button" onClick={() => removeListItem('certificates', index)} aria-label={`${chinese ? '删除证书' : 'Delete certificate'} ${index + 1}`} title="Delete"><Trash2 size={14} /></button></div>)}</div>
+          </section>
+
+          <section className="profile-section-block">
+            <ProfileSectionHeader title={chinese ? '想对 AI 说的话' : 'Message to AI'} />
+            <label className="field"><span>{chinese ? 'AI 生成要求' : 'AI generation instructions'}</span><textarea rows={5} maxLength={500} value={fields.aiMessage} onChange={(event) => updateField('aiMessage', event.target.value)} placeholder={chinese ? '给 AI 的提示词，例如：工作经验不足时补充合理内容，但不要虚构事实。' : 'Tell the AI how to tailor your resume without inventing facts.'} /><small className="profile-character-count">{fields.aiMessage.length} / 500</small></label>
+          </section>
+
+          <label className="field"><span>{chinese ? '个人简介' : 'Professional profile'}</span><textarea rows={5} value={fields.summary} onChange={(event) => updateField('summary', event.target.value)} /></label>
         </div>
-        <footer className="resume-dialog-actions">
-          <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>
-          <button className="primary-button" type="submit"><Check size={16} /> Save profile</button>
-        </footer>
+        <footer className="resume-dialog-actions"><button className="secondary-button" type="button" onClick={onCancel}>{chinese ? '取消' : 'Cancel'}</button><button className="primary-button" type="submit"><Check size={16} /> {chinese ? '保存资料' : 'Save profile'}</button></footer>
       </form>
-      {importDialogOpen && (
-        <ProfileImportDialog
-          onCancel={() => setImportDialogOpen(false)}
-          onImport={applyImportedProfile}
-        />
-      )}
-      {importedProfile && (
-        <ProfileSyncDialog
-          sourceLanguage={importedProfile.language}
-          onCancel={() => setImportedProfile(null)}
-          onSkip={() => setImportedProfile(null)}
-          onSync={syncImportedProfile}
-        />
-      )}
+      {importDialogOpen && <ProfileImportDialog onCancel={() => setImportDialogOpen(false)} onImport={applyImportedProfile} />}
+      {importedProfile && <ProfileSyncDialog sourceLanguage={importedProfile.language} onCancel={() => setImportedProfile(null)} onSkip={() => setImportedProfile(null)} onSync={syncImportedProfile} />}
+      {directoryPicker && <ProfileDirectoryPicker type={directoryPicker.type} language={language} keyword={directoryKeyword} results={directoryResults} loading={directoryLoading} onKeywordChange={setDirectoryKeyword} onSelect={selectDirectoryItem} onUseTypedValue={useTypedDirectoryValue} onCancel={() => setDirectoryPicker(null)} />}
+      {wheelPicker && <ProfileWheelPicker title={wheelPicker.type === 'degree' ? (chinese ? '选择学历' : 'Choose degree') : (chinese ? '选择时间' : 'Choose date')} chinese={chinese} columns={wheelPicker.columns} allowPresent={wheelPicker.allowPresent} onPresent={setPresent} onConfirm={confirmWheel} onCancel={() => setWheelPicker(null)} />}
     </div>
   );
 }

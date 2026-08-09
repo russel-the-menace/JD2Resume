@@ -456,6 +456,45 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
   };
 }
 
+function profileDirectoryPlugin(baseUrl: string): Plugin {
+  const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '');
+  const searchHandler = async (request: IncomingMessage, response: ServerResponse, next: () => void, endpoint: string) => {
+    if (request.method !== 'POST') {
+      next();
+      return;
+    }
+    try {
+      const body = await readJsonBody(request);
+      const upstream = await fetch(`${normalizedBaseUrl}/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const payload = await upstream.text();
+      response.statusCode = upstream.status;
+      response.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json; charset=utf-8');
+      response.end(payload);
+    } catch {
+      sendJson(response, 502, { error: 'The profile directory is temporarily unavailable.' });
+    }
+  };
+
+  const configureRoutes = (server: { middlewares: { use: Function } }) => {
+    server.middlewares.use('/api/searchUniversities', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+      void searchHandler(request, response, next, 'searchUniversities');
+    });
+    server.middlewares.use('/api/searchMajors', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+      void searchHandler(request, response, next, 'searchMajors');
+    });
+  };
+
+  return {
+    name: 'profile-directory-api',
+    configureServer: configureRoutes,
+    configurePreviewServer: configureRoutes,
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const providers: Provider[] = [];
@@ -478,7 +517,10 @@ export default defineConfig(({ mode }) => {
     });
   }
   return {
-    plugins: [resumeGenerationPlugin(providers)],
+    plugins: [
+      resumeGenerationPlugin(providers),
+      profileDirectoryPlugin(env.DIRECTORY_API_BASE_URL || 'https://feiwan.online/api'),
+    ],
     esbuild: { jsx: 'automatic' },
   };
 });
