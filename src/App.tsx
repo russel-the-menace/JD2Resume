@@ -4986,7 +4986,7 @@ function ResumeContentSection({ sectionId, data, profile, customContent, languag
   if (sectionId === 'summary') {
     return (
       <ResumeSection title={chinese ? chineseSectionLabels.summary : profile ? 'Personal Introduction' : 'Profile'} className="profile-section">
-        <p><FormattedPuppetText value={data.summary} /></p>
+        <p><FormattedPuppetText value={data.summary} allowBold maxBold={2} /></p>
       </ResumeSection>
     );
   }
@@ -5060,20 +5060,31 @@ function ProfileAvatar({ photoUrl, initials, className }) {
 }
 
 function ExperienceEntries({ items, profile = false }) {
-  return items.map((item) => (
-    <div className={cx('resume-entry', profile && 'profile-work-entry')} key={item.id}>
-      <div className="resume-entry-heading">
-        <div>
-          <strong>{profile ? `${item.company} - ${item.role}` : item.role}</strong>
-          <span>{profile ? item.location : `${item.company} · ${item.location}`}</span>
+  return items.map((item) => {
+    let underlinedBullets = 0;
+    return (
+      <div className={cx('resume-entry', profile && 'profile-work-entry')} key={item.id}>
+        <div className="resume-entry-heading">
+          <div>
+            <strong>{profile ? `${item.company} - ${item.role}` : item.role}</strong>
+            <span>{profile ? item.location : `${item.company} · ${item.location}`}</span>
+          </div>
+          <time>{item.start} - {item.end}</time>
         </div>
-        <time>{item.start} - {item.end}</time>
+        <ul>
+          {item.bullets.map((bullet, index) => {
+            const allowUnderline = underlinedBullets < 2 && /<u>.*?<\/u>/i.test(textValue(bullet));
+            if (allowUnderline) underlinedBullets += 1;
+            return (
+              <li key={index}>
+                <FormattedPuppetText value={bullet} allowUnderline={allowUnderline} maxUnderline={1} />
+              </li>
+            );
+          })}
+        </ul>
       </div>
-      <ul>
-        {item.bullets.map((bullet, index) => <li key={index}><FormattedPuppetText value={bullet} /></li>)}
-      </ul>
-    </div>
-  ));
+    );
+  });
 }
 
 function EducationEntries({ items, profile = false }) {
@@ -5114,14 +5125,30 @@ function ProfileSkills({ skills, language }) {
   );
 }
 
-function FormattedPuppetText({ value }) {
-  const tokens = textValue(value).split(/(<b>.*?<\/b>|<u>.*?<\/u>|\n)/gi);
+function FormattedPuppetText({
+  value,
+  allowBold = false,
+  allowUnderline = false,
+  maxBold = 0,
+  maxUnderline = 0,
+}) {
+  const tokens = textValue(value).split(/(<b>.*?<\/b>|<u>.*?<\/u>|(?:\r?\n[ \t]*)+)/gi);
+  let boldCount = 0;
+  let underlineCount = 0;
   return tokens.map((token, index) => {
     const bold = /^<b>(.*?)<\/b>$/i.exec(token);
-    if (bold) return <strong key={index}>{bold[1]}</strong>;
+    if (bold) {
+      boldCount += 1;
+      return allowBold && boldCount <= maxBold ? <strong key={index}>{bold[1]}</strong> : bold[1];
+    }
     const underline = /^<u>(.*?)<\/u>$/i.exec(token);
-    if (underline) return <u key={index}>{underline[1]}</u>;
-    if (token === '\n') return <br key={index} />;
+    if (underline) {
+      underlineCount += 1;
+      return allowUnderline && underlineCount <= maxUnderline ? <u key={index}>{underline[1]}</u> : underline[1];
+    }
+    if (/^(?:\r?\n[ \t]*)+$/.test(token)) {
+      return <span className="resume-paragraph-break" aria-hidden="true" key={index} />;
+    }
     return token;
   });
 }

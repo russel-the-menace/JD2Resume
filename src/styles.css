@@ -2520,6 +2520,12 @@ button:disabled {
   color: #3f453f;
 }
 
+.resume-paragraph-break {
+  display: block;
+  height: 9px;
+  line-height: 0;
+}
+
 .resume-entry + .resume-entry {
   margin-top: 17px;
 }
@@ -2878,7 +2884,19 @@ button:disabled {
 
 .template-profile .profile-education-entry .resume-entry-heading span {
   display: block;
-  margin-top: 6px;
+  margin-top: 0;
+}
+
+.template-profile .profile-education-entry .resume-entry-heading > div {
+  min-width: 0;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.template-profile .profile-education-entry .resume-entry-heading strong,
+.template-profile .profile-education-entry .resume-entry-heading span {
+  white-space: nowrap;
 }
 
 .profile-skills-grid {

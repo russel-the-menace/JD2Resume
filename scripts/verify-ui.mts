@@ -490,6 +490,15 @@ report.checks.livePreview = await desktopPage
   .locator('.resume-page')
   .getByText('Lead Product Designer', { exact: true })
   .isVisible();
+const firstExperienceBullets = firstExperience.locator('.bullet-editor textarea');
+await firstExperienceBullets.nth(0).fill('<b>Led</b> analytics workflows for <u>18K weekly users</u>.');
+await firstExperienceBullets.nth(1).fill('Built a <u>shared design system</u> across three teams.');
+await firstExperienceBullets.nth(2).fill('Improved <u>activation by 16%</u> through onboarding redesign.');
+
+await desktopPage.getByRole('button', { name: 'Professional summary', exact: true }).click();
+await desktopPage.locator('.summary-textarea').fill(
+  '<b>Product designer</b> focused on high-impact workflows.\n\n\nBuilds durable systems through clear cross-functional collaboration.',
+);
 
 await desktopPage.getByRole('button', { name: /Template/ }).click();
 await desktopPage.getByRole('button', { name: /Profile/ }).click();
@@ -527,6 +536,24 @@ report.checks.profileReferenceStructure =
     'Northwind Labs - Lead Product Designer',
     { exact: true },
   ).isVisible());
+report.checks.profileSummaryCollapsesParagraphBreaks =
+  (await desktopPage.locator('.profile-section .resume-paragraph-break').count()) === 1 &&
+  (await desktopPage.locator('.profile-section p > strong').count()) === 1 &&
+  (await desktopPage.locator('.profile-section .resume-paragraph-break').evaluate(
+    (element) => window.getComputedStyle(element).height,
+  )) === '9px';
+report.checks.profileWorkHighlightLimits =
+  (await desktopPage.locator('.profile-work-entry').first().locator('li strong').count()) === 0 &&
+  (await desktopPage.locator('.profile-work-entry').first().locator('li u').count()) === 2;
+report.checks.profileEducationStaysOnOneLine = await desktopPage
+  .locator('.profile-education-entry .resume-entry-heading > div')
+  .first()
+  .evaluate((element) => {
+    const school = element.querySelector('strong')?.getBoundingClientRect();
+    const degree = element.querySelector('span')?.getBoundingClientRect();
+    return window.getComputedStyle(element).flexDirection === 'row' &&
+      Boolean(school && degree && Math.abs(school.top - degree.top) < 4);
+  });
 report.checks.profileContentFits = await desktopPage.locator('.resume-page.template-profile').evaluate((element) =>
   element.clientHeight === element.scrollHeight,
 );
