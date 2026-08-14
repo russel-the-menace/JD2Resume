@@ -1,7 +1,6 @@
 import { GenerateFromFrontendRequest, ResumeData, mapFrontendRequestToResumeData } from './types';
-import { generateChineseJobBulletPrompt, generateChineseNonJobPrompt } from './prompts/ChinesePrompt';
-import { generateEnglishJobBulletPrompt, generateEnglishNonJobPrompt } from './prompts/EnglishPrompt';
-import { BulletPhaseWorkExperience } from './prompts/types';
+import { generateChinesePrompt } from './prompts/ChinesePrompt';
+import { generateEnglishPrompt } from './prompts/EnglishPrompt';
 import { ExperienceCalculator } from './utils/experienceCalculator';
 import { findMissingLockedExperiences } from './utils/lockedExperience';
 import { validateSupplementTimeline } from './utils/supplementTimeline';
@@ -151,10 +150,8 @@ export class PuppetResumePipeline {
       maxCharPerLine,
     };
 
-    const nonJobPrompt = isEnglish
-      ? generateEnglishNonJobPrompt(promptContext)
-      : generateChineseNonJobPrompt(promptContext);
-    const nonJobResponse = await this.generateText(nonJobPrompt, (text) => {
+    const combinedPrompt = isEnglish ? generateEnglishPrompt(promptContext) : generateChinesePrompt(promptContext);
+    const combinedResponse = await this.generateText(combinedPrompt, (text) => {
       assertNoIllegalOutput(text);
       try {
         const data = parseAIJson(text);
@@ -170,11 +167,11 @@ export class PuppetResumePipeline {
         const nonIntroductionText = JSON.stringify({
           position: data.position,
           professionalSkills: data.professionalSkills,
-          workExperience: data.workExperience,
         });
         if (/<\/?(?:b|u)>/i.test(nonIntroductionText)) {
-          throw new Error('非职责阶段仅允许在个人介绍中使用加深标记');
+          throw new Error('职位与技能禁止使用强调标记');
         }
+        if (/<\/?b>/i.test(JSON.stringify(data.workExperience))) throw new Error('工作职责禁止使用加深标记');
         if (!Array.isArray(data.workExperience) || data.workExperience.length === 0) {
           throw new Error('workExperience 不能为空');
         }
@@ -210,36 +207,7 @@ export class PuppetResumePipeline {
             throw new Error('每组技能点数量必须为 4 条');
           }
         }
-        return true;
-      } catch (error: any) {
-        throw new Error(`非职责阶段校验未通过: ${error.message}`);
-      }
-    });
-
-    const nonJobData = parseAIJson(nonJobResponse);
-    const workSkeleton: BulletPhaseWorkExperience[] = (nonJobData.workExperience || []).map((experience: any) => ({
-      company: experience.company,
-      position: experience.position,
-      startDate: experience.startDate,
-      endDate: experience.endDate,
-    }));
-    const bulletPrompt = isEnglish
-      ? generateEnglishJobBulletPrompt(promptContext, workSkeleton)
-      : generateChineseJobBulletPrompt(promptContext, workSkeleton);
-    const bulletResponse = await this.generateText(bulletPrompt, (text) => {
-      assertNoIllegalOutput(text);
-      try {
-        const data = parseAIJson(text);
-        if (!Array.isArray(data.workExperience)) throw new Error('workExperience 必须为数组');
-        if (data.workExperience.length !== workSkeleton.length) {
-          throw new Error(`职责阶段岗位数不一致（expected=${workSkeleton.length}, got=${data.workExperience.length}）`);
-        }
         data.workExperience.forEach((experience: any, index: number) => {
-          const locked = workSkeleton[index];
-          if (experience.company !== locked.company) throw new Error(`职责阶段非法修改公司名 index=${index}`);
-          if (experience.startDate !== locked.startDate || experience.endDate !== locked.endDate) {
-            throw new Error(`职责阶段非法修改工作时间 index=${index}`);
-          }
           if (!Array.isArray(experience.responsibilities) || experience.responsibilities.length !== 8) {
             throw new Error(`职责数量不足 8 条 index=${index}`);
           }
@@ -256,22 +224,17 @@ export class PuppetResumePipeline {
         });
         return true;
       } catch (error: any) {
-        throw new Error(`职责阶段校验未通过: ${error.message}`);
+        throw new Error(`单次生成校验未通过: ${error.message}`);
       }
     });
-
-    const bulletData = parseAIJson(bulletResponse);
-    const workExperience = workSkeleton.map((experience, index) => ({
-      ...experience,
-      responsibilities: bulletData.workExperience[index]?.responsibilities || [],
-    }));
+    const combinedData = parseAIJson(combinedResponse);
     return {
       ...baseData,
-      position: nonJobData.position || targetTitle,
-      yearsOfExperience: Math.floor(nonJobData.yearsOfExperience || baseData.yearsOfExperience || 0),
-      personalIntroduction: nonJobData.personalIntroduction,
-      professionalSkills: nonJobData.professionalSkills,
-      workExperience,
+      position: combinedData.position || targetTitle,
+      yearsOfExperience: Math.floor(combinedData.yearsOfExperience || baseData.yearsOfExperience || 0),
+      personalIntroduction: combinedData.personalIntroduction,
+      professionalSkills: combinedData.professionalSkills,
+      workExperience: combinedData.workExperience,
     };
   }
 }
