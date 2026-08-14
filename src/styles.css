@@ -2396,6 +2396,7 @@ button:disabled {
   min-height: 1123px;
   border: 0;
   background: #e8ece9;
+  pointer-events: none;
 }
 
 .canonical-preview-cover {
