@@ -5,6 +5,7 @@ import { generateEnglishJobBulletPrompt, generateEnglishNonJobPrompt } from "./p
 import { generateExtractionPrompt } from "./prompts/ExtractionPrompt";
 import { ExperienceCalculator } from "./utils/experienceCalculator";
 import { BulletPhaseWorkExperience } from "./prompts/types";
+import { findMissingLockedExperiences } from './utils/lockedExperience';
 const pdf = require('pdf-parse');
 
 export class ResumeAIService {
@@ -166,21 +167,15 @@ export class ResumeAIService {
             }
           }
 
-          // Existing employers keep the exact user-provided dates. Generated
-          // supplement companies are intentionally exempt from this lock.
-          const datesByCompany = new Map<string, Array<{ startDate: string; endDate: string }>>();
-          for (const exp of profile.workExperiences || []) {
-            const dates = datesByCompany.get(exp.company) || [];
-            dates.push({ startDate: exp.startDate, endDate: exp.endDate });
-            datesByCompany.set(exp.company, dates);
-          }
-          for (const exp of data.workExperience) {
-            const dates = datesByCompany.get(exp.company);
-            if (!dates) continue;
-            const expected = dates.shift();
-            if (expected && (exp.startDate !== expected.startDate || exp.endDate !== expected.endDate)) {
-              throw new Error(`已有公司 ${exp.company} 的工作时间不可修改`);
-            }
+          const missingLocked = findMissingLockedExperiences(
+            profile.workExperiences || [],
+            data.workExperience,
+          );
+          if (missingLocked.length) {
+            const missing = missingLocked
+              .map((exp) => `${exp.company} (${exp.startDate}-${exp.endDate})`)
+              .join(', ');
+            throw new Error(`已有公司或工作时间被删除/修改: ${missing}`);
           }
 
           if (!isEnglish) {
