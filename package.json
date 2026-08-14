@@ -13,6 +13,9 @@
     "check:puppet": "tsx scripts/verify-puppet-pipeline.mts",
     "check:layout": "tsx scripts/verify-puppet-layout.mts",
     "check:renderer": "tsx scripts/verify-renderer.mts",
+    "check:renderer-contract": "tsx scripts/verify-renderer-contract.mts",
+    "check:renderer-migration": "tsx scripts/verify-renderer-migration.mts",
+    "check:renderer-parity": "tsx scripts/verify-renderer-pdf-parity.mts",
     "check:persistence": "tsx scripts/verify-persistence.mts",
     "check:profile-import": "tsx scripts/verify-profile-import.mts",
     "check:ui": "tsx scripts/verify-ui.mts"
