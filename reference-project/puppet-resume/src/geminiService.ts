@@ -10,17 +10,18 @@ export class GeminiService {
   // Stable, multimodal, structured-output capable default. Pro is a fallback
   // for responses that fail our schema/content validators, not the first call.
   private readonly textModels = [
-    process.env.GEMINI_PRIMARY_MODEL || "gemini-3.5-flash-lite",
+    process.env.GEMINI_PRIMARY_MODEL || "gemini-3.5-flash",
     process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash",
     process.env.GEMINI_ESCALATION_MODEL || "gemini-3.1-pro-preview",
   ];
   private readonly visionModels = [
-    process.env.GEMINI_VISION_MODEL || "gemini-3.5-flash-lite",
+    process.env.GEMINI_VISION_MODEL || "gemini-3.5-flash",
     process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash",
     process.env.GEMINI_ESCALATION_MODEL || "gemini-3.1-pro-preview",
   ];
   private readonly openAiApiKey = process.env.OPENAI_API_KEY || '';
-  private readonly openAiModel = process.env.OPENAI_FALLBACK_MODEL || 'gpt-5-mini';
+  private readonly openAiModel = process.env.OPENAI_FALLBACK_MODEL || 'gpt-5.4-mini';
+  private readonly openAiRelayBaseUrl = (process.env.OPENAI_RELAY_BASE_URL || '').replace(/\/$/, '');
 
   constructor() {
     this.apiKey = process.env.GEMINI_API || "";
@@ -165,10 +166,10 @@ export class GeminiService {
     prompt: string,
     validator?: (text: string) => boolean | Promise<boolean>,
   ): Promise<string> {
-    if (!this.openAiApiKey) return '';
+    if (!this.openAiApiKey || !this.openAiRelayBaseUrl) return '';
     try {
-      console.log(`   - Gemini 失败，切换 OpenAI ${this.openAiModel}`);
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      console.log(`   - Gemini 失败，切换中转站模型 ${this.openAiModel}`);
+      const response = await fetch(`${this.openAiRelayBaseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.openAiApiKey}`,
@@ -177,7 +178,6 @@ export class GeminiService {
         body: JSON.stringify({
           model: this.openAiModel,
           messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' },
         }),
       });
       if (!response.ok) throw new Error(`OpenAI HTTP ${response.status}`);

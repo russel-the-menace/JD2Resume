@@ -26,9 +26,36 @@
 
 校验采用双层分工：本地代码负责文件大小、文字长度、字段类型、必填字段、公司名锁定和 JSON 结构等确定性规则；LLM 负责语义判断，例如岗位关键词覆盖、技能相关性和职责自然度。LLM 的“通过”不能直接放行，最终结果必须再次经过本地校验。
 
-当前模型策略优先使用 `gemini-3.5-flash-lite`，失败或输出不合格时先尝试 `gemini-2.5-flash` 和 `gemini-3.1-pro-preview`，全部失败后才使用 OpenAI `gpt-5-mini`。OpenAI 通过独立 provider 适配，只有配置 `OPENAI_API_KEY` 才启用，并复用同一套本地输出校验。
+当前模型策略优先使用 `gemini-3.5-flash`，失败或输出不合格时先尝试 `gemini-2.5-flash` 和 `gemini-3.1-pro-preview`，全部失败后才使用中转站上的 OpenAI-compatible `gpt-5.4-mini`。OpenAI 兜底必须配置 `OPENAI_RELAY_BASE_URL` 和 `OPENAI_API_KEY`，服务不会直连 `api.openai.com`。
 
 生成阶段的字段规则：已有公司的 `company` 和 `startDate/endDate` 由本地代码锁定；`position` 在第一阶段可按 JD 改写，第二阶段作为两阶段结构契约沿用；`responsibilities` 和技能动态生成。补足经历的公司、时间、职位和职责默认允许生成。
+
+## 在线一页简历与 LaTeX 的比较
+
+上游 LaTeX 的优势是固定纸张输出和编译后人工/Agent 检查：它会强制 CV 两页、求职信一页，并用 `pdftotext` 验证 ATS 文本层。它的分页调整主要依靠内容裁剪、`\needspace`、`\enlargethispage` 和模板规则。
+
+`puppet-resume` 的 Puppeteer 路径更适合在线简历：可以先测量真实 DOM 高度，再按工作经历数量选择布局策略、技能列数、每段职责数量和危险区分页。当前代码已经有 `findOptimalLayout`、`applySmartPageBreaks`、孤儿标题检测和密度裁剪。
+
+在线“智能一页”不应把所有内容硬缩到一页，而应定义优先级和可读性预算：
+
+1. 锁定头部身份、目标职位、最近经历和与 JD 最相关的职责。
+2. 优先裁剪低相关技能、旧经历中的低价值职责、重复表述和证书细节。
+3. 先减少内容数量，再轻微调整间距/列数，最后才考虑字号；不能用极小字体换一页。
+4. 每次裁剪输出 `omittedSections` 或 `prunedItems`，让投递证据知道在线版本省略了什么。
+5. 同时保留 `full` 和 `one-page` 两种渲染策略：在线预览默认一页，下载/投递可选择完整版本。
+6. 用 DOM 高度、最后一页填充率、孤儿标题、最小字号和 ATS 文本层做本地验收。
+
+建议的在线一页流水线：
+
+```text
+生成完整结构化简历
+  -> 本地按 JD 相关度排序职责/技能
+  -> 估算 DOM 高度
+  -> 按优先级逐项裁剪
+  -> 重新测量并处理分页危险区
+  -> 通过最小字号、孤儿标题和 ATS 校验
+  -> 保存 full/one-page 版本及裁剪记录
+```
 
 每次生成都是独立的投递证据实例。必须同时保存 `applicationId`、岗位 ID、岗位快照、候选人资料快照、语言和生成后的简历数据，确保同一个岗位重新生成或切换语言时，也能准确知道某次投递使用了哪一份简历。
 
