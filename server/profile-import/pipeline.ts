@@ -131,9 +131,31 @@ function normalizedDate(value: unknown) {
 }
 
 function dateRangeFromSource(value: string) {
-  const dates = [...value.matchAll(/(?:19|20)\d{2}(?:[./年-]\d{1,2}(?:月)?)?/g)].map((match) => normalizedDate(match[0]));
-  const present = /(?:至今|present|current)/i.test(value);
+  const compact = value.replace(/(\d)\s*([./年-])\s*(\d)/g, '$1$2$3');
+  const dates = [...compact.matchAll(/(?:19|20)\d{2}(?:[./年-]\d{1,2}(?:月)?)?/g)].map((match) => normalizedDate(match[0]));
+  const present = /(?:至今|present|current)/i.test(compact);
   return { startDate: dates[0] || '', endDate: present ? (/present/i.test(value) ? 'Present' : '至今') : dates[1] || '' };
+}
+
+function nearbySourceText(document: CanonicalDocument, ids: unknown, anchor: string, radius = 2) {
+  let anchors = referencedLines(document, ids);
+  if (!anchors.length && anchor) {
+    const target = normalizedComparable(anchor);
+    anchors = document.lines.filter((line) => normalizedComparable(line.text).includes(target));
+  }
+  const selected = new Map<string, CanonicalLine>();
+  for (const anchorLine of anchors) {
+    document.lines
+      .filter((line) => line.page === anchorLine.page && Math.abs(line.line - anchorLine.line) <= radius)
+      .forEach((line) => selected.set(line.id, line));
+  }
+  return [...selected.values()].sort((first, second) => first.page - second.page || first.line - second.line).map((line) => line.text).join('\n');
+}
+
+function dateRangeFromEvidence(document: CanonicalDocument, ids: unknown, anchor: string) {
+  const direct = dateRangeFromSource(sourceText(document, ids));
+  const nearby = dateRangeFromSource(nearbySourceText(document, ids, anchor));
+  return { startDate: direct.startDate || nearby.startDate, endDate: direct.endDate || nearby.endDate };
 }
 
 function normalizedStudyType(value: unknown, degree: string, citedSource = '') {
@@ -165,7 +187,7 @@ function cleanEducation(document: CanonicalDocument, value: Record<string, any>)
     if (!school || !supportedBySource(document, school, lines)) return [];
     const degree = text(entry.degree);
     const citedSource = sourceText(document, lines);
-    const sourceDates = dateRangeFromSource(citedSource);
+    const sourceDates = dateRangeFromEvidence(document, lines, school);
     return [{
       school,
       degree,
@@ -185,7 +207,7 @@ function cleanWork(document: CanonicalDocument, value: Record<string, any>) {
     const lines = stringArray(entry.sourceLines);
     const company = normalizedChineseSpacing(entry.company);
     if (!company || !supportedBySource(document, company, lines)) return [];
-    const sourceDates = dateRangeFromSource(sourceText(document, lines));
+    const sourceDates = dateRangeFromEvidence(document, lines, company);
     return [{
       company,
       jobTitle: text(entry.jobTitle),
@@ -265,7 +287,7 @@ export async function importProfileFacts(
   if (!document.lines.length) throw new Error('PROFILE_TEXT_EMPTY');
   const language = detectLanguage(document);
   const indexedText = indexedDocumentText(document);
-  const basic = await runModule(
+  const basicRequest = runModule(
     'basic', [models.lite, models.mini, models.escalation], basicPrompt(language, indexedText), 1_200, caller,
     (value) => isRecord(value.basic) && isRecord(value.sources),
   );
@@ -283,13 +305,14 @@ export async function importProfileFacts(
       (value) => Array.isArray(value.certificates),
     ),
   };
-  const entries = await Promise.all(Object.entries(moduleRequests).map(async ([name, request]) => {
+  const entriesRequest = Promise.all(Object.entries(moduleRequests).map(async ([name, request]) => {
     try {
       return [name, await request] as const;
     } catch (error) {
       return [name, { error: error instanceof Error ? error.message : 'MODULE_FAILED' }] as const;
     }
   }));
+  const [basic, entries] = await Promise.all([basicRequest, entriesRequest]);
   const modules = Object.fromEntries(entries) as Record<string, ModuleResult | { error: string }>;
   const educationValue = 'value' in modules.education ? cleanEducation(document, modules.education.value) : [];
   const workValue = 'value' in modules.work ? cleanWork(document, modules.work.value) : [];

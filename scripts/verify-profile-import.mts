@@ -18,13 +18,20 @@ const models: ProfileImportModels = {
 
 const calls: ProfileTaskRequest[] = [];
 let educationAttempts = 0;
+let basicFinished = false;
+let parallelTaskStartedBeforeBasicFinished = false;
 const caller = async (request: ProfileTaskRequest) => {
   calls.push(request);
   if (request.task === 'basic') {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    basicFinished = true;
     return {
       basic: { fullName: '田俊铃', gender: '', birthday: '', phone: '13800138000', email: 'junling@example.com' },
       sources: { fullName: ['p1-l1'], phone: ['p1-l2'], email: ['p1-l2'] },
     };
+  }
+  if (['education', 'work', 'certificates'].includes(request.task) && !basicFinished) {
+    parallelTaskStartedBeforeBasicFinished = true;
   }
   if (request.task === 'education') {
     educationAttempts += 1;
@@ -32,7 +39,7 @@ const caller = async (request: ProfileTaskRequest) => {
     return {
       educations: [{
         school: '复旦大学', degree: '本科', studyType: '本科', major: '视觉传达设计',
-        startDate: '', endDate: '', sourceLines: ['p1-l3', 'p1-l4'], descriptionSourceLines: [],
+        startDate: '', endDate: '', sourceLines: ['p1-l3'], descriptionSourceLines: [],
       }],
     };
   }
@@ -58,7 +65,7 @@ const imported = await importProfileFacts({
     '田俊铃',
     '13800138000 junling@example.com',
     '复旦大学 视觉传达设计 本科',
-    '2014-09 - 2018-06',
+    '2014 . 09 - 2018 . 06',
     '一 间客厅社交主题酒馆 新媒体运营 2020.01 - 2021.02',
   ].join('\n'),
   attachment: null,
@@ -76,6 +83,7 @@ assert.deepEqual(calls.filter((call) => call.task === 'education').map((call) =>
 assert.equal(calls.filter((call) => call.task === 'basic').length, 1);
 assert.equal(calls.filter((call) => call.task === 'work').length, 1);
 assert.equal(calls.filter((call) => call.task === 'certificates').length, 1);
+assert.equal(parallelTaskStartedBeforeBasicFinished, true);
 
 const translated = await translateProfileFacts('chinese', imported.profile, models, caller);
 assert.equal(translated.profile.fullName, 'Junling Tian');
