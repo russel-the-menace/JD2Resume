@@ -4,10 +4,14 @@ import { fromPuppetResume, toPuppetRequest } from '../server/puppet-resume/adapt
 import { ExperienceCalculator } from '../server/puppet-resume/utils/experienceCalculator';
 import { validateSupplementCompanyNames } from '../server/puppet-resume/utils/supplementCompany';
 import { extractTextJob } from '../server/puppet-resume/jobExtraction';
+import { bulletProjection, hasCompleteResponsibilities, structureProjection } from '../server/puppet-resume/singlePass';
 
 assert.deepEqual(extractTextJob('岗位名称：高级招聘专员\n要求 3-5 年招聘经验。', 'chinese'), {
   title: '高级招聘专员', experience: '3-5 年', description: '岗位名称：高级招聘专员\n要求 3-5 年招聘经验。',
 });
+assert.equal(hasCompleteResponsibilities({ workExperience: [{ responsibilities: Array(8).fill('result') }] }), true);
+assert.deepEqual(structureProjection({ workExperience: [{ company: 'Locked', responsibilities: ['result'] }] }).workExperience[0].responsibilities, []);
+assert.deepEqual(bulletProjection({ workExperience: [{ responsibilities: ['result'] }] }), { workExperience: [{ responsibilities: ['result'] }] });
 
 const input = {
   applicationId: 'application-test',

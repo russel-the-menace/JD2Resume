@@ -63,7 +63,7 @@ function validateResponsibilityLength(value: string, isEnglish: boolean, maxChar
   const length = responsibilityLength(value, isEnglish);
   // Layout prompts target a fuller two-line bullet, while this gate only rejects
   // content that is clearly too short to render or long enough to create a third line.
-  const minimum = maxCharPerLine * 0.75;
+  const minimum = maxCharPerLine * 0.7;
   const maximum = maxCharPerLine * 2.25;
   return { valid: length >= minimum && length <= maximum, length, minimum, maximum };
 }

@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { PuppetResumePipeline } from './server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
 import { extractTextJob } from './server/puppet-resume/jobExtraction';
+import { bulletProjection, hasCompleteResponsibilities, promoteStructurePromptToSinglePass, structureProjection } from './server/puppet-resume/singlePass';
 import { renderPdfFromPagePlan } from './server/puppet-resume/exportPdf';
 import { ExportSessionStore } from './server/puppet-resume/exportSession';
 import { canonicalize } from './src/resume-renderer/canonicalJson';
@@ -396,15 +397,35 @@ ${source.text || 'Read the attached JD directly.'}`;
 }
 
 function createPuppetTextGenerator(providers: Provider[], traceId: string) {
+  let singlePassResult: Record<string, any> | null = null;
   return async (prompt: string, validator: (text: string) => boolean | Promise<boolean>) => {
     const stage = /Phase 2/i.test(prompt) ? 'job-bullets' : 'resume-structure';
+    if (stage === 'job-bullets' && singlePassResult) {
+      const cached = JSON.stringify(bulletProjection(singlePassResult));
+      try {
+        if (await validator(cached)) return cached;
+      } catch (error) {
+        console.warn('[Resume Generation] Single-pass responsibilities require fallback', {
+          traceId,
+          error: error instanceof Error ? error.message : 'VALIDATION_FAILED',
+        });
+      }
+      singlePassResult = null;
+    }
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
+        const singlePass = stage === 'resume-structure';
         const generated = await requestFromProviders(
           providers,
           'Return valid JSON only. Do not use markdown or add commentary.',
-          prompt,
-          async (value) => validator(JSON.stringify(value)),
+          singlePass ? promoteStructurePromptToSinglePass(prompt) : prompt,
+          async (value) => {
+            if (!singlePass) return validator(JSON.stringify(value));
+            if (!isRecord(value) || !hasCompleteResponsibilities(value)) return false;
+            const valid = await validator(JSON.stringify(structureProjection(value)));
+            if (valid) singlePassResult = value;
+            return valid;
+          },
           null,
           16_000,
           PROVIDER_TIMEOUT_MS,
