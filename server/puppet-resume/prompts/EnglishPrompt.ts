@@ -1,9 +1,21 @@
 import { BulletPhaseWorkExperience, PromptContext } from './types';
+import { buildSupplementCompanyPlan } from '../utils/supplementCompany';
 
-const supplementalCompanyRulesEnglish = `A supplemental company name must use exactly one of these formats:
-1. English small-company format: a natural English name ending in "Inc" or "Inc.". Do not use Chinese legal suffixes, public companies, famous brands, or any of the candidate's real company names.
-2. Chinese city-studio format: exactly "上海/深圳/广州 + a 2-18 character name + 工作室"; the city prefix is mandatory.
-Use a different company name for every supplemental role. Prefer an obscure small-company style; when a real low-profile company cannot be confidently verified as non-conflicting, use an original, natural city-studio name.`;
+function supplementalCompanyRulesEnglish(context: PromptContext): string {
+  const plan = buildSupplementCompanyPlan(context.supplementSegments || [], {
+    educations: context.profile.educations || [],
+    location: context.profile.location,
+  });
+  const sequenceRules = plan.map((item) => item.format === 'inc'
+    ? `- Supplemental role ${item.sequence} (${item.startDate} to ${item.endDate}): use a low-profile English company name ending in "Inc" or "Inc.".`
+    : item.stage === 'in-school'
+      ? `- Supplemental role 1 (${item.startDate} to ${item.endDate}): use a studio. This is an in-school period, so prefer a local studio in ${item.preferredLocation}.`
+      : `- Supplemental role 1 (${item.startDate} to ${item.endDate}): use a studio. This starts in senior year or after graduation, so prefer a studio in Beijing, Shanghai, Guangzhou, Shenzhen, or Hangzhou.`
+  ).join('\n');
+  return `Number supplemental roles chronologically from oldest to newest and follow this exact company-name plan:
+${sequenceRules}
+A studio may be located anywhere, but its Chinese name must use "place name + studio name + 工作室". English companies must use a natural obscure-small-company style and end in Inc/Inc. Never use Chinese limited-company/group suffixes, public or famous companies, the candidate's real companies, or duplicate supplemental company names.`;
+}
 
 export function generateEnglishPrompt(context: PromptContext): string {
   const {
@@ -105,7 +117,7 @@ ${needsSupplement ? `
 ${(supplementSegments || []).map((seg, idx) => `
 Supplement ${idx + 1}:
 - Period: ${seg.startDate} to ${seg.endDate} (${seg.years} years)
-- Company Name: ${supplementalCompanyRulesEnglish}
+- Company Name: ${supplementalCompanyRulesEnglish(context)}
 - Position: Flexible based on "${targetTitle}":
   * If job title is clear ("Product Manager"), use it or variations ("Product Associate").
   * Ensure seniority matches the experience level at that time (Junior for early career).
@@ -241,7 +253,7 @@ export function generateEnglishNonJobPrompt(context: PromptContext): string {
   }).join('\n');
 
   const supplementText = needsSupplement
-    ? `Supplement is required: approximately ${supplementYears} years. Start date cannot be earlier than ${earliestWorkDate}.\nSegments:\n${(supplementSegments || []).map((seg, idx) => `- Segment ${idx + 1}: ${seg.startDate} to ${seg.endDate} (${seg.years} years)`).join('\n')}\nSupplement entries must be inserted into timeline, not appended blindly.\n${supplementalCompanyRulesEnglish}`
+    ? `Supplement is required: approximately ${supplementYears} years. Start date cannot be earlier than ${earliestWorkDate}.\nSegments:\n${(supplementSegments || []).map((seg, idx) => `- Segment ${idx + 1}: ${seg.startDate} to ${seg.endDate} (${seg.years} years)`).join('\n')}\nSupplement entries must be inserted into timeline, not appended blindly.\n${supplementalCompanyRulesEnglish(context)}`
     : 'No supplement is required. Output workExperience count must equal the existing count; no new role is allowed.';
 
   const seniorityRule = seniorityThresholdDate

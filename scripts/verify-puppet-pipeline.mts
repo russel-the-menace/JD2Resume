@@ -149,11 +149,32 @@ assert.ok(singleExperienceCalculation.supplementSegments[0].startDate >= singleE
 const lockedCompany = { company: 'Real Company', startDate: '2020-01', endDate: '至今' };
 assert.deepEqual(validateSupplementCompanyNames([lockedCompany], [
   lockedCompany,
-  { company: 'Quiet Harbor Inc', startDate: '2017-01', endDate: '2020-01' },
+  { company: '上海微澜内容工作室', startDate: '2017-01', endDate: '2020-01' },
 ]), []);
 assert.deepEqual(validateSupplementCompanyNames([], [
   { company: '深圳微澜内容工作室', startDate: '2024-01', endDate: '2025-01' },
 ]), []);
+assert.deepEqual(validateSupplementCompanyNames([], [
+  { company: 'Quiet Harbor Inc', startDate: '2025-02', endDate: '2026-08' },
+  { company: '成都微澜设计工作室', startDate: '2023-02', endDate: '2025-01' },
+], [
+  { startDate: '2023-02', endDate: '2025-01' },
+  { startDate: '2025-02', endDate: '2026-08' },
+], {
+  educations: [{ school: '四川大学', startDate: '2022-09', endDate: '2026-06' }],
+}), []);
+assert.match(validateSupplementCompanyNames([], [
+  { company: '成都微澜设计工作室', startDate: '2025-09', endDate: '2026-08' },
+], [{ startDate: '2025-09', endDate: '2026-08' }], {
+  educations: [{ school: '四川大学', startDate: '2022-09', endDate: '2026-06' }],
+}).join('; '), /北京\/上海\/广州\/深圳\/杭州/);
+assert.match(validateSupplementCompanyNames([], [
+  { company: '深圳微澜内容工作室', startDate: '2023-02', endDate: '2024-01' },
+  { company: '杭州远岫产品工作室', startDate: '2024-02', endDate: '2025-01' },
+], [
+  { startDate: '2023-02', endDate: '2024-01' },
+  { startDate: '2024-02', endDate: '2025-01' },
+]).join('; '), /第 2 段补足经历必须使用英文 Inc 名称/);
 assert.match(
   validateSupplementCompanyNames([], [
     { company: 'Apple Inc', startDate: '2024-01', endDate: '2025-01' },

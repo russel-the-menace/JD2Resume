@@ -1,9 +1,21 @@
 import { BulletPhaseWorkExperience, PromptContext } from './types';
+import { buildSupplementCompanyPlan } from '../utils/supplementCompany';
 
-const supplementalCompanyRulesChinese = `补足经历的公司名只能二选一：
-1. 英文小公司格式：使用自然的英文名称并以 "Inc" 或 "Inc." 结尾；不得含中文，不得使用 "有限公司/集团/股份有限公司"；必须避开上市公司、知名品牌和候选人的真实公司名。
-2. 城市工作室格式：严格使用 "上海/深圳/广州 + 2-18 字名称 + 工作室"，例如结构为 "深圳XXXX工作室"；不得省略城市。
-不同补足经历必须使用不同公司名。优先选择低知名度小公司风格；无法确认真实小公司是否重名时，使用原创且自然的城市工作室名称。`;
+function supplementalCompanyRulesChinese(context: PromptContext): string {
+  const plan = buildSupplementCompanyPlan(context.supplementSegments || [], {
+    educations: context.profile.educations || [],
+    location: context.profile.location,
+  });
+  const sequenceRules = plan.map((item) => item.format === 'inc'
+    ? `- 虚拟经历 ${item.sequence}（${item.startDate} 至 ${item.endDate}）：使用英文小公司名，以 "Inc" 或 "Inc." 结尾。`
+    : item.stage === 'in-school'
+      ? `- 虚拟经历 1（${item.startDate} 至 ${item.endDate}）：使用工作室；该阶段在校，优先使用${item.preferredLocation}的本地工作室。`
+      : `- 虚拟经历 1（${item.startDate} 至 ${item.endDate}）：使用工作室；该阶段已到大四或毕业，优先使用北京、上海、广州、深圳、杭州的工作室。`
+  ).join('\n');
+  return `补足经历按时间从早到晚编号，必须执行以下公司名计划：
+${sequenceRules}
+工作室可以位于任何地方，但名称必须为“地名+名称+工作室”。英文公司必须使用自然的低知名度小公司风格并以 Inc/Inc. 结尾。禁止“有限公司/集团/股份有限公司”，禁止上市公司、知名品牌、候选人的真实公司名以及补足公司间重名。`;
+}
 
 export function generateChinesePrompt(context: PromptContext): string {
   const {
@@ -39,7 +51,7 @@ export function generateChinesePrompt(context: PromptContext): string {
   // 2. 补充经历部分的文本
   let supplementInstruction = '';
   if (needsSupplement) {
-    const companyNamingGuide = `* 公司名规则：${supplementalCompanyRulesChinese}`;
+    const companyNamingGuide = `* 公司名规则：${supplementalCompanyRulesChinese(context)}`;
 
     const segmentsText = (supplementSegments || []).map((seg, idx) => `
     - **补充段落 ${idx + 1}**: ${seg.startDate} 至 ${seg.endDate} (${seg.years}年)
@@ -263,7 +275,7 @@ export function generateChineseNonJobPrompt(context: PromptContext): string {
   }).join('\n');
 
   const supplementText = needsSupplement
-    ? `需要补充约 ${supplementYears} 年经历。开始时间不得早于 ${earliestWorkDate}。\n补充片段：\n${(supplementSegments || []).map((seg, idx) => `- 片段${idx + 1}: ${seg.startDate} 至 ${seg.endDate}（${seg.years}年）`).join('\n')}\n补充经历必须插入时间线中，不得全部堆在末尾。\n${supplementalCompanyRulesChinese}`
+    ? `需要补充约 ${supplementYears} 年经历。开始时间不得早于 ${earliestWorkDate}。\n补充片段：\n${(supplementSegments || []).map((seg, idx) => `- 片段${idx + 1}: ${seg.startDate} 至 ${seg.endDate}（${seg.years}年）`).join('\n')}\n补充经历必须插入时间线中，不得全部堆在末尾。\n${supplementalCompanyRulesChinese(context)}`
     : '无需补充经历。输出工作经历条数必须与用户现有条数一致，严禁新增岗位。';
 
   const existingExpText = (profile.workExperiences || []).map((exp, idx) =>

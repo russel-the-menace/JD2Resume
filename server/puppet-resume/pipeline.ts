@@ -196,7 +196,12 @@ export class PuppetResumePipeline {
           supplementSegments,
         );
         if (timelineErrors.length) throw new Error(`补足经历时间线无效: ${timelineErrors.join('; ')}`);
-        const companyErrors = validateSupplementCompanyNames(profile.workExperiences || [], data.workExperience);
+        const companyErrors = validateSupplementCompanyNames(
+          profile.workExperiences || [],
+          data.workExperience,
+          supplementSegments,
+          { educations: profile.educations || [], location: profile.location },
+        );
         if (companyErrors.length) throw new Error(`补足经历公司名无效: ${companyErrors.join('; ')}`);
 
         if (!isEnglish) {
