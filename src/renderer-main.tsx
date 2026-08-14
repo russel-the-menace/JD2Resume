@@ -1,4 +1,3 @@
-import { createRoot } from 'react-dom/client';
 import './resume-renderer/puppet.css';
 import { RENDERER_PROTOCOL, RENDERER_VERSION } from './resume-renderer/constants';
 import { RendererError, rendererFailureCode } from './resume-renderer/errors';
@@ -16,7 +15,6 @@ window.addEventListener('message', async (event) => {
   try { const result = await runCanonicalLayout(snapshot, controller.signal); if (controller.signal.aborted || activeRequestId !== requestId) return; post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_SUCCEEDED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash, ...result }); }
   catch (error) { if (controller.signal.aborted || activeRequestId !== requestId) return; const failureCode = rendererFailureCode(error); post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_FAILED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash, failureCode, report: failureReport(snapshot.revision, snapshot.snapshotHash, failureCode, error) }); }
 });
-createRoot(document.querySelector('#renderer-root')!).render(<div className="renderer-boot" aria-hidden="true" />);
 async function runExportReplay() {
   const params = new URLSearchParams(window.location.search); const token = params.get('session');
   if (!token) return;
