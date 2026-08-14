@@ -1616,6 +1616,9 @@ function App() {
     });
   }, [runProfileRequest]);
 
+  const translateImportedProfile = useCallback(async ({ language, profile }) =>
+    runProfileRequest('/api/translate-profile', { language, profile }), [runProfileRequest]);
+
   const generateResumeFromJobDescription = useCallback(async ({
     jobDescription,
     outputLanguage,
@@ -1755,6 +1758,7 @@ function App() {
         userProfile={userProfile}
         onProfileSave={saveUserProfile}
         onImportProfile={importProfileFromResume}
+        onTranslateProfile={translateImportedProfile}
         onSearchDirectory={searchProfileDirectory}
         onGenerate={generateResumeFromJobDescription}
     />
@@ -2258,6 +2262,7 @@ function ResumeLibrary({
   userProfile,
   onProfileSave,
   onImportProfile,
+  onTranslateProfile,
   onSearchDirectory,
   onGenerate,
 }) {
@@ -2436,6 +2441,7 @@ function ResumeLibrary({
           onSave={onProfileSave}
           onComplete={() => setProfileDialogOpen(false)}
           onImport={onImportProfile}
+          onTranslate={onTranslateProfile}
           onSearchDirectory={onSearchDirectory}
         />
       )}
@@ -2921,7 +2927,7 @@ function ProfileWheelPicker({ title, chinese, columns, allowPresent, onPresent, 
   );
 }
 
-function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport, onSearchDirectory }) {
+function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport, onTranslate, onSearchDirectory }) {
   const [language, setLanguage] = useState('chinese');
   const [draft, setDraft] = useState(() => normalizeUserProfile(profile));
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -3142,12 +3148,16 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
     setImportDialogOpen(false);
   };
 
-  const syncImportedProfile = () => {
+  const syncImportedProfile = async () => {
     if (!importedProfile) return;
     const targetLanguage = importedProfile.language === 'chinese' ? 'english' : 'chinese';
+    const translated = await onTranslate({
+      language: importedProfile.language,
+      profile: importedProfile.profiles[importedProfile.language],
+    });
     const translatedFields = mergeImportedProfileFields(
       draft[targetLanguage],
-      importedProfile.profiles[targetLanguage],
+      translated.profiles[targetLanguage],
       targetLanguage,
     );
     const nextDraft = { ...draft, [targetLanguage]: translatedFields };

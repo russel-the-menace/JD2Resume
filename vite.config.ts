@@ -5,6 +5,12 @@ import { PuppetResumePipeline } from './server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
 import { renderPuppetPdf, resolvePuppetLayout } from './server/puppet-resume/layout';
 import { statePersistencePlugin } from './server/persistence';
+import {
+  importProfileFacts,
+  translateProfileFacts,
+  type ProfileImportModels,
+  type ProfileTaskRequest,
+} from './server/profile-import/pipeline';
 
 const MAX_REQUEST_BYTES = 16_000_000;
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
@@ -84,57 +90,6 @@ function chatCompletionsEndpoint(baseUrl: string) {
     : `${normalized}/v1/chat/completions`;
 }
 
-const profileDetailsShape = {
-  fullName: 'string',
-  gender: 'string',
-  birthday: 'YYYY-MM or empty string',
-  phone: 'string',
-  phoneEn: 'string',
-  email: 'string',
-  location: 'string',
-  wechat: 'string',
-  whatsapp: 'string',
-  telegram: 'string',
-  linkedin: 'string',
-  website: 'string',
-  educations: [{
-    school: 'string',
-    degree: 'string',
-    studyType: 'string',
-    major: 'string',
-    startDate: 'YYYY-MM or empty string',
-    endDate: 'YYYY-MM, Present/至今, or empty string',
-    description: 'string',
-  }],
-  workExperiences: [{
-    company: 'string',
-    jobTitle: 'string',
-    businessDirection: 'string',
-    workContent: 'string',
-    startDate: 'YYYY-MM or empty string',
-    endDate: 'YYYY-MM, Present/至今, or empty string',
-  }],
-  skills: ['string'],
-  certificates: ['string'],
-};
-
-function buildProfileImportPrompt(resumeText: string) {
-  const sourceInstruction = resumeText
-    ? `Resume text:\n${resumeText}`
-    : 'A resume file or image is attached. Read it directly, including the header contact line. Do not rely only on embedded PDF text.';
-  const responseShape = {
-    language: 'chinese or english',
-    profiles: { chinese: profileDetailsShape, english: profileDetailsShape },
-  };
-  return `You extract complete personal profile details from a resume. Return valid JSON only. Detect whether the resume is primarily Chinese or English, then provide both a Chinese and an English profile in the same response. Use only explicit resume facts. Extract every education, work experience, skill, and certificate shown in the source; do not omit these sections when they exist in an attached PDF or image. Never invent a name, gender, contact detail, date, school, employer, skill, certificate, location, social account, or website. Do not extract or generate a personal introduction, professional profile, about, objective, or summary. Carefully read the phone number and email address even when the PDF text layer is malformed. Preserve exact factual values such as dates, email addresses, phone numbers, websites, and account handles across both profiles. Translate human-readable fields into each profile language when appropriate. Preserve all list items and their original order.\n\nReturn exactly this JSON shape:\n${JSON.stringify(responseShape, null, 2)}\n\nFor Chinese profiles use Chinese values when they are known, including gender values 男, 女, or 其他 and 至今 for current dates. For English profiles use English values, including Male, Female, Non-binary, or Prefer not to say only when explicit and Present for current dates. Romanize Chinese names in Western resume order: given name followed by family name. For example, 田俊铃 must be Junling Tian, not Tian Junling. Leave unknown scalar fields empty and unknown lists empty.\n\n${sourceInstruction}`;
-}
-
-function buildProfileTranslationPrompt(sourceLanguage: string, profile: Record<string, any>) {
-  const targetLanguage = sourceLanguage === 'chinese' ? 'english' : 'chinese';
-  const responseShape = { language: targetLanguage, profile: profileDetailsShape };
-  return `You translate a complete personal profile from ${sourceLanguage} to ${targetLanguage}. Return valid JSON only. Preserve every education, work experience, skill, and certificate in its original order. Preserve exact factual values such as dates, email addresses, phones, websites, and account handles. Translate human-readable fields such as names, location, school, degree, major, job title, descriptions, skills, and certificates when appropriate. Do not invent missing fields. Do not add a personal introduction or summary. When translating a Chinese name into English, use Western resume order: given name followed by family name. For example, 田俊铃 must be Junling Tian, not Tian Junling.\n\nReturn exactly this JSON shape:\n${JSON.stringify(responseShape, null, 2)}\n\nSource profile:\n${JSON.stringify(profile)}`;
-}
-
 function sourceFromInput(input: Record<string, any>, textField: string) {
   const sourceType = stringValue(input.sourceType) || 'text';
   if (sourceType === 'text') {
@@ -199,6 +154,7 @@ async function requestJsonCompletion(
   signal: AbortSignal,
   attachment: SourceAttachment | null = null,
   maxTokens = 4_000,
+  maxAttempts = 2,
 ) {
   const requestBody = JSON.stringify({
     model: attachment?.sourceType === 'pdf' && provider.pdfModel
@@ -213,7 +169,7 @@ async function requestJsonCompletion(
     max_tokens: maxTokens,
   });
   let lastError: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       const upstream = await fetch(provider.endpoint, {
         method: 'POST',
@@ -233,6 +189,8 @@ async function requestJsonCompletion(
           : 'UPSTREAM_ERROR');
       }
       const providerData = await upstream.json();
+      const finishReason = stringValue(providerData?.choices?.[0]?.finish_reason).toLowerCase();
+      if (['length', 'max_tokens'].includes(finishReason)) throw new Error('OUTPUT_TRUNCATED');
       const content = providerData?.choices?.[0]?.message?.content;
       if (typeof content !== 'string') throw new Error('INVALID_UPSTREAM_RESPONSE');
       const generated = JSON.parse(cleanGeneratedJson(content));
@@ -245,11 +203,36 @@ async function requestJsonCompletion(
       }
       const retryable = error instanceof TypeError ||
         (error instanceof Error && ['UPSTREAM_RETRYABLE', 'INVALID_UPSTREAM_RESPONSE'].includes(error.message));
-      if (!retryable || attempt === 1) throw error;
+      if (!retryable || attempt === maxAttempts - 1) throw error;
       await new Promise((resolve) => setTimeout(resolve, PROVIDER_RETRY_DELAY_MS));
     }
   }
   throw lastError instanceof Error ? lastError : new Error('UPSTREAM_UNAVAILABLE');
+}
+
+async function requestProfileTask(
+  providers: Provider[],
+  request: ProfileTaskRequest,
+) {
+  const baseProvider = providers[0];
+  if (!baseProvider) throw new Error('PROFILE_PROVIDER_UNAVAILABLE');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const result = await requestJsonCompletion(
+      { ...baseProvider, model: request.model, pdfModel: undefined },
+      'Return valid JSON only. Do not use markdown or add commentary.',
+      request.prompt,
+      controller.signal,
+      request.attachment || null,
+      request.maxTokens,
+      1,
+    );
+    console.log('[Profile Import] Module completed', { task: request.task, model: request.model });
+    return result;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function requestFromProviders(
@@ -282,34 +265,6 @@ async function requestFromProviders(
   } finally {
     clearTimeout(timeout);
   }
-}
-
-function validProfileResponse(value: any) {
-  return isRecord(value) && ['english', 'chinese'].includes(value.language) && isRecord(value.profile);
-}
-
-function validProfileImportResponse(value: any) {
-  return isRecord(value) && ['english', 'chinese'].includes(value.language) &&
-    ((isRecord(value.profiles) && isRecord(value.profiles.chinese) && isRecord(value.profiles.english)) ||
-      isRecord(value.profile));
-}
-
-function normalizeProfileImportResponse(value: Record<string, any>) {
-  const sourceLanguage = value.language === 'chinese' ? 'chinese' : 'english';
-  const profiles = isRecord(value.profiles) ? value.profiles : {
-    [sourceLanguage]: isRecord(value.profile) ? value.profile : {},
-  };
-  const withoutSummary = (profile: Record<string, any>) => {
-    const { summary: _summary, summarySource: _summarySource, ...details } = profile;
-    return details;
-  };
-  return {
-    language: sourceLanguage,
-    profiles: {
-      chinese: isRecord(profiles.chinese) ? withoutSummary(profiles.chinese) : {},
-      english: isRecord(profiles.english) ? withoutSummary(profiles.english) : {},
-    },
-  };
 }
 
 async function extractPuppetJob(
@@ -362,7 +317,7 @@ function createPuppetTextGenerator(providers: Provider[]) {
   };
 }
 
-function resumeGenerationPlugin(providers: Provider[]): Plugin {
+function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImportModels): Plugin {
   const parseInput = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (request.method !== 'POST') {
       next();
@@ -460,14 +415,14 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
       return;
     }
     try {
-      const imported = await requestFromProviders(
-        providers,
-        'Return extracted personal profile details as valid JSON. Do not use markdown or add commentary.',
-        buildProfileImportPrompt(source.text),
-        validProfileImportResponse,
-        source.attachment,
-      );
-      sendJson(response, 200, normalizeProfileImportResponse(imported));
+      const imported = await importProfileFacts({
+        sourceType: source.attachment?.sourceType || 'text',
+        text: source.text,
+        attachment: source.attachment
+          ? { name: source.attachment.name, mimeType: source.attachment.mimeType, data: source.attachment.data }
+          : null,
+      }, profileModels, (task) => requestProfileTask(providers, task));
+      sendJson(response, 200, imported);
     } catch (error) {
       sendProviderFailure(response, error, 'The profile import service is unavailable. Please try again.');
     }
@@ -481,11 +436,11 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
       return;
     }
     try {
-      const translated = await requestFromProviders(
-        providers,
-        'Return a translated personal profile as valid JSON. Do not use markdown or add commentary.',
-        buildProfileTranslationPrompt(input.language, input.profile),
-        (value) => validProfileResponse(value) && value.language !== input.language,
+      const translated = await translateProfileFacts(
+        input.language,
+        input.profile,
+        profileModels,
+        (task) => requestProfileTask(providers, task),
       );
       sendJson(response, 200, translated);
     } catch {
@@ -602,10 +557,17 @@ export default defineConfig(({ mode }) => {
       supportsDirectFileInput: true,
     })));
   }
+  const profileModels: ProfileImportModels = {
+    lite: env.CLOUD_BRIDGE_PROFILE_LITE_MODEL || 'gemini-3.1-flash-lite',
+    mini: env.CLOUD_BRIDGE_PROFILE_MINI_MODEL || 'gpt-5-mini',
+    standard: env.CLOUD_BRIDGE_PROFILE_STANDARD_MODEL || 'gpt-5.1',
+    vision: env.CLOUD_BRIDGE_PROFILE_VISION_MODEL || 'gemini-3.6-flash',
+    escalation: env.CLOUD_BRIDGE_PROFILE_ESCALATION_MODEL || 'gpt-5.6-terra',
+  };
   return {
     plugins: [
       statePersistencePlugin(env.DATABASE_URL || ''),
-      resumeGenerationPlugin(providers),
+      resumeGenerationPlugin(providers, profileModels),
       profileDirectoryPlugin(env.DIRECTORY_API_BASE_URL || 'https://feiwan.online/api'),
     ],
     esbuild: { jsx: 'automatic' },

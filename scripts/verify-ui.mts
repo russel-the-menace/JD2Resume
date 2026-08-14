@@ -150,29 +150,6 @@ await desktopPage.route('**/api/import-profile', async (route) => {
           skills: ['用户体验设计'],
           certificates: [],
         },
-        english: {
-          fullName: 'Zhang San',
-          gender: 'Male',
-          phone: '13800138000',
-          email: 'zhangsan@example.com',
-          location: 'Shanghai',
-          wechat: 'zhangsan',
-          linkedin: '',
-          website: 'zhangsan.design',
-          summary: 'This legacy field must be discarded.',
-          educations: [{
-            school: 'Fudan University',
-            degree: 'Bachelor',
-            studyType: 'Full-time',
-            major: 'Visual Communication Design',
-            startDate: '2014-09',
-            endDate: '2018-06',
-            description: '',
-          }],
-          workExperiences: [],
-          skills: ['User experience design'],
-          certificates: [],
-        },
       },
     }),
   });
@@ -194,6 +171,18 @@ await desktopPage.route('**/api/translate-profile', async (route) => {
         wechat: 'zhangsan',
         linkedin: '',
         website: 'zhangsan.design',
+        educations: [{
+          school: 'Fudan University',
+          degree: 'Bachelor',
+          studyType: 'Full-time',
+          major: 'Visual Communication Design',
+          startDate: '2014-09',
+          endDate: '2018-06',
+          description: '',
+        }],
+        workExperiences: [],
+        skills: ['User experience design'],
+        certificates: [],
       },
     }),
   });
@@ -218,7 +207,7 @@ await profileSyncDialog.getByRole('button', { name: 'Create English profile' }).
 await profileDialog.getByLabel('Full name').waitFor({ state: 'visible' });
 report.checks.profileImportDualLanguage =
   (await profileDialog.getByLabel('Full name').inputValue()) === 'Zhang San';
-report.checks.profileImportUsesReturnedBilingualData = profileTranslationCalls === 0;
+report.checks.profileTranslationRunsOnDemand = profileTranslationCalls === 1;
 await profileDialog.getByRole('button', { name: '中文', exact: true }).click();
 report.checks.profileImportIncludesEducation = await profileDialog.getByText('复旦大学', { exact: true }).isVisible();
 report.checks.profileImportPreservesMissingFields =
