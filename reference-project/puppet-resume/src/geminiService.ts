@@ -7,6 +7,19 @@ export class GeminiService {
   private apiKey: string;
   private baseUrl: string = "https://gemini.yeatom.online";
 
+  // Stable, multimodal, structured-output capable default. Pro is a fallback
+  // for responses that fail our schema/content validators, not the first call.
+  private readonly textModels = [
+    process.env.GEMINI_PRIMARY_MODEL || "gemini-3.5-flash-lite",
+    process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash",
+    process.env.GEMINI_ESCALATION_MODEL || "gemini-3.1-pro-preview",
+  ];
+  private readonly visionModels = [
+    process.env.GEMINI_VISION_MODEL || "gemini-3.5-flash-lite",
+    process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash",
+    process.env.GEMINI_ESCALATION_MODEL || "gemini-3.1-pro-preview",
+  ];
+
   constructor() {
     this.apiKey = process.env.GEMINI_API || "";
 
@@ -64,13 +77,7 @@ export class GeminiService {
    * @param parts 包含文本、图片等混合内容的 Part 数组
    */
   async generateContentWithParts(parts: Part[]): Promise<string> {
-    const models = [
-      "gemini-3-pro-preview",
-      "gemini-2.5-pro", 
-      "gemini-3-flash-preview",
-    ];
-
-    for (const modelName of models) {
+    for (const modelName of this.visionModels) {
       try {
         console.log(`   - [Vision] 尝试使用模型: ${modelName}`);
         const genAI = new GoogleGenerativeAI(this.apiKey);
@@ -96,18 +103,12 @@ export class GeminiService {
    * @param validator 可选的校验函数
    */
   async generateContent(prompt: string, validator?: (text: string) => boolean | Promise<boolean>): Promise<string> {
-    const models = [
-      "gemini-3-pro-preview",
-      "gemini-2.5-pro",
-      "gemini-3-flash-preview",
-    ];
-
     const attempts = 3;
     
     for (let attempt = 1; attempt <= attempts; attempt++) {
       console.log(`\n🤖 [Attempt ${attempt}/${attempts}] 正在尝试调用 AI...`);
 
-      for (const modelName of models) {
+      for (const modelName of this.textModels) {
         try {
           console.log(`   - 尝试使用模型: ${modelName}`);
           const genAI = new GoogleGenerativeAI(this.apiKey);
@@ -163,13 +164,7 @@ export class GeminiService {
    * @param mimeType 图片类型
    */
   async analyzeImage(prompt: string, imageBuffer: Buffer, mimeType: string): Promise<string> {
-    const models = [
-      "gemini-3-pro-preview",
-      "gemini-2.5-pro",
-      "gemini-3-flash-preview",
-    ];
-
-    for (const modelName of models) {
+    for (const modelName of this.visionModels) {
       try {
         console.log(`   - 尝试使用模型进行图文分析: ${modelName}`);
         const genAI = new GoogleGenerativeAI(this.apiKey);
@@ -223,4 +218,3 @@ async function testGemini() {
 if (require.main === module) {
   testGemini();
 }
-

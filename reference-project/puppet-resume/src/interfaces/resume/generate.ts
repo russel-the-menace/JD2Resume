@@ -6,6 +6,7 @@ import { runBackgroundTask, TaskServices } from '../../taskRunner';
 import { GenerateFromFrontendRequest } from '../../types';
 import { StatusCode, StatusMessage } from '../../constants/statusCodes';
 import { validateGenerationInput } from '../../utils/generationValidation';
+import { persistSourceEvidence } from '../../utils/sourceEvidence';
 
 const router = Router();
 const COLLECTION_RESUMES = 'generated_resumes';
@@ -112,6 +113,7 @@ router.post('/generate', async (req: Request, res: Response) => {
     // Each generation is a separate application evidence record, even when
     // the same job is regenerated in another language or from a new profile.
     const applicationId = `APP_${dateStr}_${randomUUID().slice(0, 12)}`;
+    const storedEvidence = await persistSourceEvidence(payload.sourceEvidence, applicationId);
 
     // 2. 预先入库（立即执行）
     console.log(`📡 正在创建任务: ${taskId}`);
@@ -123,10 +125,10 @@ router.post('/generate', async (req: Request, res: Response) => {
       evidenceVersion: 1,
       status: 'processing',
       consumedType: consumedType, // 记录消耗类型用于异常退回
-      jobTitle: payload.job_data.title,
-      jobTitle_cn: payload.job_data.title_chinese,
-      jobTitle_en: payload.job_data.title_english,
-      company: payload.job_data.team,
+      jobTitle: payload.job_data.title || payload.resume_profile.name,
+      jobTitle_cn: payload.job_data.title_chinese || payload.job_data.title || '',
+      jobTitle_en: payload.job_data.title_english || payload.job_data.title || '',
+      company: payload.job_data.team || '',
       jobId: payload.jobId,
       language: payload.language,
       createTime: new Date(),
@@ -134,6 +136,7 @@ router.post('/generate', async (req: Request, res: Response) => {
       jobData: payload.job_data,
       jobSnapshot: payload.job_data,
       resumeProfileSnapshot: payload.resume_profile,
+      sourceEvidence: storedEvidence,
       generationInput: {
         jobId: payload.jobId,
         language: payload.language,

@@ -173,8 +173,8 @@ export interface GenerateFromFrontendRequest {
   language?: string;
   is_paid?: boolean;
   resume_profile: UserResumeProfile;
-  /** Omitted for direct profile-only resume creation. */
-  job_data?: JobData;
+  /** Required for JD-based generation; `_id` may be empty for ad-hoc JD input. */
+  job_data: JobData;
   enhancedData?: ResumeData; // 用于物理文件过期后的快速恢复（免AI调用）
   sourceEvidence?: SourceEvidence;
 }

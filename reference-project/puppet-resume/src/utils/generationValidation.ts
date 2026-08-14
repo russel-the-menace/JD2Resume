@@ -40,7 +40,7 @@ export function validateGenerationInput(
   if (hasJob && !job) {
     errors.push('job_data is required when jobId is provided');
   } else if (job) {
-    if (!job._id?.trim()) errors.push('job_data._id is required');
+    if (payload.jobId?.trim() && !job._id?.trim()) errors.push('job_data._id is required when jobId is provided');
     if (!job.title?.trim() && !job.title_chinese?.trim() && !job.title_english?.trim()) {
       errors.push('job_data must include a title');
     }
@@ -52,7 +52,11 @@ export function validateGenerationInput(
   if (payload.sourceEvidence?.text && payload.sourceEvidence.text.length > MAX_SOURCE_TEXT_CHARS) {
     errors.push('sourceEvidence.text must be no longer than 20,000 characters');
   }
-  for (const [kind, file] of [['photo', payload.sourceEvidence?.photo], ['pdf', payload.sourceEvidence?.pdf] as const]) {
+  const evidenceFiles = [
+    ['photo', payload.sourceEvidence?.photo],
+    ['pdf', payload.sourceEvidence?.pdf],
+  ] as const;
+  for (const [kind, file] of evidenceFiles) {
     if (!file) continue;
     if (!file.data || !file.filename || !file.mimeType) errors.push(`${kind} evidence is incomplete`);
     const estimatedBytes = Math.floor((file.data?.length || 0) * 3 / 4);
