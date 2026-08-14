@@ -4967,7 +4967,7 @@ function ResumePage({
           {contactItems.map(({ id, icon: Icon, value }, index) => (
             <span className="resume-contact-item" key={id} data-contact={id}>
               <Icon size={11} />
-              {id === 'website' ? <WebsiteLink website={value} /> : value}
+              {['website', 'linkedin'].includes(id) ? <WebsiteLink website={value} /> : value}
               {isProfileTemplate && index < contactItems.length - 1 && (
                 <i className="contact-separator" aria-hidden="true" />
               )}
