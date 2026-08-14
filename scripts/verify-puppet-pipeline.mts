@@ -92,3 +92,13 @@ assert.equal(mainResume.experience[0].company, 'Real Company');
 assert.equal(mainResume.experience[0].end, 'Present');
 assert.equal(mainResume.skills.categories.length, 4);
 console.log('Puppet Resume two-phase pipeline verified.');
+
+const chineseNameRequest = toPuppetRequest({
+  ...input,
+  profile: { ...input.profile, fullName: 'Junling Tian' },
+}, {
+  title: 'Software Engineer',
+  experience: '经验不限',
+  description: 'Build reliable remote cloud services.',
+});
+assert.equal(chineseNameRequest.resume_profile.name, 'Junling Tian');

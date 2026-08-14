@@ -84,53 +84,55 @@ function chatCompletionsEndpoint(baseUrl: string) {
     : `${normalized}/v1/chat/completions`;
 }
 
+const profileDetailsShape = {
+  fullName: 'string',
+  gender: 'string',
+  birthday: 'YYYY-MM or empty string',
+  phone: 'string',
+  phoneEn: 'string',
+  email: 'string',
+  location: 'string',
+  wechat: 'string',
+  whatsapp: 'string',
+  telegram: 'string',
+  linkedin: 'string',
+  website: 'string',
+  educations: [{
+    school: 'string',
+    degree: 'string',
+    studyType: 'string',
+    major: 'string',
+    startDate: 'YYYY-MM or empty string',
+    endDate: 'YYYY-MM, Present/至今, or empty string',
+    description: 'string',
+  }],
+  workExperiences: [{
+    company: 'string',
+    jobTitle: 'string',
+    businessDirection: 'string',
+    workContent: 'string',
+    startDate: 'YYYY-MM or empty string',
+    endDate: 'YYYY-MM, Present/至今, or empty string',
+  }],
+  skills: ['string'],
+  certificates: ['string'],
+};
+
 function buildProfileImportPrompt(resumeText: string) {
-  const sourceInstruction = [
-    resumeText
-      ? `Resume text:\n${resumeText}`
-      : 'A resume file or image is attached. Read it directly, including the header contact line. Do not rely only on embedded PDF text.',
-    `SUMMARY EXTRACTION RULES (IMPORTANT):
-- First look for an explicitly written personal introduction, profile, about, objective, or summary section. If one exists, preserve its meaning in summary and translate it for the other language without adding claims.
-- If no such section exists, leave summary empty. A separate writing step will generate it later from the extracted facts.
-- A summary is never a work-experience field. Do not turn responsibilities, bullet points, task sequences, platform lists, or project descriptions into an explicit summary.
-- If no explicit introduction exists, both summary fields must be empty.
-- Add a summarySource field to each profile with exactly "explicit" when an introduction section was found, or "missing" when it was not. This marker is required even though it is not included in the abbreviated schema above.`,
-  ].join('\n\n');
-  return `You extract personal profile details from a resume. Return valid JSON only. Detect whether the resume is primarily Chinese or English, then provide both a Chinese and an English profile in the same response. Use only explicit resume facts. Never invent a name, gender, contact details, location, social account, website, or summary. Carefully read the phone number and email address even when the PDF text layer is malformed. Preserve exact factual values such as email addresses, phone numbers, websites, and account handles across both profiles. Translate human-readable fields such as names, locations, gender, and summaries when appropriate.\n\nReturn exactly this JSON shape:\n{\n  "language": "chinese or english",\n  "profiles": {\n    "chinese": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    },\n    "english": {\n      "fullName": "string",\n      "gender": "string",\n      "phone": "string",\n      "email": "string",\n      "location": "string",\n      "wechat": "string",\n      "linkedin": "string",\n      "website": "string",\n      "summary": "string"\n    }\n  }\n}\n\nFor Chinese profiles use Chinese values when they are known, including gender values 男, 女, or 其他. For English profiles use English values, including Male, Female, Non-binary, or Prefer not to say only when explicit. Leave unknown fields empty. The summary may be a concise factual synthesis of the resume in its target language.\n\n${sourceInstruction}`;
+  const sourceInstruction = resumeText
+    ? `Resume text:\n${resumeText}`
+    : 'A resume file or image is attached. Read it directly, including the header contact line. Do not rely only on embedded PDF text.';
+  const responseShape = {
+    language: 'chinese or english',
+    profiles: { chinese: profileDetailsShape, english: profileDetailsShape },
+  };
+  return `You extract complete personal profile details from a resume. Return valid JSON only. Detect whether the resume is primarily Chinese or English, then provide both a Chinese and an English profile in the same response. Use only explicit resume facts. Extract every education, work experience, skill, and certificate shown in the source; do not omit these sections when they exist in an attached PDF or image. Never invent a name, gender, contact detail, date, school, employer, skill, certificate, location, social account, or website. Do not extract or generate a personal introduction, professional profile, about, objective, or summary. Carefully read the phone number and email address even when the PDF text layer is malformed. Preserve exact factual values such as dates, email addresses, phone numbers, websites, and account handles across both profiles. Translate human-readable fields into each profile language when appropriate. Preserve all list items and their original order.\n\nReturn exactly this JSON shape:\n${JSON.stringify(responseShape, null, 2)}\n\nFor Chinese profiles use Chinese values when they are known, including gender values 男, 女, or 其他 and 至今 for current dates. For English profiles use English values, including Male, Female, Non-binary, or Prefer not to say only when explicit and Present for current dates. Romanize Chinese names in Western resume order: given name followed by family name. For example, 田俊铃 must be Junling Tian, not Tian Junling. Leave unknown scalar fields empty and unknown lists empty.\n\n${sourceInstruction}`;
 }
 
 function buildProfileTranslationPrompt(sourceLanguage: string, profile: Record<string, any>) {
   const targetLanguage = sourceLanguage === 'chinese' ? 'english' : 'chinese';
-  return `You translate a personal profile from ${sourceLanguage} to ${targetLanguage}. Return valid JSON only. Preserve exact factual values such as names, email addresses, phones, websites, and account handles. Translate only human-readable fields such as location and summary when appropriate. Do not invent missing fields.\n\nReturn exactly this JSON shape:\n{\n  "language": "${targetLanguage}",\n  "profile": {\n    "fullName": "string",\n    "gender": "string",\n    "phone": "string",\n    "email": "string",\n    "location": "string",\n    "wechat": "string",\n    "linkedin": "string",\n    "website": "string",\n    "summary": "string"\n  }\n}\n\nSource profile:\n${JSON.stringify(profile)}`;
-}
-
-function buildProfileSummaryPrompt(profiles: Record<string, any>, resumeText: string) {
-  const sourceInstruction = resumeText
-    ? `Resume text:\n${resumeText}`
-    : 'The original resume file or image is attached. Read the full document for career facts, but do not invent anything that is not shown.';
-  return `You are the professional summary writer from the puppet-resume workflow. Generate only the missing bilingual personal introductions from the supplied factual profile and resume source, then return valid JSON only.
-
-Follow this exact generation logic:
-- Write two separate paragraphs in each language, separated by a blank line.
-- Paragraph 1 presents the professional identity, career direction, explicit years of experience when available, industry breadth, and core value proposition. Aim for 3-4 resume lines.
-- Paragraph 2 presents high-level outcomes, working methodology, leadership or collaboration style, and transferable strengths. Aim for 2 resume lines.
-- Use an implied first person / third-person-limited style: omit 我, 本人, 该候选人, I, and My. Start directly with phrases such as "拥有...经验" or "深耕...领域".
-- Use only supplied facts. Never invent years, employers, titles, metrics, tools, platforms, or achievements. Do not use decimal years; round only an explicitly stated decimal to an integer.
-- This is a professional About section, not work experience. Do not enumerate responsibilities, copy bullets, name a sequence of tasks, or describe one job in detail. Do not list social platforms or software tools.
-- Chinese output must be Chinese; English output must be English. Keep both versions semantically equivalent.
-
-Return exactly this JSON shape:
-{
-  "profiles": {
-    "chinese": { "summary": "string" },
-    "english": { "summary": "string" }
-  }
-}
-
-Supplied factual profiles (their summaries are intentionally empty because no explicit personal introduction was found):
-${JSON.stringify(profiles)}
-
-${sourceInstruction}`;
+  const responseShape = { language: targetLanguage, profile: profileDetailsShape };
+  return `You translate a complete personal profile from ${sourceLanguage} to ${targetLanguage}. Return valid JSON only. Preserve every education, work experience, skill, and certificate in its original order. Preserve exact factual values such as dates, email addresses, phones, websites, and account handles. Translate human-readable fields such as names, location, school, degree, major, job title, descriptions, skills, and certificates when appropriate. Do not invent missing fields. Do not add a personal introduction or summary. When translating a Chinese name into English, use Western resume order: given name followed by family name. For example, 田俊铃 must be Junling Tian, not Tian Junling.\n\nReturn exactly this JSON shape:\n${JSON.stringify(responseShape, null, 2)}\n\nSource profile:\n${JSON.stringify(profile)}`;
 }
 
 function sourceFromInput(input: Record<string, any>, textField: string) {
@@ -292,22 +294,20 @@ function validProfileImportResponse(value: any) {
       isRecord(value.profile));
 }
 
-function validProfileSummaryResponse(value: any) {
-  return isRecord(value) && isRecord(value.profiles) &&
-    isRecord(value.profiles.chinese) && typeof value.profiles.chinese.summary === 'string' &&
-    isRecord(value.profiles.english) && typeof value.profiles.english.summary === 'string';
-}
-
 function normalizeProfileImportResponse(value: Record<string, any>) {
   const sourceLanguage = value.language === 'chinese' ? 'chinese' : 'english';
   const profiles = isRecord(value.profiles) ? value.profiles : {
     [sourceLanguage]: isRecord(value.profile) ? value.profile : {},
   };
+  const withoutSummary = (profile: Record<string, any>) => {
+    const { summary: _summary, summarySource: _summarySource, ...details } = profile;
+    return details;
+  };
   return {
     language: sourceLanguage,
     profiles: {
-      chinese: isRecord(profiles.chinese) ? profiles.chinese : {},
-      english: isRecord(profiles.english) ? profiles.english : {},
+      chinese: isRecord(profiles.chinese) ? withoutSummary(profiles.chinese) : {},
+      english: isRecord(profiles.english) ? withoutSummary(profiles.english) : {},
     },
   };
 }
@@ -467,34 +467,7 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
         validProfileImportResponse,
         source.attachment,
       );
-      const normalized = normalizeProfileImportResponse(imported);
-      let result = normalized;
-      const extractedProfiles = [normalized.profiles.chinese, normalized.profiles.english];
-      const hasExplicitSummary = extractedProfiles
-        .some((profile) => stringValue(profile.summarySource).trim() === 'explicit');
-      if (!hasExplicitSummary) {
-        try {
-          const summarized = await requestFromProviders(
-            providers,
-            'Return concise bilingual professional summaries as valid JSON. Do not use markdown or add commentary.',
-            buildProfileSummaryPrompt(normalized.profiles, source.text),
-            validProfileSummaryResponse,
-            source.attachment,
-            1_200,
-            45_000,
-          );
-          result = {
-            ...normalized,
-            profiles: {
-              chinese: { ...normalized.profiles.chinese, summary: summarized.profiles.chinese.summary.trim() },
-              english: { ...normalized.profiles.english, summary: summarized.profiles.english.summary.trim() },
-            },
-          };
-        } catch {
-          // Keep the extracted result available when summary generation is temporarily unavailable.
-        }
-      }
-      sendJson(response, 200, result);
+      sendJson(response, 200, normalizeProfileImportResponse(imported));
     } catch (error) {
       sendProviderFailure(response, error, 'The profile import service is unavailable. Please try again.');
     }

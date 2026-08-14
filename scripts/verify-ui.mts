@@ -130,14 +130,25 @@ await desktopPage.route('**/api/import-profile', async (route) => {
       profiles: {
         chinese: {
           fullName: '张三',
-          gender: '男',
           phone: '13800138000',
           email: 'zhangsan@example.com',
           location: '上海',
           wechat: 'zhangsan',
           linkedin: '',
           website: 'zhangsan.design',
-          summary: '产品设计师，拥有企业软件设计经验。',
+          summary: 'This legacy field must be discarded.',
+          educations: [{
+            school: '复旦大学',
+            degree: '本科',
+            studyType: '全日制',
+            major: '视觉传达设计',
+            startDate: '2014-09',
+            endDate: '2018-06',
+            description: '',
+          }],
+          workExperiences: [],
+          skills: ['用户体验设计'],
+          certificates: [],
         },
         english: {
           fullName: 'Zhang San',
@@ -148,7 +159,19 @@ await desktopPage.route('**/api/import-profile', async (route) => {
           wechat: 'zhangsan',
           linkedin: '',
           website: 'zhangsan.design',
-          summary: 'Product designer with enterprise software experience.',
+          summary: 'This legacy field must be discarded.',
+          educations: [{
+            school: 'Fudan University',
+            degree: 'Bachelor',
+            studyType: 'Full-time',
+            major: 'Visual Communication Design',
+            startDate: '2014-09',
+            endDate: '2018-06',
+            description: '',
+          }],
+          workExperiences: [],
+          skills: ['User experience design'],
+          certificates: [],
         },
       },
     }),
@@ -171,11 +194,11 @@ await desktopPage.route('**/api/translate-profile', async (route) => {
         wechat: 'zhangsan',
         linkedin: '',
         website: 'zhangsan.design',
-        summary: 'Product designer with enterprise software experience.',
       },
     }),
   });
 });
+await profileDialog.getByLabel('性别').selectOption('女');
 await profileDialog.getByRole('button', { name: 'Import from resume' }).click();
 const profileImportDialog = desktopPage.getByRole('dialog', { name: 'Import from resume' });
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-profile-import-dialog.png') });
@@ -197,27 +220,33 @@ report.checks.profileImportDualLanguage =
   (await profileDialog.getByLabel('Full name').inputValue()) === 'Zhang San';
 report.checks.profileImportUsesReturnedBilingualData = profileTranslationCalls === 0;
 await profileDialog.getByRole('button', { name: '中文', exact: true }).click();
+report.checks.profileImportIncludesEducation = await profileDialog.getByText('复旦大学', { exact: true }).isVisible();
+report.checks.profileImportPreservesMissingFields =
+  (await profileDialog.getByLabel('性别').inputValue()) === '女';
+report.checks.personalProfileSummaryRemoved =
+  (await profileDialog.getByLabel('个人简介').count()) === 0;
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-personal-profile-dialog.png') });
 await profileDialog.getByLabel('姓名').fill('张三');
 await profileDialog.getByLabel('性别').selectOption('男');
 await profileDialog.getByLabel('手机号码').fill('13800138000');
 await profileDialog.getByLabel('Email').fill('zhangsan@example.com');
 await profileDialog.getByLabel('所在地').fill('上海');
-await profileDialog.getByLabel('个人简介').fill('专注于复杂产品和高质量用户体验的产品设计师。');
 await profileDialog.getByRole('button', { name: 'English', exact: true }).click();
+report.checks.personalProfileSummaryRemoved = Boolean(report.checks.personalProfileSummaryRemoved) &&
+  (await profileDialog.getByLabel('Professional profile').count()) === 0;
 await profileDialog.getByLabel('Full name').fill('Alex Zhang');
 await profileDialog.getByLabel('Gender').selectOption('Male');
 await profileDialog.getByLabel('Phone').fill('555-0100');
 await profileDialog.getByLabel('Email').fill('alex@example.com');
 await profileDialog.getByLabel('Location').fill('New York, NY');
-await profileDialog.getByLabel('Professional profile').fill('Product designer focused on high-impact workflows.');
 await profileDialog.getByRole('button', { name: 'Save profile' }).click();
 await desktopPage.unroute('**/api/import-profile');
 await desktopPage.unroute('**/api/translate-profile');
 report.checks.bilingualProfileSaved = await desktopPage.evaluate(() => {
   const profile = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-user-profile-v1'));
   return profile?.chinese?.fullName === '张三' && profile?.chinese?.gender === '男' &&
-    profile?.english?.fullName === 'Alex Zhang' && profile?.english?.gender === 'Male';
+    profile?.english?.fullName === 'Alex Zhang' && profile?.english?.gender === 'Male' &&
+    !('summary' in profile.chinese) && !('summary' in profile.english);
 });
 report.checks.accountAvatarUsesUsername =
   (await desktopPage.getByRole('button', { name: 'Account menu' }).textContent()) === 'Y';

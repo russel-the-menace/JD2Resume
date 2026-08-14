@@ -328,7 +328,6 @@ const emptyUserProfile = {
     linkedin: '',
     website: '',
     photoUrl: '',
-    summary: '',
     educations: [],
     workExperiences: [],
     skills: [],
@@ -349,7 +348,6 @@ const emptyUserProfile = {
     telegram: '',
     website: '',
     photoUrl: '',
-    summary: '',
     educations: [],
     workExperiences: [],
     skills: [],
@@ -358,7 +356,7 @@ const emptyUserProfile = {
   },
 };
 
-const requiredProfileFields = ['fullName', 'gender', 'phone', 'email', 'location', 'summary'];
+const requiredProfileFields = ['fullName', 'gender', 'phone', 'email', 'location'];
 
 const profileFieldLabels = {
   chinese: {
@@ -367,7 +365,6 @@ const profileFieldLabels = {
     phone: '手机号码',
     email: '邮箱',
     location: '所在地',
-    summary: '个人简介',
   },
   english: {
     fullName: 'Full name',
@@ -375,7 +372,6 @@ const profileFieldLabels = {
     phone: 'Phone',
     email: 'Email',
     location: 'Location',
-    summary: 'Professional profile',
   },
 };
 
@@ -452,7 +448,6 @@ function normalizeProfileLanguage(value, language) {
     telegram: textValue(source.telegram).trim(),
     website: textValue(source.website).trim(),
     photoUrl: textValue(source.photoUrl || source.photo).trim(),
-    summary: textValue(source.summary).trim(),
     educations: Array.isArray(source.educations)
       ? source.educations.map(normalizeProfileEducation)
       : [],
@@ -463,6 +458,18 @@ function normalizeProfileLanguage(value, language) {
     certificates: normalizeStringList(source.certificates),
     aiMessage: textValue(source.aiMessage).trim(),
   };
+}
+
+function mergeImportedProfileFields(currentValue, importedValue, language) {
+  const current = normalizeProfileLanguage(currentValue, language);
+  const imported = normalizeProfileLanguage(importedValue, language);
+  return Object.fromEntries(Object.keys(current).map((field) => {
+    const importedField = imported[field];
+    if (Array.isArray(importedField)) {
+      return [field, importedField.length ? importedField : current[field]];
+    }
+    return [field, textValue(importedField).trim() ? importedField : current[field]];
+  }));
 }
 
 const fallbackProfileUniversities = [
@@ -3122,7 +3129,11 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
     const imported = await onImport(source);
     const importedLanguage = imported.language;
     const importedProfiles = normalizeUserProfile(imported.profiles);
-    const normalizedFields = importedProfiles[importedLanguage];
+    const normalizedFields = mergeImportedProfileFields(
+      draft[importedLanguage],
+      importedProfiles[importedLanguage],
+      importedLanguage,
+    );
     const nextDraft = { ...draft, [importedLanguage]: normalizedFields };
     if (!onSave(nextDraft)) throw new Error('The imported personal details could not be saved locally.');
     setDraft(nextDraft);
@@ -3134,7 +3145,11 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
   const syncImportedProfile = () => {
     if (!importedProfile) return;
     const targetLanguage = importedProfile.language === 'chinese' ? 'english' : 'chinese';
-    const translatedFields = importedProfile.profiles[targetLanguage];
+    const translatedFields = mergeImportedProfileFields(
+      draft[targetLanguage],
+      importedProfile.profiles[targetLanguage],
+      targetLanguage,
+    );
     const nextDraft = { ...draft, [targetLanguage]: translatedFields };
     if (!onSave(nextDraft)) throw new Error('The imported personal details could not be saved locally.');
     setDraft(nextDraft);
@@ -3262,7 +3277,6 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
             <label className="field"><span>{chinese ? 'AI 生成要求' : 'AI generation instructions'}</span><textarea rows={5} maxLength={500} value={fields.aiMessage} onChange={(event) => updateField('aiMessage', event.target.value)} placeholder={chinese ? '给 AI 的提示词，例如：工作经验不足时补充合理内容，但不要虚构事实。' : 'Tell the AI how to tailor your resume without inventing facts.'} /><small className="profile-character-count">{fields.aiMessage.length} / 500</small></label>
           </section>
 
-          <label className="field"><span>{chinese ? '个人简介' : 'Professional profile'}</span><textarea rows={5} value={fields.summary} onChange={(event) => updateField('summary', event.target.value)} /></label>
         </div>
         <footer className="resume-dialog-actions"><button className="secondary-button" type="button" onClick={onCancel}>{chinese ? '取消' : 'Cancel'}</button><button className="primary-button" type="submit"><Check size={16} /> {chinese ? '保存资料' : 'Save profile'}</button></footer>
       </form>
