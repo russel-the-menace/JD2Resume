@@ -78,23 +78,33 @@ const responsibilities = Array.from({ length: 8 }, (_, index) =>
     ? 'Engineered core services with <u>measurable reliability gains</u> across distributed workloads, improving delivery confidence, observability, and incident response for product teams.'
     : `Delivered measurable platform result ${index + 1} by improving service reliability, automated validation, operational monitoring, and release quality across remote product teams.`
 );
-const combinedResponse = { ...phaseOne, workExperience: phaseOne.workExperience.map((experience) => ({ ...experience, responsibilities })) };
+const phaseTwo = {
+  workExperience: phaseOne.workExperience.map((experience) => ({ ...experience, responsibilities })),
+};
 
 const prompts: string[] = [];
+const responses = [phaseOne, phaseTwo];
 const pipeline = new PuppetResumePipeline(async (prompt, validator) => {
   prompts.push(prompt);
-  await assert.rejects(
-    async () => validator(JSON.stringify({ ...combinedResponse, personalIntroduction: 'Introduction without emphasis.\n\nSecond paragraph.' })),
-    /个人介绍必须仅有 1-2 处加深内容/,
-  );
-  const invalidResponsibilities = combinedResponse.workExperience.map((experience) => ({
-    ...experience, responsibilities: experience.responsibilities.map((item) => item.replace(/<\/?u>/g, '')),
-  }));
-  await assert.rejects(
-    async () => validator(JSON.stringify({ ...combinedResponse, workExperience: invalidResponsibilities })),
-    /每段工作经历必须仅有 1-2 条职责包含下划线/,
-  );
-  const response = JSON.stringify(combinedResponse);
+  const responseIndex = prompts.length - 1;
+  if (responseIndex === 0) {
+    await assert.rejects(
+      async () => validator(JSON.stringify({ ...phaseOne, personalIntroduction: 'Introduction without emphasis.\n\nSecond paragraph.' })),
+      /个人介绍必须仅有 1-2 处加深内容/,
+    );
+  } else {
+    const invalidBulletPhase = {
+      workExperience: phaseTwo.workExperience.map((experience) => ({
+        ...experience,
+        responsibilities: experience.responsibilities.map((item) => item.replace(/<\/?u>/g, '')),
+      })),
+    };
+    await assert.rejects(
+      async () => validator(JSON.stringify(invalidBulletPhase)),
+      /每段工作经历必须仅有 1-2 条职责包含下划线/,
+    );
+  }
+  const response = JSON.stringify(responses[responseIndex]);
   assert.equal(await validator(response), true);
   return response;
 });
@@ -106,15 +116,16 @@ const request = toPuppetRequest(input, {
 const puppetResume = await pipeline.enhance(request);
 const mainResume = fromPuppetResume(puppetResume);
 
-assert.equal(prompts.length, 1);
-assert.match(prompts[0], /8 bullets|8 条/);
+assert.equal(prompts.length, 2);
+assert.match(prompts[0], /Phase 1 \(Non-Job Bullet\)/);
+assert.match(prompts[1], /Phase 2 \(Job Bullet\)/);
 assert.equal(puppetResume.workExperience.length, 2);
 assert.equal(puppetResume.workExperience[0].responsibilities?.length, 8);
 assert.equal(mainResume.experience[0].company, 'Real Company');
 assert.equal(mainResume.experience[0].end, 'Present');
 assert.equal(mainResume.skills.categories.length, 4);
-assert.doesNotMatch(prompts[0], /first bullet must contain exactly one <b>/i);
-console.log('Puppet Resume single-pass pipeline verified.');
+assert.doesNotMatch(prompts[1], /first bullet must contain exactly one <b>/i);
+console.log('Puppet Resume two-phase pipeline verified.');
 
 const minimumExperienceCalculation = ExperienceCalculator.calculate({
   ...request.resume_profile,
