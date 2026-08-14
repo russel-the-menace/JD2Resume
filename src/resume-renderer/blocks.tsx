@@ -8,7 +8,7 @@ export interface RendererBlock extends ResumeBlockDescriptor { content: ReactNod
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 const label = (chinese: boolean, cn: string, en: string) => chinese ? cn : en;
 const date = (start?: string, end?: string) => [text(start), text(end)].filter(Boolean).join(' - ');
-const sectionBlock = (id: string, sourcePath: string, order: number, content: ReactNode, keepWithNext = 1): RendererBlock => ({ id, kind: 'section-heading', sourcePath, order, keepWithNext, atomic: true, gapBeforeToken: '30', gapAfterToken: '20', content });
+const sectionBlock = (id: string, sourcePath: string, order: number, content: ReactNode, keepWithNext = 1): RendererBlock => ({ id, kind: 'section-heading', sourcePath, order, keepWithNext, atomic: true, gapBeforeToken: '26', gapAfterToken: '0', content: <h3>{content}</h3> });
 const block = (id: string, kind: ResumeBlockKind, sourcePath: string, order: number, content: ReactNode, options: Partial<ResumeBlockDescriptor> = {}): RendererBlock => ({ id, kind, sourcePath, order, keepWithNext: 0, atomic: true, gapBeforeToken: '0', gapAfterToken: '0', content, ...options });
 
 export function buildRendererBlocks(document: RendererResumeDocument): RendererBlock[] {
@@ -54,7 +54,7 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
     }
     if (section === 'certifications' && (data.certificates || []).length) {
       add(sectionBlock(blockId.section('certificates'), 'data.certificates', order, label(chinese, '证书', 'Certificates')));
-      (data.certificates || []).forEach((entry, index) => add(block(blockId.certificate(entry.id, index), 'certificate-item', `data.certificates.${index}`, order, [text(entry.name), text(entry.issuer), text(entry.date)].filter(Boolean).join(' · '), { gapBeforeToken: index ? '9' : '0' })));
+      add(block(blockId.certificate('content', 0), 'certificate-item', 'data.certificates', order, <div className="certificate-list">{(data.certificates || []).map((entry, index) => <span key={String(entry.id ?? index)}>{text(entry.name)}{text(entry.date) ? <small>{text(entry.date)}</small> : null}</span>)}</div>));
     }
   }
   return blocks;
