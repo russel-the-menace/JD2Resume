@@ -1,16 +1,32 @@
+@font-face {
+  font-family: 'JD2Resume Puppet Sans';
+  src: url('@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-400-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: 'JD2Resume Puppet Sans';
+  src: url('@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-700-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+}
 @page { size: A4; margin: 0; }
 * { box-sizing: border-box; }
 html, body, #renderer-root { margin: 0; min-width: 0; min-height: 100%; background: #e8ece9; }
-.puppet-document, .puppet-measurement-document { width: 794px; color: #1d2924; background: #fff; font-family: "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", Arial, sans-serif; font-size: calc(14px + var(--layout-font-size-delta, 0px)); line-height: calc(1.6 + var(--layout-line-height-delta, 0) / 20); }
+.puppet-document, .puppet-measurement-document { width: 794px; color: #1d2924; background: #fff; font-family: "JD2Resume Puppet Sans", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", Arial, sans-serif; font-size: calc(14px + var(--layout-font-size-delta, 0px)); line-height: calc(1.6 + var(--layout-line-height-delta, 0) / 20); }
 .puppet-measurement-host { position: fixed; top: 0; left: -100000px; width: 794px; visibility: hidden; pointer-events: none; contain: layout style; }
 .puppet-measurement-document { padding: 40px 50px; min-height: 0; }
 .puppet-page { width: 794px; height: 1123px; margin: 0 0 34px; overflow: hidden; background: #fff; box-shadow: 0 1px 6px rgba(24, 44, 34, .16); }
 .puppet-page-content { width: 794px; height: 1123px; overflow: hidden; }
 .puppet-block { min-width: 0; overflow-wrap: break-word; }
 .puppet-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 2px solid var(--resume-accent, #167c65); padding-bottom: 15px; }
+.puppet-header-main { min-width: 0; flex: 1; }
 .puppet-header h1 { margin: 0; font-size: 30px; line-height: 1.18; font-weight: 700; }
 .puppet-header p { margin: 5px 0 0; font-size: 16px; line-height: 1.45; color: #3f514a; }
-.puppet-contact { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px 12px; max-width: 360px; color: #506159; font-size: 12px; line-height: 1.45; }
+.puppet-contact { display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 9px; max-width: 520px; color: #506159; font-size: 12px; line-height: 1.45; }
+.puppet-avatar { width: 72px; height: 72px; flex: 0 0 72px; object-fit: cover; border: 1px solid #d2dad5; border-radius: 2px; }
 .puppet-section-heading { border-left: 4px solid var(--resume-accent, #167c65); padding-left: 10px; color: #173e31; font-size: calc(20px + var(--layout-font-size-delta, 0px)); line-height: 1.25; font-weight: 700; }
 .puppet-summary-paragraph { font-size: calc(14px + var(--layout-font-size-delta, 0px)); line-height: calc(1.8 + var(--layout-line-height-delta, 0) / 20); }
 .puppet-education-entry, .puppet-experience-heading { font-size: calc(16px + var(--layout-font-size-delta, 0px)); line-height: 1.45; }

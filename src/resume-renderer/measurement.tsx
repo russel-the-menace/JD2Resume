@@ -8,7 +8,7 @@ let measurementRoot: Root | null = null;
 let measurementHost: HTMLDivElement | null = null;
 function host() { if (!measurementHost) { measurementHost = document.createElement('div'); measurementHost.className = 'puppet-measurement-host'; document.body.append(measurementHost); measurementRoot = createRoot(measurementHost); } return measurementHost; }
 export function afterTwoAnimationFrames() { return new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))); }
-export async function ensureCanonicalFont() { try { await document.fonts.ready; } catch { throw new RendererError('FONT_LOAD_FAILED'); } }
+export async function ensureCanonicalFont() { try { await document.fonts.load('14px "JD2Resume Puppet Sans"'); await document.fonts.ready; if (!document.fonts.check('14px "JD2Resume Puppet Sans"')) throw new Error('font unavailable'); } catch { throw new RendererError('FONT_LOAD_FAILED'); } }
 export async function waitForImages(root: ParentNode) { const images = Array.from(root.querySelectorAll('img')); try { await Promise.all(images.map(async (image) => { if (!image.complete) await new Promise<void>((resolve, reject) => { image.addEventListener('load', () => resolve(), { once: true }); image.addEventListener('error', () => reject(new Error('decode')), { once: true }); }); await image.decode(); })); } catch { throw new RendererError('IMAGE_DECODE_FAILED'); } return images.length; }
 export async function measureSnapshot(snapshot: RenderSnapshot, tuning: LayoutTuningV2, signal: AbortSignal): Promise<MeasurementResult> {
   const target = host(); if (!measurementRoot) throw new RendererError('MEASUREMENT_ROOT_MISSING');

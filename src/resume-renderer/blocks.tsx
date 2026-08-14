@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { blockId } from './blockIds';
+import { FormattedPuppetText } from './FormattedPuppetText';
 import type { RendererResumeDocument, ResumeBlockDescriptor, ResumeBlockKind } from './types';
 
 export interface RendererBlock extends ResumeBlockDescriptor { content: ReactNode; }
@@ -15,13 +16,13 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
   const add = (entry: RendererBlock) => blocks.push({ ...entry, order: order++ });
   const basics = data.basics || {}; const name = chinese ? text(basics.fullName) : [text(basics.firstName), text(basics.lastName)].filter(Boolean).join(' ') || text(basics.fullName);
   const contacts = [basics.email, basics.phone, basics.location, basics.gender, basics.website, basics.wechat, basics.linkedin, basics.whatsapp, basics.telegram].map(text).filter(Boolean);
-  add(block(blockId.header(), 'header', 'data.basics', order, <header className="puppet-header"><div><h1>{name}</h1><p>{text(basics.role)}</p></div>{contacts.length ? <div className="puppet-contact">{contacts.map((item, index) => <span key={`${item}-${index}`}>{item}</span>)}</div> : null}</header>, { gapBeforeToken: '0', gapAfterToken: '27' }));
+  add(block(blockId.header(), 'header', 'data.basics', order, <header className="puppet-header"><div className="puppet-header-main"><h1>{name}</h1><p>{text(basics.role)}</p>{contacts.length ? <div className="puppet-contact">{contacts.map((item, index) => <span key={`${item}-${index}`}>{item}</span>)}</div> : null}</div>{text(basics.photoUrl) ? <img className="puppet-avatar" src={text(basics.photoUrl)} alt="" /> : null}</header>, { gapBeforeToken: '0', gapAfterToken: '27' }));
   const sectionOrder = document.sectionOrder.length ? document.sectionOrder : ['summary', 'education', 'experience', 'skills', 'certifications'];
   for (const section of sectionOrder) {
     if (section === 'basics') continue;
     if (section === 'summary' && text(data.summary)) {
       add(sectionBlock(blockId.section('summary'), 'data.summary', order, label(chinese, '个人介绍', 'Personal Introduction')));
-      paragraphs(text(data.summary)).forEach((paragraph, index) => add(block(blockId.summary(index), 'summary-paragraph', `data.summary.${index}`, order, paragraph, { gapBeforeToken: index ? '9' : '0' })));
+      paragraphs(text(data.summary)).forEach((paragraph, index) => add(block(blockId.summary(index), 'summary-paragraph', `data.summary.${index}`, order, <FormattedPuppetText value={paragraph} allowBold maxBold={2} />, { gapBeforeToken: index ? '9' : '0' })));
     }
     if (section === 'education' && data.education.length) {
       add(sectionBlock(blockId.section('education'), 'data.education', order, label(chinese, '教育经历', 'Education')));
@@ -35,7 +36,7 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
         if (!bullets.length) return;
         add(block(blockId.experienceHeading(entry.id, entryIndex), 'experience-heading', `data.experience.${entryIndex}`, order,
           <div className="puppet-experience-heading"><strong>{text(entry.company)}</strong><span>{text(entry.role)}</span><time>{date(entry.start, entry.current ? (chinese ? '至今' : 'Present') : entry.end)}</time></div>, { keepWithNext: 1, gapBeforeToken: entryIndex ? '25' : '0' }));
-        bullets.forEach((bullet, bulletIndex) => add(block(blockId.experienceBullet(entry.id, entryIndex, bulletIndex), 'experience-bullet', `data.experience.${entryIndex}.bullets.${bulletIndex}`, order, <div className="puppet-bullet">{bullet}</div>, { gapBeforeToken: bulletIndex ? '9' : '0' })));
+        bullets.forEach((bullet, bulletIndex) => add(block(blockId.experienceBullet(entry.id, entryIndex, bulletIndex), 'experience-bullet', `data.experience.${entryIndex}.bullets.${bulletIndex}`, order, <div className="puppet-bullet"><FormattedPuppetText value={bullet} allowUnderline maxUnderline={1} /></div>, { gapBeforeToken: bulletIndex ? '9' : '0' })));
       });
     }
     if (section === 'skills' && Object.values(data.skills || {}).some((value) => text(value))) {
