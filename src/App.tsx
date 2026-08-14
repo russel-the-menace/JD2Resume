@@ -1922,6 +1922,15 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
     });
   };
 
+  // A page plan belongs to one immutable snapshot only. Invalidate it before the edited frame paints.
+  useLayoutEffect(() => {
+    setRenderState((current) => current.status === 'idle' && !current.pagePlan
+      ? current
+      : { ...current, status: 'idle', pagePlan: null, layoutReport: null, currentSnapshotHash: '' });
+  }, [accent, customContent, customSections, data, documentName, sectionOrder, sectionOrderCustomized, template]);
+
+  const canExport = template === 'profile' && renderState.status === 'valid' && Boolean(renderState.pagePlan);
+
   useEffect(() => {
     setSaveState('Saving...');
     const saved = onResumeChange(resumeId, {
@@ -2168,6 +2177,10 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
   };
 
   const exportPdf = async () => {
+    if (!canExport) {
+      setToast('Wait for the verified page layout before exporting.');
+      return;
+    }
     setToast('Preparing PDF...');
     try {
       const resumeDocument = {
@@ -2233,6 +2246,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
         canUndo={history.past.length > 0}
         canRedo={history.future.length > 0}
         onExport={exportPdf}
+        canExport={canExport}
         onAi={() => setAiPanel(true)}
         onReset={resetDemo}
         onBack={onBack}
@@ -3941,6 +3955,7 @@ function TopBar({
   canUndo,
   canRedo,
   onExport,
+  canExport,
   onAi,
   onReset,
   onBack,
@@ -3992,7 +4007,7 @@ function TopBar({
           <Sparkles size={16} />
           <span>Improve with AI</span>
         </button>
-        <button className="primary-button export-button" onClick={onExport}>
+        <button className="primary-button export-button" onClick={onExport} disabled={!canExport} title={canExport ? 'Export PDF' : 'Wait for the verified page layout'}>
           <Download size={16} />
           <span>Export PDF</span>
         </button>
