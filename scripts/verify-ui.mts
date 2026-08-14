@@ -294,6 +294,15 @@ await desktopPage.route('**/api/generate-resume', async (route) => {
     contentType: 'application/json',
     body: JSON.stringify({
       documentName: 'Alex Zhang - Product Designer',
+      layoutManifest: {
+        policy: 'balanced-fit',
+        sectionGapDelta: 0,
+        lineHeightDelta: 0,
+        fontSizeDelta: 0,
+        pageCount: 2,
+        fillRatio: 0.95,
+        pageFillRatios: [1, 0.95],
+      },
       resume: {
         basics: {
           fullName: 'Alex Zhang',
@@ -339,11 +348,14 @@ await generatorDialog.getByRole('button', { name: 'Generate resume' }).click();
 await desktopPage.waitForURL(/resume=/);
 report.checks.jobDescriptionGenerated =
   (await desktopPage.getByLabel('Resume name').inputValue()) === 'Alex Zhang - Product Designer' &&
-  (await desktopPage.locator('.resume-page').getByText('Lead Product Designer', { exact: true }).isVisible());
+  (await desktopPage.locator('.resume-page').first().getByText('Lead Product Designer', { exact: true }).isVisible());
+report.checks.serverLayoutPageCountIsAuthoritative =
+  (await desktopPage.locator('.resume-sheet').count()) === 2 &&
+  (await desktopPage.locator('.page-count').textContent()) === '2 pages';
 report.checks.englishSocialContactIcons =
-  (await desktopPage.locator('[data-contact="linkedin"] svg').count()) === 1 &&
-  (await desktopPage.locator('[data-contact="whatsapp"] svg').count()) === 1 &&
-  (await desktopPage.locator('[data-contact="telegram"] svg').count()) === 1;
+  (await desktopPage.locator('.resume-sheet').first().locator('[data-contact="linkedin"] svg').count()) === 1 &&
+  (await desktopPage.locator('.resume-sheet').first().locator('[data-contact="whatsapp"] svg').count()) === 1 &&
+  (await desktopPage.locator('.resume-sheet').first().locator('[data-contact="telegram"] svg').count()) === 1;
 await desktopPage.unroute('**/api/generate-resume');
 await desktopPage.getByRole('button', { name: 'Back to resumes' }).click();
 

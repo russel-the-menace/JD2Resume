@@ -4571,7 +4571,13 @@ function PreviewPanel({
   const [colorMenu, setColorMenu] = useState(false);
   const [contentHeight, setContentHeight] = useState(RESUME_PAGE_HEIGHT);
   const zoomPercent = Math.round(zoom * 100);
-  const pageCount = Math.max(1, Math.ceil(contentHeight / RESUME_PAGE_HEIGHT));
+  const serverPageCount = Math.max(1, Number(layoutManifest.pageCount) || 1);
+  const hasServerLayout = Boolean(
+    layoutManifest.policy && layoutManifest.pageFillRatios.length === serverPageCount,
+  );
+  const pageCount = hasServerLayout
+    ? serverPageCount
+    : Math.max(1, Math.ceil(contentHeight / RESUME_PAGE_HEIGHT));
   const previewHeight = pageCount * (RESUME_PAGE_HEIGHT + RESUME_PAGE_GAP);
   const updateProfilePageHeight = useCallback((height) => {
     setContentHeight((current) => (Math.abs(current - height) < 1 ? current : height));
@@ -4693,7 +4699,7 @@ function PreviewPanel({
                     customContent={customContent}
                     sectionOrder={sectionOrder}
                     sectionOrderCustomized={sectionOrderCustomized}
-                    onContentHeightChange={pageIndex === 0 ? updateProfilePageHeight : null}
+                    onContentHeightChange={pageIndex === 0 && !hasServerLayout ? updateProfilePageHeight : null}
                     language={language}
                     layoutManifest={layoutManifest}
                   />
