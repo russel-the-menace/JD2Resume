@@ -628,7 +628,8 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
       const document = rendererDocumentFromStored(input.document);
       const pagePlan = input.document.renderState.pagePlan as PagePlanV2;
       const hash = serverSnapshotHash(document);
-      if (hash !== pagePlan.snapshotHash || pagePlan.rendererVersion !== RENDERER_VERSION) {
+      const renderState = input.document.renderState as Record<string, unknown>;
+      if (renderState.status !== 'valid' || renderState.currentSnapshotHash !== pagePlan.snapshotHash || hash !== pagePlan.snapshotHash || pagePlan.rendererVersion !== RENDERER_VERSION) {
         sendJson(response, 409, { error: 'The resume changed before layout was finalized.', code: 'SNAPSHOT_HASH_MISMATCH' });
         return;
       }
@@ -649,7 +650,7 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
     server.middlewares.use('/api/render-sessions', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
       if (request.method !== 'GET') { next(); return; }
       const token = request.url?.replace(/^\/?/, '').split('?')[0] || '';
-      const session = renderSessions.get(token);
+      const session = renderSessions.consume(token);
       if (!session) { sendJson(response, 404, { error: 'Render session expired.' }); return; }
       sendJson(response, 200, { document: session.document, pagePlan: session.pagePlan, snapshotHash: session.snapshotHash, rendererVersion: session.rendererVersion });
     });

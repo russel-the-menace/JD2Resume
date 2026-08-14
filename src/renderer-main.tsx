@@ -24,7 +24,7 @@ async function runExportReplay() {
     const response = await fetch(`/api/render-sessions/${encodeURIComponent(token)}`); if (!response.ok) throw new Error('session');
     const payload = await response.json(); const snapshot = { revision: payload.pagePlan.revision, snapshotHash: payload.snapshotHash, rendererVersion: payload.rendererVersion, document: payload.document };
     const result = await replayCanonicalLayout(snapshot, payload.pagePlan, new AbortController().signal);
-    document.documentElement.dataset.replayResult = JSON.stringify({ rendererVersion: snapshot.rendererVersion, snapshotHash: snapshot.snapshotHash, pageCount: result.pagePlan.pages.length, blockOrder: result.pagePlan.blockOrder }); document.documentElement.dataset.renderStatus = 'ready';
+    document.documentElement.dataset.replayResult = JSON.stringify({ rendererVersion: snapshot.rendererVersion, snapshotHash: snapshot.snapshotHash, pageCount: result.pagePlan.pages.length, blockOrder: result.pagePlan.blockOrder, pages: result.pages.map((page) => ({ pageNumber: page.pageNumber, blockIds: result.pagePlan.pages[page.pageNumber - 1].blockIds, overflowX: page.overflowX, overflowY: page.overflowY })) }); document.documentElement.dataset.renderStatus = 'ready';
   } catch (error) { const failureCode = rendererFailureCode(error); document.documentElement.dataset.replayResult = JSON.stringify({ rendererVersion: RENDERER_VERSION, snapshotHash: '', pageCount: 0, blockOrder: [], failureCode }); document.documentElement.dataset.renderStatus = 'failed'; }
 }
 if (new URLSearchParams(window.location.search).get('mode') === 'export') void runExportReplay();
