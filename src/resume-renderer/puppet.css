@@ -15,8 +15,8 @@ html, body, #renderer-root { margin: 0; min-width: 0; min-height: 100%; backgrou
 .puppet-page { width: 794px; height: 1123px; margin: 0 0 34px; overflow: hidden; background: #fff; box-shadow: 0 1px 6px rgba(24, 44, 34, .16); }
 .puppet-page-content { height: 1123px; overflow: hidden; }
 .puppet-block { position: relative; min-width: 0; overflow-wrap: break-word; }
-.puppet-header { margin: -36px -54px 0; padding: 36px 54px 18px; border-bottom: 1px solid #d9ddda; }
-.resume-header { position: relative; display: block; }
+.puppet-header { margin: -36px -54px 0; }
+.resume-header { position: relative; display: block; padding: 36px 54px 18px; border-bottom: 1px solid #d9ddda; }
 .resume-name-block h1, .resume-name-block p { display: inline; margin: 0; color: #30445a; font-size: 29px; font-weight: 700; line-height: 1.22; letter-spacing: 0; }
 .resume-name-block h1::after { content: ' - '; }
 .resume-contact { display: flex; flex-wrap: wrap; gap: 5px 0; margin-top: 12px; color: #3d3d3d; font-size: 12.5px; }
