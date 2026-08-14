@@ -438,6 +438,17 @@ function rendererDocumentFromStored(document: Record<string, any>): RendererResu
 }
 function serverSnapshotHash(document: RendererResumeDocument) { return `sha256:${createHash('sha256').update(canonicalize(document)).digest('hex')}`; }
 function validPagePlan(value: unknown): value is PagePlanV2 { return isRecord(value) && Number(value.schemaVersion) === 2 && Array.isArray(value.pages) && Array.isArray(value.blockOrder) && typeof value.snapshotHash === 'string' && typeof value.rendererVersion === 'string'; }
+function preservesLayoutLocks(original: Record<string, any>, candidate: Record<string, any>) {
+  const originalBasics = isRecord(original.basics) ? original.basics : {}; const candidateBasics = isRecord(candidate.basics) ? candidate.basics : {};
+  for (const key of ['fullName', 'firstName', 'lastName', 'email', 'phone', 'gender', 'website', 'wechat', 'linkedin', 'whatsapp', 'telegram']) {
+    if (stringValue(originalBasics[key]) && stringValue(originalBasics[key]) !== stringValue(candidateBasics[key])) return false;
+  }
+  const originalExperience = Array.isArray(original.experience) ? original.experience : []; const candidateExperience = Array.isArray(candidate.experience) ? candidate.experience : [];
+  return originalExperience.every((entry, index) => {
+    const refined = candidateExperience[index];
+    return isRecord(refined) && stringValue(entry?.company) === stringValue(refined.company) && stringValue(entry?.start) === stringValue(refined.start) && stringValue(entry?.end) === stringValue(refined.end);
+  });
+}
 
 function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImportModels): Plugin {
   const renderSessions = new ExportSessionStore();
@@ -579,6 +590,26 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
     }
   };
 
+  const refineLayoutHandler = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+    const input = await parseInput(request, response, next);
+    if (!input) return;
+    if (!['english', 'chinese'].includes(input.language) || !isRecord(input.data)) { sendJson(response, 400, { error: 'Provide a generated resume to refine.' }); return; }
+    const traceId = randomUUID();
+    try {
+      const result = await requestFromProviders(
+        providers,
+        'Return valid JSON only. Preserve locked facts exactly. Do not add markdown or commentary.',
+        `Refine this generated resume only to improve page-density after five layout attempts failed. Return {"data": ResumeData}. Preserve all basic identity/contact fields exactly. Preserve every work experience company, start, and end exactly. You may expand or rewrite the summary, responsibilities, and skills. Do not remove work experiences. Add concrete responsibilities where necessary so each natural A4 page can be filled without reducing font size below the renderer floor. Layout report: ${JSON.stringify(input.layoutReport || {})}\nResume data: ${JSON.stringify(input.data)}`,
+        (value) => isRecord(value) && isRecord(value.data) && preservesLayoutLocks(input.data, value.data),
+        null,
+        8_000,
+        PROVIDER_TIMEOUT_MS,
+        { traceId, stage: 'layout-refinement' },
+      );
+      sendJson(response, 200, { data: result.data });
+    } catch (error) { sendProviderFailure(response, error, 'The resume layout could not be refined automatically.', traceId); }
+  };
+
   const pdfExportHandler = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (request.method !== 'POST') {
       next();
@@ -627,6 +658,9 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
     });
     server.middlewares.use('/api/import-profile', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
       void profileImportHandler(request, response, next);
+    });
+    server.middlewares.use('/api/refine-resume-layout', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+      void refineLayoutHandler(request, response, next);
     });
     server.middlewares.use('/api/translate-profile', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
       void profileTranslationHandler(request, response, next);

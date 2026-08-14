@@ -2207,6 +2207,21 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
     }
   };
 
+  const refineGeneratedLayout = useCallback(async (report) => {
+    try {
+      const response = await fetch('/api/refine-resume-layout', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language, data, layoutReport: report }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !isRecord(payload.data)) throw new Error(textValue(payload.error, 'Layout refinement failed.'));
+      updateData(normalizeResumeData(payload.data, language));
+      setToast('Resume content adjusted to fit the page layout');
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Layout refinement failed');
+    }
+  }, [data, language]);
+
   return (
     <div className="app-shell">
       <TopBar
@@ -2298,6 +2313,8 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
           documentName={documentName}
           layoutManifest={initialResumeState.layoutManifest}
           renderState={renderState}
+          allowContentRefinement={Boolean(initialResumeState.generationEvidence?.applicationId)}
+          onLayoutFailure={refineGeneratedLayout}
           onValidPlan={(pagePlan, report) => {
             setRenderState((current) => {
               if (current.pagePlan?.snapshotHash === pagePlan.snapshotHash && current.pagePlan?.revision === pagePlan.revision) return current;
@@ -4615,6 +4632,8 @@ function PreviewPanel({
   layoutManifest,
   renderState,
   onValidPlan,
+  allowContentRefinement,
+  onLayoutFailure,
 }) {
   const [colorMenu, setColorMenu] = useState(false);
   const [contentHeight, setContentHeight] = useState(RESUME_PAGE_HEIGHT);
@@ -4739,7 +4758,7 @@ function PreviewPanel({
         onPositionChange={onPreviewPositionChange}
       >
         {template === 'profile' ? (
-          <ResumePreviewFrame document={canonicalDocument} lastPlan={renderState?.pagePlan || null} onValidPlan={onValidPlan} />
+          <ResumePreviewFrame document={canonicalDocument} lastPlan={renderState?.pagePlan || null} onValidPlan={onValidPlan} allowContentRefinement={allowContentRefinement} onLayoutFailure={onLayoutFailure} />
         ) : <div className="resume-pages" aria-label={`${pageCount}-page resume preview`}>
           {Array.from({ length: pageCount }, (_, pageIndex) => (
             <div className="resume-sheet" data-page={pageIndex + 1} key={pageIndex}>
