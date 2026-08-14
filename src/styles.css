@@ -2803,8 +2803,9 @@ button:disabled {
 }
 
 .template-profile .resume-body {
-  gap: 26px;
-  padding: 30px 54px 40px;
+  gap: clamp(8px, calc(26px + var(--layout-section-gap-delta, 0px)), 46px);
+  padding: clamp(18px, calc(30px + var(--layout-section-gap-delta, 0px)), 42px) 54px
+    clamp(24px, calc(40px + var(--layout-section-gap-delta, 0px)), 54px);
 }
 
 .template-profile .resume-section {
@@ -2813,7 +2814,7 @@ button:disabled {
 
 .template-profile .resume-section h3 {
   padding: 2px 0 2px 12px;
-  margin: 0 0 18px;
+  margin: 0 0 clamp(8px, calc(18px + var(--layout-section-gap-delta, 0px)), 30px);
   color: #30445a;
   border-left: 4px solid var(--resume-accent);
   font-size: 18px;
@@ -2828,13 +2829,13 @@ button:disabled {
 
 .template-profile .resume-section p {
   color: #555;
-  font-size: 12.5px;
-  line-height: 1.8;
+  font-size: clamp(10.5px, calc(12.5px + var(--layout-font-size-delta, 0px)), 14px);
+  line-height: max(20px, calc(22.5px + var(--layout-line-height-delta, 0px)));
   text-align: justify;
 }
 
 .template-profile .resume-entry + .resume-entry {
-  margin-top: 23px;
+  margin-top: clamp(8px, calc(23px + var(--layout-section-gap-delta, 0px)), 38px);
 }
 
 .template-profile .resume-entry-heading strong {
@@ -2855,12 +2856,12 @@ button:disabled {
 }
 
 .template-profile .resume-entry ul {
-  gap: 8px;
+  gap: clamp(4px, calc(8px + var(--layout-section-gap-delta, 0px)), 12px);
   padding-left: 20px;
-  margin-top: 10px;
+  margin-top: clamp(5px, calc(10px + var(--layout-section-gap-delta, 0px)), 16px);
   color: #555;
-  font-size: 12.5px;
-  line-height: 1.7;
+  font-size: clamp(10.5px, calc(12.5px + var(--layout-font-size-delta, 0px)), 14px);
+  line-height: max(20px, calc(21.25px + var(--layout-line-height-delta, 0px)));
 }
 
 .template-profile .resume-entry li::marker {
@@ -2884,7 +2885,7 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 34px;
-  row-gap: 18px;
+  row-gap: clamp(8px, calc(18px + var(--layout-section-gap-delta, 0px)), 30px);
 }
 
 .profile-skill-category > strong {
@@ -2897,12 +2898,12 @@ button:disabled {
 .profile-skill-category ul {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: clamp(4px, calc(7px + var(--layout-section-gap-delta, 0px)), 11px);
   padding-left: 20px;
-  margin: 15px 0 0;
+  margin: clamp(7px, calc(15px + var(--layout-section-gap-delta, 0px)), 24px) 0 0;
   color: #555;
-  font-size: 12.5px;
-  line-height: 1.6;
+  font-size: clamp(10.5px, calc(12.5px + var(--layout-font-size-delta, 0px)), 14px);
+  line-height: max(19px, calc(20px + var(--layout-line-height-delta, 0px)));
 }
 
 .profile-skill-category li::marker {

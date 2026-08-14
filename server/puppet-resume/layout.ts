@@ -26,6 +26,9 @@ interface LayoutQuality {
   details: string;
   contentBottom: number;
   entryCount: number;
+  paragraphLineHeight: number;
+  responsibilityLineHeight: number;
+  skillLineHeight: number;
 }
 
 const PAGE_HEIGHT = 1123;
@@ -34,12 +37,15 @@ const MIN_PAGE_FILL_RATIO = 0.92;
 const TARGET_BOTTOM_MARGIN = 42;
 const CALIBRATION_STEPS = 8;
 const MAX_TUNING_INTENSITY = 3;
+const MIN_PARAGRAPH_LINE_HEIGHT = 20;
+const MIN_RESPONSIBILITY_LINE_HEIGHT = 20;
+const MIN_SKILL_LINE_HEIGHT = 19;
 const strategies = [
-  { id: 'balanced-fit', sectionGapDelta: 8, lineHeightDelta: 4, fontSizeDelta: 0 },
-  { id: 'line-fit', sectionGapDelta: 0, lineHeightDelta: 6, fontSizeDelta: 0 },
   { id: 'spacing-fit', sectionGapDelta: 14, lineHeightDelta: 0, fontSizeDelta: 0 },
+  { id: 'balanced-fit', sectionGapDelta: 8, lineHeightDelta: 4, fontSizeDelta: 0 },
   { id: 'typography-fit', sectionGapDelta: 2, lineHeightDelta: 2, fontSizeDelta: 1 },
   { id: 'combined-fit', sectionGapDelta: 10, lineHeightDelta: 5, fontSizeDelta: 0.8 },
+  { id: 'line-fit', sectionGapDelta: 0, lineHeightDelta: 6, fontSizeDelta: 0 },
 ] as const;
 
 function executablePath() {
@@ -93,30 +99,11 @@ async function seedResume(page: Page, document: Record<string, any>) {
 async function applyTuning(page: Page, tuning: LayoutTuning) {
   await page.evaluate(`(() => {
     const tuning = ${JSON.stringify(tuning)};
-    const spacing = document.querySelectorAll('.resume-section, .resume-entry, .profile-skill-category');
-    const lines = document.querySelectorAll('.resume-section p, .resume-entry li, .profile-skill-category li, .certificate-list span');
-    for (const element of spacing) {
-      element.style.marginTop = '';
-      element.style.marginBottom = '';
-    }
-    for (const element of lines) {
-      element.style.lineHeight = '';
-      element.style.fontSize = '';
-    }
-    for (const element of spacing) {
-      const styles = getComputedStyle(element);
-      const marginTop = Number.parseFloat(styles.marginTop) || 0;
-      const marginBottom = Number.parseFloat(styles.marginBottom) || 0;
-      element.style.marginTop = Math.max(0, marginTop + tuning.sectionGapDelta) + 'px';
-      element.style.marginBottom = Math.max(0, marginBottom + tuning.sectionGapDelta) + 'px';
-    }
-    for (const element of lines) {
-      const styles = getComputedStyle(element);
-      const lineHeight = Number.parseFloat(styles.lineHeight);
-      const fontSize = Number.parseFloat(styles.fontSize);
-      if (Number.isFinite(lineHeight)) element.style.lineHeight = Math.max(12, lineHeight + tuning.lineHeightDelta) + 'px';
-      if (Number.isFinite(fontSize)) element.style.fontSize = Math.max(8, fontSize + tuning.fontSizeDelta) + 'px';
-    }
+    const root = document.querySelector('.resume-page');
+    if (!root) return;
+    root.style.setProperty('--layout-section-gap-delta', tuning.sectionGapDelta + 'px');
+    root.style.setProperty('--layout-line-height-delta', tuning.lineHeightDelta + 'px');
+    root.style.setProperty('--layout-font-size-delta', tuning.fontSizeDelta + 'px');
   })()`);
 }
 
@@ -124,7 +111,18 @@ async function assess(page: Page): Promise<LayoutQuality> {
   return page.evaluate(({ pageHeight, orphanThreshold }) => {
     const root = document.querySelector('.resume-page');
     if (!root) {
-      return { pageCount: 0, fillRatio: 0, pageFillRatios: [], hasOrphans: true, details: 'resume root missing', contentBottom: 0, entryCount: 0 };
+      return {
+        pageCount: 0,
+        fillRatio: 0,
+        pageFillRatios: [],
+        hasOrphans: true,
+        details: 'resume root missing',
+        contentBottom: 0,
+        entryCount: 0,
+        paragraphLineHeight: 0,
+        responsibilityLineHeight: 0,
+        skillLineHeight: 0,
+      };
     }
     const rootRect = root.getBoundingClientRect();
     const renderScale = rootRect.width > 0 && (root as HTMLElement).clientWidth > 0
@@ -176,6 +174,9 @@ async function assess(page: Page): Promise<LayoutQuality> {
       details: details.join('; '),
       contentBottom,
       entryCount: root.querySelectorAll('.resume-entry').length,
+      paragraphLineHeight: Number.parseFloat(getComputedStyle(root.querySelector('.resume-section > p') || root).lineHeight) || 0,
+      responsibilityLineHeight: Number.parseFloat(getComputedStyle(root.querySelector('.resume-entry li') || root).lineHeight) || 0,
+      skillLineHeight: Number.parseFloat(getComputedStyle(root.querySelector('.profile-skill-category li') || root).lineHeight) || 0,
     };
   }, { pageHeight: PAGE_HEIGHT, orphanThreshold: ORPHAN_THRESHOLD });
 }
@@ -192,7 +193,10 @@ function scaledTuning(strategy: typeof strategies[number], direction: number, in
 
 function isValid(quality: LayoutQuality, targetPageCount: number) {
   return quality.pageCount === targetPageCount && quality.contentBottom > 0 && !quality.hasOrphans &&
-    quality.pageFillRatios.length === targetPageCount && quality.pageFillRatios.every((ratio) => ratio >= MIN_PAGE_FILL_RATIO);
+    quality.pageFillRatios.length === targetPageCount && quality.pageFillRatios.every((ratio) => ratio >= MIN_PAGE_FILL_RATIO) &&
+    (quality.paragraphLineHeight === 0 || quality.paragraphLineHeight >= MIN_PARAGRAPH_LINE_HEIGHT) &&
+    (quality.responsibilityLineHeight === 0 || quality.responsibilityLineHeight >= MIN_RESPONSIBILITY_LINE_HEIGHT) &&
+    (quality.skillLineHeight === 0 || quality.skillLineHeight >= MIN_SKILL_LINE_HEIGHT);
 }
 
 async function calibrateStrategy(

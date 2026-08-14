@@ -4903,34 +4903,6 @@ function ResumePage({
   const pageRef = useRef(null);
 
   useLayoutEffect(() => {
-    const root = pageRef.current;
-    if (!root) return undefined;
-    const spacingElements = root.querySelectorAll('.resume-section, .resume-entry, .profile-skill-category');
-    const lineElements = root.querySelectorAll('.resume-section p, .resume-entry li, .profile-skill-category li, .certificate-list span');
-    spacingElements.forEach((element) => {
-      element.style.marginTop = '';
-      element.style.marginBottom = '';
-    });
-    lineElements.forEach((element) => {
-      element.style.lineHeight = '';
-      element.style.fontSize = '';
-    });
-    spacingElements.forEach((element) => {
-      const computed = window.getComputedStyle(element);
-      element.style.marginTop = `${Math.max(0, Number.parseFloat(computed.marginTop) + layoutManifest.sectionGapDelta)}px`;
-      element.style.marginBottom = `${Math.max(0, Number.parseFloat(computed.marginBottom) + layoutManifest.sectionGapDelta)}px`;
-    });
-    lineElements.forEach((element) => {
-      const computed = window.getComputedStyle(element);
-      const lineHeight = Number.parseFloat(computed.lineHeight);
-      const fontSize = Number.parseFloat(computed.fontSize);
-      if (Number.isFinite(lineHeight)) element.style.lineHeight = `${Math.max(12, lineHeight + layoutManifest.lineHeightDelta)}px`;
-      if (Number.isFinite(fontSize)) element.style.fontSize = `${Math.max(8, fontSize + layoutManifest.fontSizeDelta)}px`;
-    });
-    return undefined;
-  }, [data, layoutManifest.fontSizeDelta, layoutManifest.lineHeightDelta, layoutManifest.sectionGapDelta]);
-
-  useLayoutEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       const contentHeight = Math.max(RESUME_PAGE_HEIGHT, Math.ceil(pageRef.current?.scrollHeight || RESUME_PAGE_HEIGHT));
       onContentHeightChange(contentHeight);
@@ -4951,7 +4923,12 @@ function ResumePage({
     <article
       ref={pageRef}
       className={cx('resume-page', `template-${template}`, hasProfilePhoto && 'has-profile-photo')}
-      style={{ '--resume-accent': accent } as CssVariables}
+      style={{
+        '--resume-accent': accent,
+        '--layout-section-gap-delta': `${layoutManifest.sectionGapDelta}px`,
+        '--layout-line-height-delta': `${layoutManifest.lineHeightDelta}px`,
+        '--layout-font-size-delta': `${layoutManifest.fontSizeDelta}px`,
+      } as CssVariables}
       lang={isChineseResume(language) ? 'zh-CN' : 'en'}
     >
       <header className="resume-header">
