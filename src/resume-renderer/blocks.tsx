@@ -8,7 +8,7 @@ export interface RendererBlock extends ResumeBlockDescriptor { content: ReactNod
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 const label = (chinese: boolean, cn: string, en: string) => chinese ? cn : en;
 const date = (start?: string, end?: string) => [text(start), text(end)].filter(Boolean).join(' - ');
-const sectionBlock = (id: string, sourcePath: string, order: number, content: ReactNode, keepWithNext = 1): RendererBlock => ({ id, kind: 'section-heading', sourcePath, order, keepWithNext, atomic: true, gapBeforeToken: '26', gapAfterToken: '0', content: <h3>{content}</h3> });
+const sectionBlock = (id: string, sourcePath: string, order: number, content: ReactNode, keepWithNext = 1): RendererBlock => ({ id, kind: 'section-heading', sourcePath, order, keepWithNext, atomic: true, gapBeforeToken: order === 1 ? '30' : '26', gapAfterToken: '0', content: <h3>{content}</h3> });
 const block = (id: string, kind: ResumeBlockKind, sourcePath: string, order: number, content: ReactNode, options: Partial<ResumeBlockDescriptor> = {}): RendererBlock => ({ id, kind, sourcePath, order, keepWithNext: 0, atomic: true, gapBeforeToken: '0', gapAfterToken: '0', content, ...options });
 
 export function buildRendererBlocks(document: RendererResumeDocument): RendererBlock[] {
@@ -26,12 +26,12 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
     if (section === 'basics') continue;
     if (section === 'summary' && text(data.summary)) {
       add(sectionBlock(blockId.section('summary'), 'data.summary', order, label(chinese, '个人介绍', 'Personal Introduction')));
-      add(block(blockId.summary(0), 'summary-paragraph', 'data.summary', order, <FormattedPuppetText value={text(data.summary)} allowBold maxBold={2} />));
+      add(block(blockId.summary(0), 'summary-paragraph', 'data.summary', order, <FormattedPuppetText value={text(data.summary)} allowBold maxBold={2} />, { gapBeforeToken: '18' }));
     }
     if (section === 'education' && data.education.length) {
       add(sectionBlock(blockId.section('education'), 'data.education', order, label(chinese, '教育经历', 'Education')));
       data.education.forEach((entry, index) => add(block(blockId.education(entry.id, index), 'education-entry', `data.education.${index}`, order,
-        <div className="resume-entry-heading profile-education-entry"><div><strong>{text(entry.school)}</strong><span>{[text(entry.degree), text(entry.location)].filter(Boolean).join(', ')}</span></div><time>{date(entry.start, entry.end)}</time></div>, { gapBeforeToken: index ? '23' : '0' })));
+        <div className="resume-entry-heading profile-education-entry"><div><strong>{text(entry.school)}</strong><span>{[text(entry.degree), text(entry.location)].filter(Boolean).join(', ')}</span></div><time>{date(entry.start, entry.end)}</time></div>, { gapBeforeToken: index ? '23' : '18' })));
     }
     if (section === 'experience' && data.experience.length) {
       add(sectionBlock(blockId.section('experience'), 'data.experience', order, label(chinese, '工作经历', 'Work Experience')));
@@ -39,7 +39,7 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
         const bullets = (entry.bullets || []).map(text).filter(Boolean);
         if (!bullets.length) return;
         add(block(blockId.experienceHeading(entry.id, entryIndex), 'experience-heading', `data.experience.${entryIndex}`, order,
-          <div className="resume-entry-heading profile-work-entry"><div><strong>{text(entry.company)} - {text(entry.role)}</strong></div><time>{date(entry.start, entry.current ? (chinese ? '至今' : 'Present') : entry.end)}</time></div>, { keepWithNext: 1, gapBeforeToken: entryIndex ? '23' : '0' }));
+          <div className="resume-entry-heading profile-work-entry"><div><strong>{text(entry.company)} - {text(entry.role)}</strong></div><time>{date(entry.start, entry.current ? (chinese ? '至今' : 'Present') : entry.end)}</time></div>, { keepWithNext: 1, gapBeforeToken: entryIndex ? '23' : '18' }));
         let underlinedBullets = 0;
         bullets.forEach((bullet, bulletIndex) => { const allowUnderline = underlinedBullets < 2 && /<u>.*?<\/u>/i.test(bullet); if (allowUnderline) underlinedBullets += 1; add(block(blockId.experienceBullet(entry.id, entryIndex, bulletIndex), 'experience-bullet', `data.experience.${entryIndex}.bullets.${bulletIndex}`, order, <div className="resume-bullet"><FormattedPuppetText value={bullet} allowUnderline={allowUnderline} maxUnderline={1} /></div>, { gapBeforeToken: bulletIndex ? '8' : '10' })); });
       });
@@ -50,11 +50,11 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
         { title: chinese ? '专业领域' : 'Expertise', items: text(data.skills?.expertise).split(',').map((item) => item.trim()).filter(Boolean) },
         { title: chinese ? '工具平台' : 'Tools & Platforms', items: text(data.skills?.tools).split(',').map((item) => item.trim()).filter(Boolean) },
       ].filter((category) => category.items.length);
-      add(block(blockId.skillHeading('content', 0), 'skill-category-heading', 'data.skills', order, <div className="profile-skills-grid">{categories.map((category) => <div className="profile-skill-category" key={category.title}><strong>{category.title}</strong><ul>{category.items.map((item, itemIndex) => <li key={`${item}-${itemIndex}`}>{item}</li>)}</ul></div>)}</div>));
+      add(block(blockId.skillHeading('content', 0), 'skill-category-heading', 'data.skills', order, <div className="profile-skills-grid">{categories.map((category) => <div className="profile-skill-category" key={category.title}><strong>{category.title}</strong><ul>{category.items.map((item, itemIndex) => <li key={`${item}-${itemIndex}`}>{item}</li>)}</ul></div>)}</div>, { gapBeforeToken: '18' }));
     }
     if (section === 'certifications' && (data.certificates || []).length) {
       add(sectionBlock(blockId.section('certificates'), 'data.certificates', order, label(chinese, '证书', 'Certificates')));
-      add(block(blockId.certificate('content', 0), 'certificate-item', 'data.certificates', order, <div className="certificate-list">{(data.certificates || []).map((entry, index) => <span key={String(entry.id ?? index)}>{text(entry.name)}{text(entry.date) ? <small>{text(entry.date)}</small> : null}</span>)}</div>));
+      add(block(blockId.certificate('content', 0), 'certificate-item', 'data.certificates', order, <div className="certificate-list">{(data.certificates || []).map((entry, index) => <span key={String(entry.id ?? index)}>{text(entry.name)}{text(entry.date) ? <small>{text(entry.date)}</small> : null}</span>)}</div>, { gapBeforeToken: '18' }));
     }
   }
   return blocks;

@@ -26,9 +26,8 @@ html, body, #renderer-root { margin: 0; min-width: 0; min-height: 100%; backgrou
 .profile-avatar-slot { position: absolute; top: 36px; right: 54px; display: flex; align-items: center; justify-content: center; width: 80px; }
 .resume-profile-avatar { width: 80px; height: 80px; object-fit: cover; border: 2px solid #e0e0e0; border-radius: 50%; overflow: hidden; }
 .resume-header:has(.profile-avatar-slot) { padding-right: 178px; }
-.puppet-section-heading { width: 91px; height: 0; }
-.puppet-section-heading h3 { position: absolute; top: 0; left: 0; width: 91px; padding: 2px 0 2px 12px; margin: 0; color: #30445a; border-left: 4px solid var(--resume-accent); font-size: 18px; font-weight: 700; line-height: 1.2; }
-.puppet-summary-paragraph, .puppet-education-entry, .puppet-experience-heading, .puppet-experience-bullet, .puppet-skill-category-heading, .puppet-certificate-item { margin-left: 108px; }
+.puppet-section-heading { width: 100%; }
+.puppet-section-heading h3 { padding: 2px 0 2px 12px; margin: 0; color: #30445a; border-left: 4px solid var(--resume-accent); font-size: 18px; font-weight: 700; line-height: 1.2; }
 .puppet-summary-paragraph { color: #555; font-size: clamp(10.5px, calc(12.5px + var(--layout-font-size-delta, 0px)), 14px); line-height: max(20px, calc(22.5px + var(--layout-line-height-delta, 0px))); text-align: justify; }
 .resume-paragraph-break { display: block; height: 9px; line-height: 0; }
 .resume-entry-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
