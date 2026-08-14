@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { resolve } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { PuppetResumePipeline } from './server/puppet-resume/pipeline';
@@ -691,6 +692,14 @@ export default defineConfig(({ mode }) => {
     escalation: env.GEMINI_PROFILE_PRO_MODEL || 'gemini-3.1-pro-preview',
   };
   return {
+    build: {
+      rollupOptions: {
+        input: {
+          app: resolve(__dirname, 'index.html'),
+          renderer: resolve(__dirname, 'renderer.html'),
+        },
+      },
+    },
     plugins: [
       statePersistencePlugin(env.DATABASE_URL || ''),
       resumeGenerationPlugin(providers, profileModels),
