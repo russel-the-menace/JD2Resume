@@ -47,7 +47,9 @@ const document = {
 const origin = process.env.DRAFTLINE_URL || 'http://127.0.0.1:4173';
 const manifest = await resolvePuppetLayout(origin, document);
 assert.ok(manifest.pageCount > 1);
-assert.ok(['compact-gaps', 'compact-lines', 'compact-balanced', 'expand-gaps', 'expand-lines'].includes(manifest.policy));
+assert.ok(['balanced-fit', 'line-fit', 'spacing-fit', 'typography-fit', 'combined-fit'].includes(manifest.policy));
+assert.equal(manifest.pageFillRatios.length, manifest.pageCount);
+assert.ok(manifest.pageFillRatios.every((ratio) => ratio >= 0.92));
 const pdf = await renderPuppetPdf(origin, { ...document, layoutManifest: manifest }, manifest);
 assert.equal(pdf.subarray(0, 4).toString(), '%PDF');
 assert.ok(pdf.length > 10_000);

@@ -195,13 +195,20 @@ function normalizeGenerationEvidence(value) {
 
 function normalizeLayoutManifest(value) {
   const source = isRecord(value) ? value : {};
-  const allowedPolicies = new Set(['compact-gaps', 'compact-lines', 'compact-balanced', 'expand-gaps', 'expand-lines']);
+  const allowedPolicies = new Set([
+    'balanced-fit', 'line-fit', 'spacing-fit', 'typography-fit', 'combined-fit',
+    'compact-gaps', 'compact-lines', 'compact-balanced', 'expand-gaps', 'expand-lines',
+  ]);
   return {
     policy: allowedPolicies.has(source.policy) ? source.policy : '',
     sectionGapDelta: Number.isFinite(Number(source.sectionGapDelta)) ? Number(source.sectionGapDelta) : 0,
     lineHeightDelta: Number.isFinite(Number(source.lineHeightDelta)) ? Number(source.lineHeightDelta) : 0,
+    fontSizeDelta: Number.isFinite(Number(source.fontSizeDelta)) ? Number(source.fontSizeDelta) : 0,
     pageCount: Math.max(1, Number(source.pageCount) || 1),
     fillRatio: Math.max(0, Math.min(1, Number(source.fillRatio) || 0)),
+    pageFillRatios: Array.isArray(source.pageFillRatios)
+      ? source.pageFillRatios.map((ratio) => Math.max(0, Math.min(1, Number(ratio) || 0)))
+      : [],
   };
 }
 
@@ -4704,20 +4711,24 @@ function ResumePage({
       element.style.marginTop = '';
       element.style.marginBottom = '';
     });
-    lineElements.forEach((element) => { element.style.lineHeight = ''; });
+    lineElements.forEach((element) => {
+      element.style.lineHeight = '';
+      element.style.fontSize = '';
+    });
     spacingElements.forEach((element) => {
       const computed = window.getComputedStyle(element);
       element.style.marginTop = `${Math.max(0, Number.parseFloat(computed.marginTop) + layoutManifest.sectionGapDelta)}px`;
       element.style.marginBottom = `${Math.max(0, Number.parseFloat(computed.marginBottom) + layoutManifest.sectionGapDelta)}px`;
     });
-    if (layoutManifest.lineHeightDelta !== 0) {
-      lineElements.forEach((element) => {
-        const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight);
-        if (Number.isFinite(lineHeight)) element.style.lineHeight = `${Math.max(12, lineHeight + layoutManifest.lineHeightDelta)}px`;
-      });
-    }
+    lineElements.forEach((element) => {
+      const computed = window.getComputedStyle(element);
+      const lineHeight = Number.parseFloat(computed.lineHeight);
+      const fontSize = Number.parseFloat(computed.fontSize);
+      if (Number.isFinite(lineHeight)) element.style.lineHeight = `${Math.max(12, lineHeight + layoutManifest.lineHeightDelta)}px`;
+      if (Number.isFinite(fontSize)) element.style.fontSize = `${Math.max(8, fontSize + layoutManifest.fontSizeDelta)}px`;
+    });
     return undefined;
-  }, [data, layoutManifest.lineHeightDelta, layoutManifest.sectionGapDelta]);
+  }, [data, layoutManifest.fontSizeDelta, layoutManifest.lineHeightDelta, layoutManifest.sectionGapDelta]);
 
   useLayoutEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -4731,6 +4742,7 @@ function ResumePage({
     data,
     displayOrder,
     layoutManifest.lineHeightDelta,
+    layoutManifest.fontSizeDelta,
     layoutManifest.sectionGapDelta,
     onContentHeightChange,
   ]);

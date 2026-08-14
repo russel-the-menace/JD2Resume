@@ -48,6 +48,25 @@ function assertNoIllegalOutput(text: string): void {
   if (text.includes('\uFFFD')) throw new Error('检测到 AI 输出包含 Unicode 替换字符');
 }
 
+function plainText(value: string) {
+  return value.replace(/<\/?(?:b|u)>/gi, '').replace(/\s+/g, ' ').trim();
+}
+
+function responsibilityLength(value: string, isEnglish: boolean) {
+  const content = plainText(value);
+  if (isEnglish) return content.length;
+  return [...content].reduce((total, character) => total + (/[^\x00-\xff]/.test(character) ? 1 : 0.5), 0);
+}
+
+function validateResponsibilityLength(value: string, isEnglish: boolean, maxCharPerLine: number) {
+  const length = responsibilityLength(value, isEnglish);
+  // Layout prompts target a fuller two-line bullet, while this gate only rejects
+  // content that is clearly too short to render or long enough to create a third line.
+  const minimum = maxCharPerLine * 0.75;
+  const maximum = maxCharPerLine * 2.25;
+  return { valid: length >= minimum && length <= maximum, length, minimum, maximum };
+}
+
 /** Puppet Resume's two-phase content generation pipeline. */
 export class PuppetResumePipeline {
   constructor(private readonly generateText: PuppetTextGenerator) {}
@@ -162,6 +181,14 @@ export class PuppetResumePipeline {
             throw new Error(`职责数量不足 8 条 index=${index}`);
           }
           if (experience.responsibilities.some(isIllegal)) throw new Error(`职责内容存在非法值 index=${index}`);
+          experience.responsibilities.forEach((item: string, itemIndex: number) => {
+            const length = validateResponsibilityLength(item, isEnglish, maxCharPerLine);
+            if (!length.valid) {
+              throw new Error(
+                `职责长度不适合双行排版 index=${index}, item=${itemIndex}, length=${Math.round(length.length)}, expected=${Math.round(length.minimum)}-${Math.round(length.maximum)}`,
+              );
+            }
+          });
         });
         return true;
       } catch (error: any) {
@@ -174,19 +201,6 @@ export class PuppetResumePipeline {
       ...experience,
       responsibilities: bulletData.workExperience[index]?.responsibilities || [],
     }));
-    if (!isEnglish) {
-      workExperience.forEach((experience, experienceIndex) => {
-        experience.responsibilities.forEach((item: string, itemIndex: number) => {
-          const visualLength = item.split('').reduce((total: number, character: string) =>
-            total + (/[^\x00-\xff]/.test(character) ? 1 : 0.5), 0);
-          const remainder = visualLength % maxCharPerLine;
-          const fill = remainder === 0 && visualLength > 0 ? 1 : remainder / maxCharPerLine;
-          if (fill < 0.3) {
-            console.warn(`[排版建议] 工作经历 ${experienceIndex + 1} 的第 ${itemIndex + 1} 条职责可能留白过大 (填充率: ${Math.round(fill * 100)}%)`);
-          }
-        });
-      });
-    }
     return {
       ...baseData,
       position: nonJobData.position || targetTitle,

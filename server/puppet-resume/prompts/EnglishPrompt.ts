@@ -405,10 +405,11 @@ ${anchors}
   - If original content includes leadership/technical-leading signals, preserve that leadership level and do not downgrade to an individual-contributor-only narrative.
 4. Use strong action verbs; avoid weak phrasing like “Responsible for” or “Helped with”.
 5. Follow STAR logic and keep each bullet outcome-oriented.
+5.1 Prefer ${Math.floor((context.maxCharPerLine || 90) * 1.7)}-${Math.floor((context.maxCharPerLine || 90) * 2.1)} visible characters after removing HTML tags. Count and verify every bullet before the first response; do not make bullets so short that they occupy one line or so long that they spill into a third line.
 6. Bolding rule per role: first bullet must contain exactly one <b> segment; among remaining bullets, exactly two bullets each contain one <b> segment (total 3 bullets with <b> per role).
 7. Avoid acronym-with-parentheses style for professional methodologies (write full terms when possible).
 8. Do not add, remove, or rewrite non-responsibility fields.
-9. Even if context is sparse, still provide 8 high-quality bullets.
+9. Even if context is sparse, still provide 8 high-quality bullets. Every bullet must fill approximately two lines without spilling into a clear third line.
 
 ### Output format (JSON only)
 {

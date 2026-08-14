@@ -54,7 +54,9 @@ const phaseOne = {
   }],
 };
 const responsibilities = Array.from({ length: 8 }, (_, index) =>
-  index === 0 ? 'Engineered <b>core services</b> with measurable reliability gains.' : `Delivered measurable platform result ${index + 1}.`
+  index === 0
+    ? 'Engineered <b>core services</b> with measurable reliability gains across distributed workloads, improving delivery confidence, observability, and incident response for product teams.'
+    : `Delivered measurable platform result ${index + 1} by improving service reliability, automated validation, operational monitoring, and release quality across remote product teams.`
 );
 const phaseTwo = {
   workExperience: [{
