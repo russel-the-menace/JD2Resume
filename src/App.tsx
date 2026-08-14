@@ -29,11 +29,14 @@ import {
   LayoutGrid,
   KeyRound,
   Link,
+  Linkedin,
   ListChecks,
   LoaderCircle,
   LogIn,
   Mail,
   MapPin,
+  MessageCircle,
+  MessageSquareText,
   Minus,
   MoreHorizontal,
   Palette,
@@ -45,6 +48,7 @@ import {
   Redo2,
   RotateCcw,
   Search,
+  Send,
   Settings2,
   Sparkles,
   Trash2,
@@ -354,22 +358,16 @@ const emptyUserProfile = {
   },
 };
 
-const requiredProfileFields = ['fullName', 'gender', 'phone', 'email', 'location'];
-
-const profileFieldLabels = {
+const profileValidationMessages = {
   chinese: {
-    fullName: '姓名',
-    gender: '性别',
-    phone: '手机号码',
-    email: '邮箱',
-    location: '所在地',
+    name: '请填写姓名。',
+    contact: '请至少填写手机号码、邮箱或微信号中的一项。',
+    education: '请至少添加一条教育经历。',
   },
   english: {
-    fullName: 'Full name',
-    gender: 'Gender',
-    phone: 'Phone',
-    email: 'Email',
-    location: 'Location',
+    name: 'Enter your full name.',
+    contact: 'Add at least one personal website, LinkedIn, WhatsApp, or Telegram contact.',
+    education: 'Add at least one education entry.',
   },
 };
 
@@ -601,9 +599,21 @@ function accountInitials(username) {
     .toUpperCase() || '??';
 }
 
-function missingProfileFields(profile, language) {
+function validatePersonalProfile(profile, language) {
   const fields = profile?.[language] || {};
-  return requiredProfileFields.filter((field) => !textValue(fields[field]).trim());
+  const contactFields = language === 'chinese'
+    ? ['phone', 'email', 'wechat']
+    : ['website', 'linkedin', 'whatsapp', 'telegram'];
+  const issues = [
+    ...(!textValue(fields.fullName).trim() ? ['name'] : []),
+    ...(!contactFields.some((field) => textValue(fields[field]).trim()) ? ['contact'] : []),
+    ...(!Array.isArray(fields.educations) || fields.educations.length === 0 ? ['education'] : []),
+  ];
+  return {
+    valid: issues.length === 0,
+    issues,
+    message: issues.map((issue) => profileValidationMessages[language][issue]).join(' '),
+  };
 }
 
 function parseWebsiteLink(value) {
@@ -695,10 +705,11 @@ function normalizeResumeData(value, language = 'english') {
       phone: textValue(basics.phone, initialResume.basics.phone),
       location: textValue(basics.location, initialResume.basics.location),
       gender: textValue(basics.gender, chinese ? '男' : initialResume.basics.gender),
-      website: textValue(
-        basics.website,
-        textValue(basics.linkedin, initialResume.basics.website),
-      ),
+      website: textValue(basics.website),
+      wechat: textValue(basics.wechat),
+      linkedin: textValue(basics.linkedin),
+      whatsapp: textValue(basics.whatsapp),
+      telegram: textValue(basics.telegram),
       photoUrl: textValue(basics.photoUrl, initialResume.basics.photoUrl),
     },
     summary: textValue(source.summary, initialResume.summary),
@@ -1675,10 +1686,12 @@ function App() {
     });
     const languages = outputLanguage === 'both' ? ['chinese', 'english'] : [outputLanguage];
     const incompleteProfiles = languages
-      .map((language) => ({ language, fields: missingProfileFields(userProfile, language) }))
-      .filter(({ fields }) => fields.length);
+      .map((language) => ({ language, validation: validatePersonalProfile(userProfile, language) }))
+      .filter(({ validation }) => !validation.valid);
     if (incompleteProfiles.length) {
-      throw new Error('Complete the selected personal profile before generating a resume.');
+      throw new Error(incompleteProfiles
+        .map(({ language, validation }) => `${language === 'chinese' ? '中文' : 'English'}: ${validation.message}`)
+        .join(' '));
     }
     if (sourceType === 'text' && !normalizedJobDescription) {
       throw new Error('Enter a job description before generating a resume.');
@@ -2978,6 +2991,7 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
   const [educationEditor, setEducationEditor] = useState(null);
   const [workEditor, setWorkEditor] = useState(null);
   const [entryError, setEntryError] = useState('');
+  const [profileError, setProfileError] = useState('');
   const [directoryPicker, setDirectoryPicker] = useState(null);
   const [directoryKeyword, setDirectoryKeyword] = useState('');
   const [directoryResults, setDirectoryResults] = useState([]);
@@ -2986,6 +3000,7 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
   const fields = draft[language];
   const chinese = language === 'chinese';
   const updateField = (field, value) => {
+    setProfileError('');
     setDraft((current) => ({
       ...current,
       [language]: { ...current[language], [field]: value },
@@ -3171,6 +3186,12 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
       setEntryError(chinese ? '请先保存或取消当前编辑项。' : 'Save or cancel the current entry first.');
       return;
     }
+    const validation = validatePersonalProfile(draft, language);
+    if (!validation.valid) {
+      setProfileError(validation.message);
+      return;
+    }
+    setProfileError('');
     if (onSave(draft)) onComplete();
   };
 
@@ -3261,8 +3282,8 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
         </header>
         <div className="resume-dialog-content profile-dialog-content">
           <div className="resume-language-selector" role="group" aria-label="Profile language">
-            <button type="button" className={cx(chinese && 'is-selected')} onClick={() => { setLanguage('chinese'); setEducationEditor(null); setWorkEditor(null); }} aria-pressed={chinese}>中文</button>
-            <button type="button" className={cx(!chinese && 'is-selected')} onClick={() => { setLanguage('english'); setEducationEditor(null); setWorkEditor(null); }} aria-pressed={!chinese}>English</button>
+            <button type="button" className={cx(chinese && 'is-selected')} onClick={() => { setLanguage('chinese'); setEducationEditor(null); setWorkEditor(null); setProfileError(''); }} aria-pressed={chinese}>中文</button>
+            <button type="button" className={cx(!chinese && 'is-selected')} onClick={() => { setLanguage('english'); setEducationEditor(null); setWorkEditor(null); setProfileError(''); }} aria-pressed={!chinese}>English</button>
           </div>
 
           <section className="profile-section-block">
@@ -3290,7 +3311,7 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
               {fields.phoneEn && fields.phoneEn !== fields.phone && <Field label={chinese ? '国际手机号' : 'International phone'} value={fields.phoneEn} onChange={(value) => updateField('phoneEn', value)} />}
               <Field label="Email" type="email" value={fields.email} onChange={(value) => updateField('email', value)} />
               {chinese ? <Field label="微信号" value={fields.wechat} onChange={(value) => updateField('wechat', value)} /> : <Field label="LinkedIn" value={fields.linkedin} onChange={(value) => updateField('linkedin', value)} />}
-              <Field label={chinese ? '个人网站' : 'Website'} value={fields.website} placeholder="https://..." onChange={(value) => updateField('website', value)} />
+              <Field label={chinese ? '个人网站' : 'Personal website'} value={fields.website} placeholder="https://..." onChange={(value) => updateField('website', value)} />
               {!chinese && <Field label="WhatsApp" value={fields.whatsapp} onChange={(value) => updateField('whatsapp', value)} />}
               {!chinese && <Field label="Telegram" value={fields.telegram} onChange={(value) => updateField('telegram', value)} />}
             </div>
@@ -3337,7 +3358,11 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
           </section>
 
         </div>
-        <footer className="resume-dialog-actions"><button className="secondary-button" type="button" onClick={onCancel}>{chinese ? '取消' : 'Cancel'}</button><button className="primary-button" type="submit"><Check size={16} /> {chinese ? '保存资料' : 'Save profile'}</button></footer>
+        <footer className="resume-dialog-actions profile-save-actions">
+          {profileError && <p className="account-auth-error profile-save-error" role="alert">{profileError}</p>}
+          <button className="secondary-button" type="button" onClick={onCancel}>{chinese ? '取消' : 'Cancel'}</button>
+          <button className="primary-button" type="submit"><Check size={16} /> {chinese ? '保存资料' : 'Save profile'}</button>
+        </footer>
       </form>
       {importDialogOpen && <ProfileImportDialog onCancel={() => setImportDialogOpen(false)} onImport={applyImportedProfile} />}
       {importedProfile && <ProfileSyncDialog sourceLanguage={importedProfile.language} onCancel={() => setImportedProfile(null)} onSkip={() => setImportedProfile(null)} onSync={syncImportedProfile} />}
@@ -3515,11 +3540,11 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const outputLanguages = outputLanguage === 'both' ? ['chinese', 'english'] : [outputLanguage];
   const incompleteProfiles = outputLanguages
-    .map((language) => ({ language, fields: missingProfileFields(profile, language) }))
-    .filter(({ fields }) => fields.length);
+    .map((language) => ({ language, validation: validatePersonalProfile(profile, language) }))
+    .filter(({ validation }) => !validation.valid);
   const profileError = incompleteProfiles.length
     ? incompleteProfiles
-      .map(({ language, fields }) => `${language === 'chinese' ? '中文' : 'English'}: ${fields.map((field) => profileFieldLabels[language][field]).join('、')}`)
+      .map(({ language, validation }) => `${language === 'chinese' ? '中文' : 'English'}: ${validation.message}`)
       .join('；')
     : '';
   const sourceReady = inputMode === 'text' ? Boolean(jobDescription.trim()) : Boolean(sourceFile);
@@ -3546,7 +3571,7 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
     event.preventDefault();
     if (!canGenerate) return;
     if (profileError) {
-      setError('Complete the selected profile before generating a resume.');
+      setError(profileError);
       return;
     }
     setError('');
@@ -4863,6 +4888,10 @@ function ResumePage({
     { id: 'location', icon: MapPin, value: basics.location },
     { id: 'gender', icon: UserRound, value: basics.gender },
     { id: 'website', icon: Link, value: basics.website },
+    { id: 'wechat', icon: MessageSquareText, value: basics.wechat },
+    { id: 'linkedin', icon: Linkedin, value: basics.linkedin },
+    { id: 'whatsapp', icon: MessageCircle, value: basics.whatsapp },
+    { id: 'telegram', icon: Send, value: basics.telegram },
   ].filter((item) => item.value);
   const displayOrder = useMemo(
     () => isProfileTemplate && !sectionOrderCustomized

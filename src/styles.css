@@ -277,6 +277,16 @@ button:disabled {
   line-height: 1.45;
 }
 
+.profile-save-actions {
+  flex-wrap: wrap;
+}
+
+.profile-save-error {
+  flex: 1 0 100%;
+  margin: 0;
+  text-align: right;
+}
+
 .profile-import-button {
   height: 32px;
   padding: 0 10px;

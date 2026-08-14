@@ -197,6 +197,14 @@ await desktopPage.route('**/api/translate-profile', async (route) => {
     }),
   });
 });
+await profileDialog.getByLabel('姓名').fill('');
+await profileDialog.getByLabel('手机号码').fill('');
+await profileDialog.getByLabel('Email').fill('');
+await profileDialog.getByLabel('微信号').fill('');
+await profileDialog.getByRole('button', { name: '保存资料' }).click();
+const profileSaveError = profileDialog.getByRole('alert');
+report.checks.profileSaveUsesGenerationValidation =
+  (await profileSaveError.textContent()) === '请填写姓名。 请至少填写手机号码、邮箱或微信号中的一项。 请至少添加一条教育经历。';
 await profileDialog.getByLabel('性别').selectOption('女');
 await profileDialog.getByRole('button', { name: 'Import from resume' }).click();
 const profileImportDialog = desktopPage.getByRole('dialog', { name: 'Import from resume' });
@@ -297,6 +305,9 @@ await desktopPage.route('**/api/generate-resume', async (route) => {
           location: 'New York, NY',
           gender: 'Male',
           website: 'alex.design',
+          linkedin: 'https://linkedin.com/in/alex-zhang',
+          whatsapp: '+1 555 0100',
+          telegram: '@alexzhang',
         },
         summary: 'Product designer focused on high-impact workflows.',
         experience: [],
@@ -329,6 +340,10 @@ await desktopPage.waitForURL(/resume=/);
 report.checks.jobDescriptionGenerated =
   (await desktopPage.getByLabel('Resume name').inputValue()) === 'Alex Zhang - Product Designer' &&
   (await desktopPage.locator('.resume-page').getByText('Lead Product Designer', { exact: true }).isVisible());
+report.checks.englishSocialContactIcons =
+  (await desktopPage.locator('[data-contact="linkedin"] svg').count()) === 1 &&
+  (await desktopPage.locator('[data-contact="whatsapp"] svg').count()) === 1 &&
+  (await desktopPage.locator('[data-contact="telegram"] svg').count()) === 1;
 await desktopPage.unroute('**/api/generate-resume');
 await desktopPage.getByRole('button', { name: 'Back to resumes' }).click();
 

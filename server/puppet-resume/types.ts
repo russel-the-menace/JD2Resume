@@ -12,6 +12,8 @@ export interface ContactInfo {
   website?: string;
   /** 领英 */
   linkedin?: string;
+  /** WhatsApp */
+  whatsapp?: string;
   /** 电报 */
   telegram?: string;
   /** 地址 */
@@ -158,6 +160,7 @@ export interface UserResumeProfile {
   aiMessage: string;
   website?: string;
   linkedin?: string;
+  whatsapp?: string;
   telegram?: string;
   location?: string;
   phone_en?: string;
@@ -214,6 +217,7 @@ export function mapFrontendRequestToResumeData(payload: GenerateFromFrontendRequ
       phone: isEnglish ? profile.phone_en : profile.phone,
       website: profile.website,
       linkedin: profile.linkedin,
+      whatsapp: profile.whatsapp,
       telegram: profile.telegram,
       location: profile.location,
     },
