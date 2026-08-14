@@ -153,9 +153,7 @@ export class ResumeAIService {
             throw new Error('workExperience 不能为空');
           }
 
-          const invalidSkeleton = data.workExperience.some((exp: any) =>
-            isIllegal(exp.company) || isIllegal(exp.position) || isIllegal(exp.startDate) || isIllegal(exp.endDate)
-          );
+          const invalidSkeleton = data.workExperience.some((exp: any) => isIllegal(exp.company));
           if (invalidSkeleton) {
             throw new Error('workExperience 骨架字段不完整');
           }
@@ -219,8 +217,8 @@ export class ResumeAIService {
               throw new Error(`职责阶段存在越界岗位 index=${idx}`);
             }
 
-            if (exp.company !== base.company || exp.position !== base.position || exp.startDate !== base.startDate || exp.endDate !== base.endDate) {
-              throw new Error(`职责阶段非法修改岗位骨架 index=${idx}`);
+            if (exp.company !== base.company) {
+              throw new Error(`职责阶段非法修改公司名 index=${idx}`);
             }
 
             if (!Array.isArray(exp.responsibilities) || exp.responsibilities.length !== 8) {

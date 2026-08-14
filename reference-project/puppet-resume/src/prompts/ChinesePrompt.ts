@@ -130,7 +130,8 @@ export function generateChinesePrompt(context: PromptContext): string {
      * "Head of Logistics & Supply Chain" -> "**供应链负责人**" (6字)
      * "云平台主任软件工程师（SDK)" -> "**SDK研发工程师**" (7字)
 2. **背景重塑**：
-   - **现有经历的公司名、起止时间必须原样保留，绝对不可修改**。
+   - **现有经历的公司名必须原样保留，绝对不可修改**。
+   - **现有经历的职位、起止时间、职责可以根据目标岗位动态改写**；除基本信息和公司名外，不存在不可修改字段。
    - **职责重写**：抹除无关痕迹，完全围绕"${targetTitle}"重写职责。
    - **岗位名称保留规则（最高优先级硬性规则，必须执行）**：
      - 若用户原岗位名称与目标岗位在职能上高度接近（同一职业赛道/同一核心职能），**必须保留原岗位名**（最多做最小规范化），**不得因“职位标准化”或“命名美化”而改名**。
@@ -276,7 +277,7 @@ export function generateChineseNonJobPrompt(context: PromptContext): string {
     : '无需补充经历。输出工作经历条数必须与用户现有条数一致，严禁新增岗位。';
 
   const existingExpText = (profile.workExperiences || []).map((exp, idx) =>
-    `- 经历${idx + 1}: 公司=${exp.company}（必须保留） | 时间=${exp.startDate} 至 ${exp.endDate}（必须保留） | 原职位=${exp.jobTitle} | 业务方向=${exp.businessDirection}`
+    `- 经历${idx + 1}: 公司=${exp.company}（必须保留） | 时间参考=${exp.startDate} 至 ${exp.endDate} | 原职位=${exp.jobTitle} | 业务方向=${exp.businessDirection}`
   ).join('\n');
 
   const techTrackPattern = /(后端|前端|全栈|研发|开发|技术|架构|算法|数据|运维|测试|java|golang|python|node|\.net|react|vue|engineer|developer|backend|frontend|full\s*stack|software|platform|tech)/i;
@@ -315,7 +316,7 @@ ${supplementText}
 最终时间线（必须严格遵循）：
 ${timelineList}
 
-现有经历信息（公司名和时间不可改）：
+现有经历信息（仅公司名不可改，职位和时间可动态改写）：
 ${existingExpText || '无'}
 
 ### 标题保留锁定清单（系统预判，必须硬执行）
@@ -406,7 +407,7 @@ export function generateChineseJobBulletPrompt(
   }).join('\n');
 
   return `
-你是一位顶级简历写作专家。当前是 Phase 2（Job Bullet）：仅生成工作经历职责正文。不得改动骨架。
+你是一位顶级简历写作专家。当前是 Phase 2（Job Bullet）：生成工作经历的职位、时间和职责。已有公司名必须保持不变，其余字段可动态改写。
 
 ### 语言与风格
 - 全中文输出。
@@ -415,7 +416,7 @@ export function generateChineseJobBulletPrompt(
 - 用户最高指令："${context.profile.aiMessage || '无'}"（若不为空，必须严格满足）
 
 ### 输入的工作经历（禁止改动基础信息）
-以下经历的 company / position / startDate / endDate 均已定稿，严禁修改：
+以下经历的 company 已定稿，严禁修改；position / startDate / endDate 可按目标岗位动态生成：
 ${lines}
 
 ### 现有经历原始输入锚点（用于“基于原输入扩展”）
