@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { PuppetResumePipeline } from './server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
+import { extractTextJob } from './server/puppet-resume/jobExtraction';
 import { renderPdfFromPagePlan } from './server/puppet-resume/exportPdf';
 import { ExportSessionStore } from './server/puppet-resume/exportSession';
 import { canonicalize } from './src/resume-renderer/canonicalJson';
@@ -491,7 +492,9 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
     }
     try {
       console.info('[Resume Generation] Request started', { traceId, language: input.language, sourceType: source.attachment?.sourceType || 'text' });
-      const job = await extractPuppetJob(providers, input, source, traceId);
+      const job = source.attachment
+        ? await extractPuppetJob(providers, input, source, traceId)
+        : extractTextJob(source.text, input.language);
       const pipeline = new PuppetResumePipeline(createPuppetTextGenerator(providers, traceId));
       const puppetData = await pipeline.enhance(toPuppetRequest(input, job));
       const applicationId = stringValue(input.applicationId) || randomUUID();
@@ -723,11 +726,11 @@ export default defineConfig(({ mode }) => {
   const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://www.yunqiaoai.top';
   if (env.CLOUD_BRIDGE_API_KEY) {
     const endpoint = chatCompletionsEndpoint(cloudBridgeBaseUrl);
-    const models = env.CLOUD_BRIDGE_PRIMARY_MODEL ? [
-      env.CLOUD_BRIDGE_PRIMARY_MODEL,
+    const models = [...new Set([
       env.CLOUD_BRIDGE_SECONDARY_MODEL || 'gemini-3.6-flash',
+      env.CLOUD_BRIDGE_PRIMARY_MODEL || 'gemini-3.7-flash',
       env.CLOUD_BRIDGE_TERTIARY_MODEL || 'gemini-3.1-pro-preview',
-    ] : ['gemini-3.6-flash', 'gemini-3.7-flash', env.CLOUD_BRIDGE_TERTIARY_MODEL || 'gemini-3.1-pro-preview'];
+    ])];
     providers.push(...models.map((model) => ({
       kind: 'chat' as const,
       apiKey: env.CLOUD_BRIDGE_API_KEY,

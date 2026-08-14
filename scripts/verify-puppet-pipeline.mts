@@ -3,6 +3,11 @@ import { PuppetResumePipeline } from '../server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from '../server/puppet-resume/adapter';
 import { ExperienceCalculator } from '../server/puppet-resume/utils/experienceCalculator';
 import { validateSupplementCompanyNames } from '../server/puppet-resume/utils/supplementCompany';
+import { extractTextJob } from '../server/puppet-resume/jobExtraction';
+
+assert.deepEqual(extractTextJob('岗位名称：高级招聘专员\n要求 3-5 年招聘经验。', 'chinese'), {
+  title: '高级招聘专员', experience: '3-5 年', description: '岗位名称：高级招聘专员\n要求 3-5 年招聘经验。',
+});
 
 const input = {
   applicationId: 'application-test',
