@@ -26,7 +26,9 @@
 
 校验采用双层分工：本地代码负责文件大小、文字长度、字段类型、必填字段、公司名锁定和 JSON 结构等确定性规则；LLM 负责语义判断，例如岗位关键词覆盖、技能相关性和职责自然度。LLM 的“通过”不能直接放行，最终结果必须再次经过本地校验。
 
-当前模型策略优先使用 `gemini-3.5-flash-lite`，失败或输出不合格时升级到 `gemini-2.5-flash`，再次失败才使用 `gemini-3.1-pro-preview`。OpenAI 的备选可使用 `gpt-5-mini`，但需要单独实现 provider 适配和同一套输出校验，不能把第二个模型直接并行到每次生成中。
+当前模型策略优先使用 `gemini-3.5-flash-lite`，失败或输出不合格时先尝试 `gemini-2.5-flash` 和 `gemini-3.1-pro-preview`，全部失败后才使用 OpenAI `gpt-5-mini`。OpenAI 通过独立 provider 适配，只有配置 `OPENAI_API_KEY` 才启用，并复用同一套本地输出校验。
+
+生成阶段的字段规则：已有公司的 `company` 和 `startDate/endDate` 由本地代码锁定；`position` 在第一阶段可按 JD 改写，第二阶段作为两阶段结构契约沿用；`responsibilities` 和技能动态生成。补足经历的公司、时间、职位和职责默认允许生成。
 
 每次生成都是独立的投递证据实例。必须同时保存 `applicationId`、岗位 ID、岗位快照、候选人资料快照、语言和生成后的简历数据，确保同一个岗位重新生成或切换语言时，也能准确知道某次投递使用了哪一份简历。
 

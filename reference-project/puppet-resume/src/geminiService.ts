@@ -19,6 +19,8 @@ export class GeminiService {
     process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash",
     process.env.GEMINI_ESCALATION_MODEL || "gemini-3.1-pro-preview",
   ];
+  private readonly openAiApiKey = process.env.OPENAI_API_KEY || '';
+  private readonly openAiModel = process.env.OPENAI_FALLBACK_MODEL || 'gpt-5-mini';
 
   constructor() {
     this.apiKey = process.env.GEMINI_API || "";
@@ -150,11 +152,44 @@ export class GeminiService {
         console.log(`\n⚠️ 所有模型在 Attempt ${attempt} 中均失败。系统将在 ${waitSec} 秒后重试...`);
         await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
       } else {
+        const openAiResult = await this.generateWithOpenAI(prompt, validator);
+        if (openAiResult) return openAiResult;
         throw new Error(`经过 ${attempts} 次重试且尝试了所有候选模型后，AI 仍无法提供有效回复。请稍后再试。`);
       }
     }
 
     return "";
+  }
+
+  private async generateWithOpenAI(
+    prompt: string,
+    validator?: (text: string) => boolean | Promise<boolean>,
+  ): Promise<string> {
+    if (!this.openAiApiKey) return '';
+    try {
+      console.log(`   - Gemini 失败，切换 OpenAI ${this.openAiModel}`);
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.openAiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.openAiModel,
+          messages: [{ role: 'user', content: prompt }],
+          response_format: { type: 'json_object' },
+        }),
+      });
+      if (!response.ok) throw new Error(`OpenAI HTTP ${response.status}`);
+      const payload = await response.json() as any;
+      const text = payload.choices?.[0]?.message?.content;
+      if (typeof text !== 'string' || !text.trim()) throw new Error('OpenAI returned empty content');
+      if (validator && !(await validator(text))) throw new Error('OpenAI output failed validation');
+      return text;
+    } catch (error: any) {
+      console.error(`      ❌ OpenAI fallback failed: ${error.message}`);
+      return '';
+    }
   }
 
   /**

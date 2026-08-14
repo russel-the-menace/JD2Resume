@@ -166,6 +166,23 @@ export class ResumeAIService {
             }
           }
 
+          // Existing employers keep the exact user-provided dates. Generated
+          // supplement companies are intentionally exempt from this lock.
+          const datesByCompany = new Map<string, Array<{ startDate: string; endDate: string }>>();
+          for (const exp of profile.workExperiences || []) {
+            const dates = datesByCompany.get(exp.company) || [];
+            dates.push({ startDate: exp.startDate, endDate: exp.endDate });
+            datesByCompany.set(exp.company, dates);
+          }
+          for (const exp of data.workExperience) {
+            const dates = datesByCompany.get(exp.company);
+            if (!dates) continue;
+            const expected = dates.shift();
+            if (expected && (exp.startDate !== expected.startDate || exp.endDate !== expected.endDate)) {
+              throw new Error(`已有公司 ${exp.company} 的工作时间不可修改`);
+            }
+          }
+
           if (!isEnglish) {
             if (data.professionalSkills.length !== 4) {
               throw new Error("AI 生成的技能分类数量不足 4 组，触发重试");
@@ -219,6 +236,10 @@ export class ResumeAIService {
 
             if (exp.company !== base.company) {
               throw new Error(`职责阶段非法修改公司名 index=${idx}`);
+            }
+
+            if (exp.startDate !== base.startDate || exp.endDate !== base.endDate) {
+              throw new Error(`职责阶段非法修改工作时间 index=${idx}`);
             }
 
             if (!Array.isArray(exp.responsibilities) || exp.responsibilities.length !== 8) {

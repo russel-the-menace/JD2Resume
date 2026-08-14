@@ -52,7 +52,7 @@ You are a world-class resume expert specializing in tailoring profiles for Engli
 2. **Remove Irrelevant Background**: If the user's original background clashes with "${targetTitle}", you MUST 【completely remove】 irrelevant tech stacks or business domains from the responsibilities.
 3. **Experience Reshaping**:
    - **⚠️ CRITICAL: Existing Company Names MUST remain unchanged** (User-provided names like "Tencent", "Xiaomi" etc. must be kept exactly as is).
-   - Rewrite timeframes, job titles, and responsibilities based on "business direction" to highly match "${targetTitle}". Only basic identity fields and existing company names are locked.
+   - Rewrite job titles and responsibilities based on "business direction" to highly match "${targetTitle}". Existing company names and existing timeframes are locked. Supplement entries may be generated.
    - **Job Title Preservation Rule (HIGHEST-PRIORITY HARD GATE, MUST)**:
      - If an existing role title is functionally close to the target role (same core function/domain), you MUST keep the original role title (at most minimal normalization), and MUST NOT rename it for title standardization or cosmetic optimization.
      - Only rename when there is a clear cross-function mismatch.
@@ -143,7 +143,7 @@ Experience ${i + 1}:
 - Original Title: ${exp.jobTitle}
 - Business Direction: ${exp.businessDirection}
 - Work Content: ${exp.workContent || "None"} (Low weight reference: Use only if highly relevant to ${targetTitle}; otherwise IGNORE and regenerate based on target)
-- Time reference: ${exp.startDate} to ${exp.endDate} (may be dynamically tailored)
+- Time: ${exp.startDate} to ${exp.endDate} (DO NOT CHANGE for existing companies)
 `).join('\n')}
 
 ### 6. Tasks
@@ -253,7 +253,7 @@ export function generateEnglishNonJobPrompt(context: PromptContext): string {
     : 'Use seniority titles conservatively and only when timeline supports them.';
 
   const existingExpText = (profile.workExperiences || []).map((exp, idx) =>
-    `- Experience ${idx + 1}: Company=${exp.company} (must preserve company only) | Time reference=${exp.startDate} to ${exp.endDate} | Original Title=${exp.jobTitle} | Business Direction=${exp.businessDirection}`
+    `- Experience ${idx + 1}: Company=${exp.company} (must preserve) | Time=${exp.startDate} to ${exp.endDate} (must preserve) | Original Title=${exp.jobTitle} | Business Direction=${exp.businessDirection}`
   ).join('\n');
 
   const techTrackPattern = /(backend|frontend|full\s*stack|software|engineer|developer|tech|platform|java|golang|python|node|\.net|react|vue|devops|data|architecture|研发|开发|后端|前端|技术|架构)/i;
@@ -389,7 +389,7 @@ You are a world-class resume writer. This is Phase 2 (Job Bullet): generate only
 - Highest-priority user instruction: "${context.profile.aiMessage || 'None'}" (must be satisfied when present)
 
 ### Fixed work experience skeleton (must not be changed)
-The company below is finalized and must not change. position / startDate / endDate may be dynamically tailored:
+The company / position / startDate / endDate below are finalized for this phase. Only responsibilities may be generated:
 ${lines}
 
 ### Original source anchors (must be used for related-role expansion)
