@@ -5,6 +5,7 @@ import { ensureUser } from '../../userUtils';
 import { runBackgroundTask, TaskServices } from '../../taskRunner';
 import { GenerateFromFrontendRequest } from '../../types';
 import { StatusCode, StatusMessage } from '../../constants/statusCodes';
+import { validateGenerationInput } from '../../utils/generationValidation';
 
 const router = Router();
 const COLLECTION_RESUMES = 'generated_resumes';
@@ -16,6 +17,16 @@ const COLLECTION_RESUMES = 'generated_resumes';
 router.post('/generate', async (req: Request, res: Response) => {
   try {
     const payload = req.body as GenerateFromFrontendRequest;
+
+    const validation = validateGenerationInput(payload);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_GENERATION_INPUT',
+        message: '生成前校验未通过',
+        errors: validation.errors,
+      });
+    }
     
     // 使用 JWT 鉴权通过后的手机号
     const phoneNumber = (req as any).user.phoneNumber;
@@ -98,6 +109,9 @@ router.post('/generate', async (req: Request, res: Response) => {
     // 1. 生成唯一 Task ID
     const dateStr = now.toISOString().replace(/[-:T]/g, '').slice(0, 14);
     const taskId = `RESUME_${dateStr}_${randomUUID().slice(0, 8)}`;
+    // Each generation is a separate application evidence record, even when
+    // the same job is regenerated in another language or from a new profile.
+    const applicationId = `APP_${dateStr}_${randomUUID().slice(0, 12)}`;
 
     // 2. 预先入库（立即执行）
     console.log(`📡 正在创建任务: ${taskId}`);
@@ -105,6 +119,8 @@ router.post('/generate', async (req: Request, res: Response) => {
       phoneNumber: phoneNumber,
       openid: user.openid, // Keep openid for reference
       task_id: taskId,
+      applicationId,
+      evidenceVersion: 1,
       status: 'processing',
       consumedType: consumedType, // 记录消耗类型用于异常退回
       jobTitle: payload.job_data.title,
@@ -115,7 +131,14 @@ router.post('/generate', async (req: Request, res: Response) => {
       language: payload.language,
       createTime: new Date(),
       resumeInfo: payload.resume_profile,
-      jobData: payload.job_data
+      jobData: payload.job_data,
+      jobSnapshot: payload.job_data,
+      resumeProfileSnapshot: payload.resume_profile,
+      generationInput: {
+        jobId: payload.jobId,
+        language: payload.language,
+        applicationId,
+      }
     });
 
     // 3. 开启异步后台任务
@@ -127,6 +150,7 @@ router.post('/generate', async (req: Request, res: Response) => {
       success: true,
       result: {
         task_id: taskId,
+        application_id: applicationId,
         status: 'processing'
       }
     });
