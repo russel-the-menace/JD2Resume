@@ -252,8 +252,9 @@ async function requestProfileTask(
   providers: Provider[],
   request: ProfileTaskRequest,
 ) {
-  const candidates = providers
-    .filter((provider) => provider.kind === 'gemini' || provider.kind === 'chat')
+  const googleProviders = providers.filter((provider) => provider.kind === 'gemini');
+  const cloudFallback = providers.find((provider) => provider.kind === 'chat');
+  const candidates = [...googleProviders, ...(cloudFallback ? [cloudFallback] : [])]
     .map((provider) => ({ ...provider, model: request.model, pdfModel: undefined }));
   let lastError: unknown = null;
   for (const provider of candidates) {
