@@ -1,4 +1,5 @@
 import { GenerateFromFrontendRequest } from '../types';
+import { MAX_SOURCE_FILE_BYTES, MAX_SOURCE_TEXT_CHARS } from './sourceEvidence';
 
 export interface GenerationValidationResult {
   valid: boolean;
@@ -17,7 +18,6 @@ export function validateGenerationInput(
   const profile = payload.resume_profile;
   const job = payload.job_data;
 
-  if (!payload.jobId?.trim()) errors.push('jobId is required');
   if (!payload.language || !['chinese', 'english'].includes(payload.language)) {
     errors.push('language must be chinese or english');
   }
@@ -33,19 +33,30 @@ export function validateGenerationInput(
     if (!Array.isArray(profile.skills)) errors.push('resume_profile.skills must be an array');
   }
 
-  if (!job) {
-    errors.push('job_data is required');
-  } else {
+  const hasJob = Boolean(payload.jobId?.trim() || job);
+  if (payload.jobId?.trim() && job && job._id !== payload.jobId) {
+    errors.push('jobId must match job_data._id');
+  }
+  if (hasJob && !job) {
+    errors.push('job_data is required when jobId is provided');
+  } else if (job) {
     if (!job._id?.trim()) errors.push('job_data._id is required');
-    if (payload.jobId && job._id !== payload.jobId) {
-      errors.push('jobId must match job_data._id');
-    }
     if (!job.title?.trim() && !job.title_chinese?.trim() && !job.title_english?.trim()) {
       errors.push('job_data must include a title');
     }
     if (!job.description?.trim() && !job.description_chinese?.trim() && !job.description_english?.trim()) {
       errors.push('job_data must include a description');
     }
+  }
+
+  if (payload.sourceEvidence?.text && payload.sourceEvidence.text.length > MAX_SOURCE_TEXT_CHARS) {
+    errors.push('sourceEvidence.text must be no longer than 20,000 characters');
+  }
+  for (const [kind, file] of [['photo', payload.sourceEvidence?.photo], ['pdf', payload.sourceEvidence?.pdf] as const]) {
+    if (!file) continue;
+    if (!file.data || !file.filename || !file.mimeType) errors.push(`${kind} evidence is incomplete`);
+    const estimatedBytes = Math.floor((file.data?.length || 0) * 3 / 4);
+    if (estimatedBytes > MAX_SOURCE_FILE_BYTES) errors.push(`${kind} evidence must be no larger than 10MB`);
   }
 
   return { valid: errors.length === 0, errors };

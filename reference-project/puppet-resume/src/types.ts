@@ -167,13 +167,30 @@ export interface UserResumeProfile {
  * 前端发送的生成请求体
  */
 export interface GenerateFromFrontendRequest {
-  jobId: string;
+  /** Empty for direct resume creation without a persisted remote job. */
+  jobId?: string;
   openid: string; // Standardized from userId
   language?: string;
   is_paid?: boolean;
   resume_profile: UserResumeProfile;
-  job_data: JobData;
+  /** Omitted for direct profile-only resume creation. */
+  job_data?: JobData;
   enhancedData?: ResumeData; // 用于物理文件过期后的快速恢复（免AI调用）
+  sourceEvidence?: SourceEvidence;
+}
+
+export interface SourceEvidenceFile {
+  filename: string;
+  mimeType: string;
+  /** Base64 payload accepted only for the short-lived generation request. */
+  data: string;
+}
+
+export interface SourceEvidence {
+  /** JD or resume text supplied directly by the user. */
+  text?: string;
+  photo?: SourceEvidenceFile;
+  pdf?: SourceEvidenceFile;
 }
 
 /**
@@ -189,7 +206,7 @@ export function mapFrontendRequestToResumeData(payload: GenerateFromFrontendRequ
 
   return {
     name: displayName,
-    position: isEnglish ? (job.title_english || job.title) : (job.title_chinese || job.title),
+    position: isEnglish ? (job?.title_english || job?.title || '') : (job?.title_chinese || job?.title || ''),
     gender: profile.gender,
     contact: {
       email: profile.email,
@@ -249,4 +266,3 @@ export function mapFrontendRequestToResumeData(payload: GenerateFromFrontendRequ
     }))
   };
 }
-
