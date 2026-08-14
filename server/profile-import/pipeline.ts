@@ -113,6 +113,10 @@ function normalizedChineseSpacing(value: unknown) {
   return text(value).replace(/([\u3400-\u9FFF])\s+(?=[\u3400-\u9FFF])/gu, '$1');
 }
 
+function normalizedOrganizationName(value: unknown) {
+  return normalizedChineseSpacing(value).replace(/\s*([/／|｜])\s*/g, '$1');
+}
+
 function supportedBySource(document: CanonicalDocument, value: string, ids: unknown) {
   if (!value) return true;
   const cited = sourceText(document, ids);
@@ -192,7 +196,7 @@ function cleanEducation(document: CanonicalDocument, value: Record<string, any>)
   return value.educations.flatMap((entry: any) => {
     if (!isRecord(entry)) return [];
     const lines = stringArray(entry.sourceLines);
-    const school = normalizedChineseSpacing(entry.school);
+    const school = normalizedOrganizationName(entry.school);
     if (!school || !supportedByDocument(document, school)) return [];
     const degree = text(entry.degree);
     const citedSource = sourceText(document, lines);
@@ -214,7 +218,7 @@ function cleanWork(document: CanonicalDocument, value: Record<string, any>) {
   return value.workExperiences.flatMap((entry: any) => {
     if (!isRecord(entry)) return [];
     const lines = stringArray(entry.sourceLines);
-    const company = normalizedChineseSpacing(entry.company);
+    const company = normalizedOrganizationName(entry.company);
     if (!company || !supportedByDocument(document, company)) return [];
     const sourceDates = dateRangeFromEvidence(document, lines, company);
     return [{

@@ -154,8 +154,20 @@ await desktopPage.route('**/api/import-profile', async (route) => {
   });
 });
 let profileTranslationCalls = 0;
+let profileDatabaseSaves = 0;
+let translatedSourceProfile: Record<string, any> | null = null;
+await desktopPage.route('**/api/account-state', async (route) => {
+  if (route.request().method() !== 'PUT') return route.continue();
+  profileDatabaseSaves += 1;
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ accountId: 'yeatom', revision: 100 + profileDatabaseSaves, payload: {} }),
+  });
+});
 await desktopPage.route('**/api/translate-profile', async (route) => {
   profileTranslationCalls += 1;
+  translatedSourceProfile = route.request().postDataJSON()?.profile || null;
   await route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -206,6 +218,11 @@ await profileDialog.getByLabel('Full name').waitFor({ state: 'visible' });
 report.checks.profileImportDualLanguage =
   (await profileDialog.getByLabel('Full name').inputValue()) === 'Zhang San';
 report.checks.profileTranslationRunsOnDemand = profileTranslationCalls === 1;
+report.checks.profileImportSavedToDatabase = profileDatabaseSaves >= 2;
+report.checks.profileTranslationUsesSavedProfile =
+  translatedSourceProfile?.gender === '女' &&
+  translatedSourceProfile?.educations?.[0]?.startDate === '2014-09' &&
+  translatedSourceProfile?.workExperiences?.[0]?.startDate === '2020-01';
 await profileDialog.getByRole('button', { name: '中文', exact: true }).click();
 report.checks.profileImportIncludesEducation = await profileDialog.getByText('复旦大学', { exact: true }).isVisible();
 report.checks.profileImportPreservesMissingFields =
@@ -244,6 +261,7 @@ await profileDialog.getByLabel('Location').fill('New York, NY');
 await profileDialog.getByRole('button', { name: 'Save profile' }).click();
 await desktopPage.unroute('**/api/import-profile');
 await desktopPage.unroute('**/api/translate-profile');
+await desktopPage.unroute('**/api/account-state');
 report.checks.bilingualProfileSaved = await desktopPage.evaluate(() => {
   const profile = JSON.parse(localStorage.getItem('draftline-account-data-v1:yeatom:draftline-user-profile-v1'));
   return profile?.chinese?.fullName === '张三' && profile?.chinese?.gender === '男' &&

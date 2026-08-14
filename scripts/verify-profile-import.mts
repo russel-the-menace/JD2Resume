@@ -38,12 +38,12 @@ const caller = async (request: ProfileTaskRequest) => {
     if (educationAttempts === 1) throw new Error('MODULE_SCHEMA_INVALID');
     return {
       educations: [{
-        school: '复旦大学', degree: '本科', studyType: '本科', major: '视觉传达设计',
+        school: '复 旦大学', degree: '本科', studyType: '本科', major: '视觉传达设计',
         startDate: '', endDate: '', sourceLines: ['p1-l4'], descriptionSourceLines: [],
       }],
     };
   }
-  if (request.task === 'work') return { workExperiences: [{ company: '一 间客厅社交主题酒馆', jobTitle: '新媒体运营', businessDirection: '', startDate: '', endDate: '', sourceLines: ['p1-l5'], workContentSourceLines: [] }] };
+  if (request.task === 'work') return { workExperiences: [{ company: '小红书/抖音 /微博/B站', jobTitle: '新媒体运营', businessDirection: '', startDate: '', endDate: '', sourceLines: ['p1-l5'], workContentSourceLines: [] }] };
   if (request.task === 'certificates') return { certificates: [] };
   if (request.task === 'translation') {
     return {
@@ -66,7 +66,7 @@ const imported = await importProfileFacts({
     '13800138000 junling@example.com',
     '复旦大学 视觉传达设计 本科',
     '2014 . 09 - 2018 . 06',
-    '一 间客厅社交主题酒馆 新媒体运营 2020.01 - 2021.02',
+    '小红书/抖音 /微博/B站 新媒体运营 2020.01 - 2021.02',
   ].join('\n'),
   attachment: null,
 }, models, caller);
@@ -77,7 +77,7 @@ assert.equal(imported.profile.educations[0].school, '复旦大学');
 assert.equal(imported.profile.educations[0].studyType, '全日制');
 assert.equal(imported.profile.educations[0].startDate, '2014-09');
 assert.equal(imported.profile.educations[0].endDate, '2018-06');
-assert.equal(imported.profile.workExperiences[0].company, '一间客厅社交主题酒馆');
+assert.equal(imported.profile.workExperiences[0].company, '小红书/抖音/微博/B站');
 assert.equal(imported.profile.workExperiences[0].startDate, '2020-01');
 assert.deepEqual(calls.filter((call) => call.task === 'education').map((call) => call.model), ['gemini-3.6-flash', 'gemini-3.7-flash']);
 assert.equal(calls.filter((call) => call.task === 'basic').length, 1);

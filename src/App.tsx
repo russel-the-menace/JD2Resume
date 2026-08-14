@@ -1290,6 +1290,7 @@ function App() {
   const libraryRef = useRef(initialLibrary);
   const remoteRevisionRef = useRef(null);
   const remoteSaveTimerRef = useRef(null);
+  const lastRemoteSnapshotRef = useRef({ accountId: '', signature: '' });
   const [library, setLibrary] = useState(initialLibrary);
   const [userProfile, setUserProfile] = useState(initialProfile);
   const [remoteSyncReady, setRemoteSyncReady] = useState(false);
@@ -1307,6 +1308,31 @@ function App() {
     setLibrary(nextLibrary);
     return true;
   }, [accountLibraryKey, accountSyncDirtyKey]);
+
+  const saveRemoteSnapshot = useCallback(async ({ accountId, dirtyKey, payload, signature }) => {
+    const save = async (baseRevision) => fetch('/api/account-state', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId, baseRevision, payload }),
+    });
+    let response = await save(remoteRevisionRef.current);
+    if (response.status === 409) {
+      const conflict = await response.json().catch(() => ({}));
+      const currentRevision = Number(conflict?.current?.revision);
+      if (Number.isInteger(currentRevision) && currentRevision > 0) {
+        remoteRevisionRef.current = currentRevision;
+        response = await save(currentRevision);
+      }
+    }
+    if (!response.ok) throw new Error('REMOTE_PROFILE_SAVE_FAILED');
+    const saved = await response.json().catch(() => ({}));
+    if (saved.configured === false) return false;
+    if (!Number.isInteger(saved.revision)) throw new Error('REMOTE_PROFILE_SAVE_INVALID');
+    remoteRevisionRef.current = saved.revision;
+    lastRemoteSnapshotRef.current = { accountId, signature };
+    removeStoredValue(dirtyKey);
+    return true;
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1362,6 +1388,9 @@ function App() {
     if (!remoteSyncReady) return undefined;
     if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
     const accountId = currentAccount.id;
+    const signature = JSON.stringify({ library, profile: userProfile });
+    if (lastRemoteSnapshotRef.current.accountId === accountId &&
+      lastRemoteSnapshotRef.current.signature === signature) return undefined;
     const payload = {
       version: 1,
       library,
@@ -1369,26 +1398,8 @@ function App() {
       savedAt: Date.now(),
     };
     remoteSaveTimerRef.current = window.setTimeout(async () => {
-      const save = async (baseRevision) => fetch('/api/account-state', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId, baseRevision, payload }),
-      });
       try {
-        let response = await save(remoteRevisionRef.current);
-        if (response.status === 409) {
-          const conflict = await response.json().catch(() => ({}));
-          const currentRevision = Number(conflict?.current?.revision);
-          if (Number.isInteger(currentRevision) && currentRevision > 0) {
-            remoteRevisionRef.current = currentRevision;
-            response = await save(currentRevision);
-          }
-        }
-        if (!response.ok) return;
-        const saved = await response.json();
-        if (!Number.isInteger(saved.revision)) return;
-        remoteRevisionRef.current = saved.revision;
-        removeStoredValue(accountSyncDirtyKey);
+        await saveRemoteSnapshot({ accountId, dirtyKey: accountSyncDirtyKey, payload, signature });
       } catch {
         // Local storage remains the offline source until the next successful sync.
       }
@@ -1396,7 +1407,7 @@ function App() {
     return () => {
       if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
     };
-  }, [accountSyncDirtyKey, currentAccount.id, library, remoteSyncReady, userProfile]);
+  }, [accountSyncDirtyKey, currentAccount.id, library, remoteSyncReady, saveRemoteSnapshot, userProfile]);
 
   useEffect(() => {
     const syncFromLocation = () => {
@@ -1549,13 +1560,28 @@ function App() {
     });
   }, [persistLibrary]);
 
-  const saveUserProfile = useCallback((nextProfile) => {
+  const saveUserProfile = useCallback((nextProfile, options = { flushRemote: false }) => {
     const normalized = normalizeUserProfile(nextProfile);
     if (!writeStoredJson(accountProfileKey, normalized)) return false;
     writeStoredJson(accountSyncDirtyKey, { changedAt: Date.now() });
     setUserProfile(normalized);
-    return true;
-  }, [accountProfileKey, accountSyncDirtyKey]);
+    if (!options.flushRemote) return true;
+    const librarySnapshot = libraryRef.current;
+    const signature = JSON.stringify({ library: librarySnapshot, profile: normalized });
+    const payload = { version: 1, library: librarySnapshot, profile: normalized, savedAt: Date.now() };
+    return (async () => {
+      if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
+      const saved = await saveRemoteSnapshot({
+        accountId: currentAccount.id,
+        dirtyKey: accountSyncDirtyKey,
+        payload,
+        signature,
+      });
+      if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
+      if (!saved) throw new Error('Database persistence is not configured on this server.');
+      return true;
+    })();
+  }, [accountProfileKey, accountSyncDirtyKey, currentAccount.id, saveRemoteSnapshot]);
 
   const searchProfileDirectory = useCallback(async ({ type, keyword, level = '' }) => {
     const endpoint = type === 'major' ? '/api/searchMajors' : '/api/searchUniversities';
@@ -3158,10 +3184,13 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
       importedLanguage,
     );
     const nextDraft = { ...draft, [importedLanguage]: normalizedFields };
-    if (!onSave(nextDraft)) throw new Error('The imported personal details could not be saved locally.');
+    if (!(await onSave(nextDraft, { flushRemote: true }))) throw new Error('The imported personal details could not be saved.');
     setDraft(nextDraft);
     setLanguage(importedLanguage);
-    setImportedProfile({ language: importedLanguage, profiles: importedProfiles });
+    setImportedProfile({
+      language: importedLanguage,
+      profiles: { ...importedProfiles, [importedLanguage]: normalizedFields },
+    });
     setImportDialogOpen(false);
   };
 
@@ -3178,7 +3207,7 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
       targetLanguage,
     );
     const nextDraft = { ...draft, [targetLanguage]: translatedFields };
-    if (!onSave(nextDraft)) throw new Error('The imported personal details could not be saved locally.');
+    if (!(await onSave(nextDraft, { flushRemote: true }))) throw new Error('The translated personal details could not be saved.');
     setDraft(nextDraft);
     setLanguage(targetLanguage);
     setImportedProfile(null);
