@@ -12,6 +12,7 @@
     "check:types": "tsc --noEmit",
     "check:puppet": "tsx scripts/verify-puppet-pipeline.mts",
     "check:layout": "tsx scripts/verify-puppet-layout.mts",
+    "check:renderer": "tsx scripts/verify-renderer.mts",
     "check:persistence": "tsx scripts/verify-persistence.mts",
     "check:profile-import": "tsx scripts/verify-profile-import.mts",
     "check:ui": "tsx scripts/verify-ui.mts"

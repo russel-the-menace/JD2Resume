@@ -14,6 +14,12 @@ function renderHost() { let host = document.querySelector<HTMLElement>('#rendere
 async function renderAndValidate(snapshot: RenderSnapshot, plan: PagePlanV2, tuning: LayoutTuningV2, signal: AbortSignal) {
   const { host, root } = renderHost(); root.render(<PuppetPaginatedDocument snapshot={snapshot} pagePlan={plan} tuning={tuning} />); await afterTwoAnimationFrames(); assertNotAborted(signal); await ensureCanonicalFont(); const imageCount = await waitForImages(host); await afterTwoAnimationFrames(); assertNotAborted(signal); return { ...validateRenderedDom(plan), imageCount };
 }
+export async function replayCanonicalLayout(snapshot: RenderSnapshot, plan: PagePlanV2, signal: AbortSignal) {
+  if (snapshot.rendererVersion !== RENDERER_VERSION || plan.rendererVersion !== RENDERER_VERSION || plan.snapshotHash !== snapshot.snapshotHash) throw new RendererError('EXPORT_REPLAY_MISMATCH');
+  if (await snapshotHash(snapshot.document) !== snapshot.snapshotHash) throw new RendererError('SNAPSHOT_HASH_MISMATCH');
+  const validation = await renderAndValidate(snapshot, plan, plan.tuning, signal);
+  return { ...validation, pagePlan: plan };
+}
 function asFailure(error: unknown) { return error instanceof RendererError ? error.code : 'LAYOUT_ATTEMPTS_EXHAUSTED'; }
 export async function runCanonicalLayout(snapshot: RenderSnapshot, signal: AbortSignal): Promise<{ pagePlan: PagePlanV2; report: LayoutReportV2 }> {
   const startedAt = performance.now(); assertNotAborted(signal);

@@ -2,9 +2,14 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { resolve } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { PuppetResumePipeline } from './server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
-import { renderPuppetPdf, resolvePuppetLayout } from './server/puppet-resume/layout';
+import { renderPdfFromPagePlan } from './server/puppet-resume/exportPdf';
+import { ExportSessionStore } from './server/puppet-resume/exportSession';
+import { canonicalize } from './src/resume-renderer/canonicalJson';
+import { RENDERER_VERSION } from './src/resume-renderer/constants';
+import type { PagePlanV2, RendererResumeDocument } from './src/resume-renderer/types';
 import { statePersistencePlugin } from './server/persistence';
 import {
   importProfileFacts,
@@ -420,7 +425,22 @@ function createPuppetTextGenerator(providers: Provider[], traceId: string) {
   };
 }
 
+function rendererDocumentFromStored(document: Record<string, any>): RendererResumeDocument {
+  return {
+    id: stringValue(document.id), documentName: stringValue(document.documentName),
+    language: document.language === 'chinese' ? 'chinese' : 'english', data: document.data,
+    template: 'profile', accent: stringValue(document.accent) || '#167c65',
+    customSections: Array.isArray(document.customSections) ? document.customSections.map(stringValue) : [],
+    customContent: isRecord(document.customContent) ? document.customContent : {},
+    sectionOrder: Array.isArray(document.sectionOrder) ? document.sectionOrder.map(stringValue) : [],
+    sectionOrderCustomized: document.sectionOrderCustomized === true,
+  };
+}
+function serverSnapshotHash(document: RendererResumeDocument) { return `sha256:${createHash('sha256').update(canonicalize(document)).digest('hex')}`; }
+function validPagePlan(value: unknown): value is PagePlanV2 { return isRecord(value) && Number(value.schemaVersion) === 2 && Array.isArray(value.pages) && Array.isArray(value.blockOrder) && typeof value.snapshotHash === 'string' && typeof value.rendererVersion === 'string'; }
+
 function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImportModels): Plugin {
+  const renderSessions = new ExportSessionStore();
   const parseInput = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (request.method !== 'POST') {
       next();
@@ -481,16 +501,11 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
         generationEvidence: input.evidence || {},
         updatedAt: Date.now(),
       };
-      const forwardedProtocol = Array.isArray(request.headers['x-forwarded-proto'])
-        ? request.headers['x-forwarded-proto'][0]
-        : request.headers['x-forwarded-proto'];
-      const origin = `${forwardedProtocol || 'http'}://${request.headers.host}`;
-      const layoutManifest = await resolvePuppetLayout(origin, renderDocument);
-      console.info('[Resume Generation] Request completed', { traceId, durationMs: Date.now() - startedAt, pages: layoutManifest.pageCount });
+      // Pagination is intentionally deferred to the user's browser renderer. The API only creates content.
+      console.info('[Resume Generation] Request completed', { traceId, durationMs: Date.now() - startedAt, renderer: 'client-authority' });
       sendJson(response, 200, {
         documentName,
         resume,
-        layoutManifest,
         applicationId,
         jobId: stringValue(input.jobId),
         evidence: isRecord(input.evidence)
@@ -571,7 +586,7 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
     }
     try {
       const input = await readJsonBody(request);
-      if (!isRecord(input.document) || !isRecord(input.document.layoutManifest)) {
+      if (!isRecord(input.document) || !isRecord(input.document.renderState) || !validPagePlan(input.document.renderState.pagePlan)) {
         sendJson(response, 400, { error: 'Provide a finalized resume document.' });
         return;
       }
@@ -579,11 +594,17 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
         ? request.headers['x-forwarded-proto'][0]
         : request.headers['x-forwarded-proto'];
       const origin = `${forwardedProtocol || 'http'}://${request.headers.host}`;
-      const providedManifest = input.document.layoutManifest as Record<string, any>;
-      const manifest = stringValue(providedManifest.policy)
-        ? providedManifest
-        : await resolvePuppetLayout(origin, input.document);
-      const pdf = await renderPuppetPdf(origin, { ...input.document, layoutManifest: manifest }, manifest as any);
+      const document = rendererDocumentFromStored(input.document);
+      const pagePlan = input.document.renderState.pagePlan as PagePlanV2;
+      const hash = serverSnapshotHash(document);
+      if (hash !== pagePlan.snapshotHash || pagePlan.rendererVersion !== RENDERER_VERSION) {
+        sendJson(response, 409, { error: 'The resume changed before layout was finalized.', code: 'SNAPSHOT_HASH_MISMATCH' });
+        return;
+      }
+      const session = renderSessions.create({ document, pagePlan, snapshotHash: hash, rendererVersion: RENDERER_VERSION, expiresAt: Date.now() + 60_000 });
+      let pdf: Buffer;
+      try { pdf = await renderPdfFromPagePlan(origin, session.token, pagePlan, hash, RENDERER_VERSION); }
+      finally { renderSessions.delete(session.token); }
       response.statusCode = 200;
       response.setHeader('Content-Type', 'application/pdf');
       response.setHeader('Content-Disposition', 'attachment; filename="resume.pdf"');
@@ -594,6 +615,13 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
   };
 
   const configureRoutes = (server: { middlewares: { use: Function } }) => {
+    server.middlewares.use('/api/render-sessions', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+      if (request.method !== 'GET') { next(); return; }
+      const token = request.url?.replace(/^\/?/, '').split('?')[0] || '';
+      const session = renderSessions.get(token);
+      if (!session) { sendJson(response, 404, { error: 'Render session expired.' }); return; }
+      sendJson(response, 200, { document: session.document, pagePlan: session.pagePlan, snapshotHash: session.snapshotHash, rendererVersion: session.rendererVersion });
+    });
     server.middlewares.use('/api/generate-resume', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
       void resumeHandler(request, response, next);
     });

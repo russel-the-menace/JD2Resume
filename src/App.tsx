@@ -2294,6 +2294,8 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
           sectionOrder={sectionOrder}
           sectionOrderCustomized={sectionOrderCustomized}
           language={language}
+          documentId={resumeId}
+          documentName={documentName}
           layoutManifest={initialResumeState.layoutManifest}
           renderState={renderState}
           onValidPlan={(pagePlan, report) => {
@@ -4608,6 +4610,8 @@ function PreviewPanel({
   sectionOrder,
   sectionOrderCustomized,
   language,
+  documentId,
+  documentName,
   layoutManifest,
   renderState,
   onValidPlan,
@@ -4616,9 +4620,9 @@ function PreviewPanel({
   const [contentHeight, setContentHeight] = useState(RESUME_PAGE_HEIGHT);
   const zoomPercent = Math.round(zoom * 100);
   const canonicalDocument = useMemo(() => ({
-    id: 'preview', documentName: 'Preview', language, data, template: 'profile' as const, accent,
+    id: documentId, documentName, language, data, template: 'profile' as const, accent,
     customSections, customContent, sectionOrder, sectionOrderCustomized,
-  }) satisfies RendererResumeDocument, [accent, customContent, customSections, data, language, sectionOrder, sectionOrderCustomized]);
+  }) satisfies RendererResumeDocument, [accent, customContent, customSections, data, documentId, documentName, language, sectionOrder, sectionOrderCustomized]);
   const canonicalPageCount = Math.max(1, Number(renderState?.pagePlan?.pages?.length) || 1);
   const serverPageCount = Math.max(1, Number(layoutManifest.pageCount) || 1);
   const hasServerLayout = Boolean(
