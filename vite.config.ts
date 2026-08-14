@@ -21,6 +21,7 @@ const PROVIDER_RETRY_DELAY_MS = 700;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 type Provider = {
+  kind: 'gemini' | 'chat';
   apiKey: string;
   endpoint: string;
   model: string;
@@ -147,6 +148,19 @@ function modelMessageContent(userPrompt: string, attachment: SourceAttachment | 
   return content;
 }
 
+function geminiRequestContent(userPrompt: string, attachment: SourceAttachment | null) {
+  const parts: Record<string, any>[] = [{ text: userPrompt }];
+  if (attachment) {
+    parts.push({
+      inline_data: {
+        mime_type: attachment.mimeType,
+        data: attachment.data,
+      },
+    });
+  }
+  return [{ role: 'user', parts }];
+}
+
 async function requestJsonCompletion(
   provider: Provider,
   systemPrompt: string,
@@ -171,16 +185,35 @@ async function requestJsonCompletion(
   let lastError: unknown = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const upstream = await fetch(provider.endpoint, {
+      const isGemini = provider.kind === 'gemini';
+      const endpoint = isGemini
+        ? `${provider.endpoint.replace(/\/+$/, '')}/models/${encodeURIComponent(provider.model)}:generateContent?key=${encodeURIComponent(provider.apiKey)}`
+        : provider.endpoint;
+      const body = isGemini
+        ? JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents: geminiRequestContent(userPrompt, attachment),
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.2,
+              maxOutputTokens: maxTokens,
+            },
+          })
+        : requestBody;
+      const upstream = await fetch(endpoint, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${provider.apiKey}`,
+          ...(isGemini ? {} : { Authorization: `Bearer ${provider.apiKey}` }),
           'Content-Type': 'application/json',
         },
-        body: requestBody,
+        body,
         signal,
       });
       if (!upstream.ok) {
+        const errorBody = await upstream.text().catch(() => '');
+        if (upstream.status === 429 || /quota|resource_exhausted|rate.?limit/i.test(errorBody)) {
+          throw new Error('PROVIDER_QUOTA_EXHAUSTED');
+        }
         if (upstream.status === 401 || upstream.status === 403) {
           throw new Error('PROVIDER_AUTH_FAILED');
         }
@@ -189,9 +222,14 @@ async function requestJsonCompletion(
           : 'UPSTREAM_ERROR');
       }
       const providerData = await upstream.json();
-      const finishReason = stringValue(providerData?.choices?.[0]?.finish_reason).toLowerCase();
+      const finishReason = stringValue(isGemini
+        ? providerData?.candidates?.[0]?.finishReason
+        : providerData?.choices?.[0]?.finish_reason).toLowerCase();
       if (['length', 'max_tokens'].includes(finishReason)) throw new Error('OUTPUT_TRUNCATED');
-      const content = providerData?.choices?.[0]?.message?.content;
+      if (isGemini && finishReason === 'max_tokens') throw new Error('OUTPUT_TRUNCATED');
+      const content = isGemini
+        ? providerData?.candidates?.[0]?.content?.parts?.map((part: any) => stringValue(part.text)).filter(Boolean).join('')
+        : providerData?.choices?.[0]?.message?.content;
       if (typeof content !== 'string') throw new Error('INVALID_UPSTREAM_RESPONSE');
       const generated = JSON.parse(cleanGeneratedJson(content));
       if (!generated || typeof generated !== 'object') throw new Error('INVALID_UPSTREAM_RESPONSE');
@@ -214,25 +252,38 @@ async function requestProfileTask(
   providers: Provider[],
   request: ProfileTaskRequest,
 ) {
-  const baseProvider = providers[0];
-  if (!baseProvider) throw new Error('PROFILE_PROVIDER_UNAVAILABLE');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-  try {
-    const result = await requestJsonCompletion(
-      { ...baseProvider, model: request.model, pdfModel: undefined },
-      'Return valid JSON only. Do not use markdown or add commentary.',
-      request.prompt,
-      controller.signal,
-      request.attachment || null,
-      request.maxTokens,
-      1,
-    );
-    console.log('[Profile Import] Module completed', { task: request.task, model: request.model });
-    return result;
-  } finally {
-    clearTimeout(timeout);
+  const candidates = providers
+    .filter((provider) => provider.kind === 'gemini' || provider.kind === 'chat')
+    .map((provider) => ({ ...provider, model: request.model, pdfModel: undefined }));
+  let lastError: unknown = null;
+  for (const provider of candidates) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const result = await requestJsonCompletion(
+        provider,
+        'Return valid JSON only. Do not use markdown or add commentary.',
+        request.prompt,
+        controller.signal,
+        request.attachment || null,
+        request.maxTokens,
+        1,
+      );
+      console.log('[Profile Import] Module completed', { task: request.task, model: request.model, provider: provider.kind });
+      return result;
+    } catch (error) {
+      lastError = error;
+      console.warn('[Profile Import] Provider exhausted for module', {
+        task: request.task,
+        model: request.model,
+        provider: provider.kind,
+        error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+  throw lastError instanceof Error ? lastError : new Error('PROFILE_PROVIDER_UNAVAILABLE');
 }
 
 async function requestFromProviders(
@@ -541,15 +592,26 @@ function profileDirectoryPlugin(baseUrl: string): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const providers: Provider[] = [];
+  const geminiBaseUrl = env.GOOGLE_AI_API_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+  const generationModel = env.GEMINI_GENERATION_MODEL || 'gemini-3.7-flash';
+  const googleKeys = [env.GOOGLE_AI_STUDIO_PRIMARY_KEY, env.GOOGLE_AI_STUDIO_SECONDARY_KEY].filter(Boolean);
+  providers.push(...googleKeys.map((apiKey) => ({
+    kind: 'gemini' as const,
+    apiKey,
+    endpoint: geminiBaseUrl,
+    model: generationModel,
+    supportsDirectFileInput: true,
+  })));
   const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://www.yunqiaoai.top';
   if (env.CLOUD_BRIDGE_API_KEY) {
     const endpoint = chatCompletionsEndpoint(cloudBridgeBaseUrl);
     const models = [
-      env.CLOUD_BRIDGE_PRIMARY_MODEL || 'gemini-3.6-flash',
-      env.CLOUD_BRIDGE_SECONDARY_MODEL || 'gemini-3.1-pro-preview',
-      env.CLOUD_BRIDGE_TERTIARY_MODEL || 'gpt-5.4',
+      env.CLOUD_BRIDGE_PRIMARY_MODEL || 'gemini-3.7-flash',
+      env.CLOUD_BRIDGE_SECONDARY_MODEL || 'gemini-3.6-flash',
+      env.CLOUD_BRIDGE_TERTIARY_MODEL || 'gemini-3.1-pro-preview',
     ];
     providers.push(...models.map((model) => ({
+      kind: 'chat' as const,
       apiKey: env.CLOUD_BRIDGE_API_KEY,
       endpoint,
       model,
@@ -558,11 +620,11 @@ export default defineConfig(({ mode }) => {
     })));
   }
   const profileModels: ProfileImportModels = {
-    lite: env.CLOUD_BRIDGE_PROFILE_LITE_MODEL || 'gemini-3.1-flash-lite',
-    mini: env.CLOUD_BRIDGE_PROFILE_MINI_MODEL || 'gpt-5-mini',
-    standard: env.CLOUD_BRIDGE_PROFILE_STANDARD_MODEL || 'gpt-5.1',
-    vision: env.CLOUD_BRIDGE_PROFILE_VISION_MODEL || 'gemini-3.6-flash',
-    escalation: env.CLOUD_BRIDGE_PROFILE_ESCALATION_MODEL || 'gpt-5.6-terra',
+    lite: env.GEMINI_PROFILE_LITE_MODEL || 'gemini-3.5-flash-lite',
+    mini: env.GEMINI_PROFILE_FLASH_MODEL || 'gemini-3.6-flash',
+    standard: env.GEMINI_PROFILE_ADVANCED_MODEL || 'gemini-3.7-flash',
+    vision: env.GEMINI_PROFILE_VISION_MODEL || 'gemini-3.6-flash',
+    escalation: env.GEMINI_PROFILE_PRO_MODEL || 'gemini-3.1-pro-preview',
   };
   return {
     plugins: [
