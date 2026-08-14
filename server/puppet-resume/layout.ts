@@ -33,6 +33,7 @@ const ORPHAN_THRESHOLD = 80;
 const MIN_PAGE_FILL_RATIO = 0.92;
 const TARGET_BOTTOM_MARGIN = 42;
 const CALIBRATION_STEPS = 8;
+const MAX_TUNING_INTENSITY = 3;
 const strategies = [
   { id: 'balanced-fit', sectionGapDelta: 8, lineHeightDelta: 4, fontSizeDelta: 0 },
   { id: 'line-fit', sectionGapDelta: 0, lineHeightDelta: 6, fontSizeDelta: 0 },
@@ -60,6 +61,24 @@ async function openBrowser(): Promise<Browser> {
 }
 
 async function seedResume(page: Page, document: Record<string, any>) {
+  await page.setRequestInterception(true);
+  page.on('request', (request) => {
+    let pathname = '';
+    try {
+      pathname = new URL(request.url()).pathname;
+    } catch {
+      // Non-HTTP browser requests continue normally.
+    }
+    if (pathname === '/api/account-state') {
+      void request.respond({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ configured: false }),
+      });
+      return;
+    }
+    void request.continue();
+  });
   await page.evaluateOnNewDocument((resumeDocument) => {
     const account = { id: 'yeatom', username: 'yeatom', password: 'yeatom', createdAt: 0 };
     localStorage.setItem('draftline-user-database-v1', JSON.stringify({ version: 1, accounts: [account] }));
@@ -184,7 +203,7 @@ async function calibrateStrategy(
   targetPageCount: number,
 ) {
   let lower = 0;
-  let upper = 1;
+  let upper = MAX_TUNING_INTENSITY;
   let best: { tuning: LayoutTuning; quality: LayoutQuality; distance: number } | null = null;
   for (let step = 0; step < CALIBRATION_STEPS; step += 1) {
     const intensity = step === 0 ? 1 : (lower + upper) / 2;
@@ -203,8 +222,19 @@ async function calibrateStrategy(
 }
 
 async function loadResume(page: Page, origin: string, documentId: unknown) {
-  await page.goto(`${origin}/?resume=${encodeURIComponent(String(documentId))}&render=1`, { waitUntil: 'networkidle0' });
-  await page.waitForSelector('.resume-page');
+  const renderUrl = `${origin}/?resume=${encodeURIComponent(String(documentId))}&render=1`;
+  await page.goto(renderUrl, { waitUntil: 'domcontentloaded', timeout: 10_000 });
+  try {
+    await page.waitForSelector('.resume-page', { timeout: 10_000 });
+  } catch {
+    const state = await page.evaluate(() => ({
+      url: window.location.href,
+      title: document.title,
+      hasLibrary: Boolean(document.querySelector('.resume-library')),
+      bodyText: document.body?.innerText.slice(0, 200) || '',
+    }));
+    throw new Error(`Resume render entry failed: ${JSON.stringify(state)}`);
+  }
 }
 
 export async function resolvePuppetLayout(origin: string, document: Record<string, any>): Promise<LayoutManifest> {

@@ -42,7 +42,8 @@ function sendJson(response: ServerResponse, status: number, body: Record<string,
   response.end(JSON.stringify(body));
 }
 
-function sendProviderFailure(response: ServerResponse, error: unknown, fallback: string) {
+function sendProviderFailure(response: ServerResponse, error: unknown, fallback: string, traceId = '') {
+  const trace = traceId ? { traceId } : {};
   if (error instanceof Error && error.message === 'PROFILE_DATE_INTEGRITY_FAILED') {
     const errorDetails = (error as Error & { details?: unknown }).details;
     const details = isRecord(errorDetails) ? errorDetails : {};
@@ -54,18 +55,18 @@ function sendProviderFailure(response: ServerResponse, error: unknown, fallback:
     return;
   }
   if (error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE') {
-    sendJson(response, 503, { error: 'File imports require a configured ChatGPT-compatible provider.' });
+    sendJson(response, 503, { error: 'File imports require a configured ChatGPT-compatible provider.', ...trace });
     return;
   }
   if (error instanceof Error && error.message === 'PROVIDER_AUTH_FAILED') {
-    sendJson(response, 401, { error: 'The configured ChatGPT provider rejected its API key. Update CLOUD_BRIDGE_API_KEY.' });
+    sendJson(response, 401, { error: 'The configured ChatGPT provider rejected its API key. Update CLOUD_BRIDGE_API_KEY.', ...trace });
     return;
   }
   if (error instanceof Error && error.message === 'PROVIDER_TIMEOUT') {
-    sendJson(response, 504, { error: 'The file recognition provider took too long to respond. Please try again.' });
+    sendJson(response, 504, { error: 'The file recognition provider took too long to respond. Please try again.', ...trace });
     return;
   }
-  sendJson(response, 502, { error: fallback });
+  sendJson(response, 502, { error: fallback, ...trace });
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
@@ -305,6 +306,7 @@ async function requestFromProviders(
   attachment: SourceAttachment | null = null,
   maxTokens = 4_000,
   timeoutMs = PROVIDER_TIMEOUT_MS,
+  diagnostics: { traceId: string; stage: string; attempt?: number } | null = null,
 ) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -314,13 +316,42 @@ async function requestFromProviders(
       : providers;
     if (!eligibleProviders.length) throw new Error('DIRECT_FILE_PROVIDER_UNAVAILABLE');
     let lastError: unknown = null;
+    const unavailableEndpoints = new Set<string>();
     for (const provider of eligibleProviders) {
+      const endpointKey = `${provider.kind}:${provider.endpoint}`;
+      if (unavailableEndpoints.has(endpointKey)) {
+        if (diagnostics) console.warn('[Resume Generation] Provider skipped', {
+          ...diagnostics,
+          provider: provider.kind,
+          model: provider.model,
+          reason: 'ENDPOINT_UNAVAILABLE',
+        });
+        continue;
+      }
+      const startedAt = Date.now();
       try {
         const result = await requestJsonCompletion(provider, systemPrompt, userPrompt, controller.signal, attachment, maxTokens);
-        if (await validate(result)) return result;
+        if (await validate(result)) {
+          if (diagnostics) console.info('[Resume Generation] Provider completed', {
+            ...diagnostics,
+            provider: provider.kind,
+            model: provider.model,
+            durationMs: Date.now() - startedAt,
+          });
+          return result;
+        }
       } catch (error) {
         lastError = error;
-        // A configured secondary provider can complete a transient primary-provider failure.
+        if (error instanceof TypeError || (error instanceof Error && error.message === 'fetch failed')) {
+          unavailableEndpoints.add(endpointKey);
+        }
+        if (diagnostics) console.warn('[Resume Generation] Provider failed', {
+          ...diagnostics,
+          provider: provider.kind,
+          model: provider.model,
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+        });
       }
     }
     throw lastError instanceof Error ? lastError : new Error('UPSTREAM_UNAVAILABLE');
@@ -333,6 +364,7 @@ async function extractPuppetJob(
   providers: Provider[],
   input: Record<string, any>,
   source: { text: string; attachment: SourceAttachment | null },
+  traceId = '',
 ) {
   const prompt = `Extract the target job from the supplied JD and return JSON only.
 {
@@ -351,11 +383,14 @@ ${source.text || 'Read the attached JD directly.'}`;
     (value) => isRecord(value) && typeof value.title === 'string' && typeof value.experience === 'string' && typeof value.description === 'string',
     source.attachment,
     6_000,
+    PROVIDER_TIMEOUT_MS,
+    traceId ? { traceId, stage: 'jd-extraction' } : null,
   ) as Promise<{ title: string; experience: string; description: string }>;
 }
 
-function createPuppetTextGenerator(providers: Provider[]) {
+function createPuppetTextGenerator(providers: Provider[], traceId: string) {
   return async (prompt: string, validator: (text: string) => boolean | Promise<boolean>) => {
+    const stage = /Phase 2/i.test(prompt) ? 'job-bullets' : 'resume-structure';
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         const generated = await requestFromProviders(
@@ -365,14 +400,19 @@ function createPuppetTextGenerator(providers: Provider[]) {
           async (value) => validator(JSON.stringify(value)),
           null,
           16_000,
+          PROVIDER_TIMEOUT_MS,
+          { traceId, stage, attempt },
         );
         return JSON.stringify(generated);
       } catch (error) {
+        console.warn('[Resume Generation] Stage attempt failed', {
+          traceId,
+          stage,
+          attempt,
+          error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+        });
         if (attempt === 3) throw error;
-        const minWait = attempt === 1 ? 10 : 20;
-        const maxWait = attempt === 1 ? 30 : 40;
-        const waitSeconds = Math.floor(Math.random() * (maxWait - minWait + 1)) + minWait;
-        await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1_000));
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1_500));
       }
     }
     throw new Error('Puppet Resume generation exhausted all retries');
@@ -400,6 +440,8 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
   };
 
   const resumeHandler = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+    const traceId = randomUUID();
+    const startedAt = Date.now();
     const input = await parseInput(request, response, next);
     if (!input) return;
     if (!['english', 'chinese'].includes(input.language)) {
@@ -416,8 +458,9 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
       return;
     }
     try {
-      const job = await extractPuppetJob(providers, input, source);
-      const pipeline = new PuppetResumePipeline(createPuppetTextGenerator(providers));
+      console.info('[Resume Generation] Request started', { traceId, language: input.language, sourceType: source.attachment?.sourceType || 'text' });
+      const job = await extractPuppetJob(providers, input, source, traceId);
+      const pipeline = new PuppetResumePipeline(createPuppetTextGenerator(providers, traceId));
       const puppetData = await pipeline.enhance(toPuppetRequest(input, job));
       const applicationId = stringValue(input.applicationId) || randomUUID();
       const resume = fromPuppetResume(puppetData);
@@ -442,6 +485,7 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
         : request.headers['x-forwarded-proto'];
       const origin = `${forwardedProtocol || 'http'}://${request.headers.host}`;
       const layoutManifest = await resolvePuppetLayout(origin, renderDocument);
+      console.info('[Resume Generation] Request completed', { traceId, durationMs: Date.now() - startedAt, pages: layoutManifest.pageCount });
       sendJson(response, 200, {
         documentName,
         resume,
@@ -460,7 +504,12 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
           : null,
       });
     } catch (error) {
-      sendProviderFailure(response, error, 'The resume service is unavailable. Please try again.');
+      console.error('[Resume Generation] Request failed', {
+        traceId,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+      });
+      sendProviderFailure(response, error, 'The resume service is unavailable. Please try again.', traceId);
     }
   };
 

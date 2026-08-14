@@ -1748,7 +1748,8 @@ function App() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(textValue(payload.error, 'Unable to generate a resume right now.'));
+        const traceId = textValue(payload.traceId);
+        throw new Error(`${textValue(payload.error, 'Unable to generate a resume right now.')}${traceId ? ` Trace: ${traceId}` : ''}`);
       }
       if (!isRecord(payload.resume)) {
         throw new Error('The generated resume could not be read. Please try again.');
