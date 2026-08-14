@@ -616,16 +616,15 @@ export default defineConfig(({ mode }) => {
   if (env.CLOUD_BRIDGE_API_KEY) {
     const endpoint = chatCompletionsEndpoint(cloudBridgeBaseUrl);
     const models = [
-      env.GEMINI_PRIMARY_MODEL || 'gemini-3.5-flash',
-      env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash',
-      env.GEMINI_ESCALATION_MODEL || 'gemini-3.1-pro-preview',
-      env.OPENAI_FALLBACK_MODEL || 'gpt-5.4-mini',
+      env.CLOUD_BRIDGE_PRIMARY_MODEL || 'gemini-3.6-flash',
+      env.CLOUD_BRIDGE_SECONDARY_MODEL || 'gemini-3.1-pro-preview',
+      env.CLOUD_BRIDGE_TERTIARY_MODEL || 'gpt-5.4',
     ];
     providers.push(...models.map((model) => ({
       apiKey: env.CLOUD_BRIDGE_API_KEY,
       endpoint,
       model,
-      pdfModel: env.GEMINI_VISION_MODEL || 'gemini-3.5-flash',
+      pdfModel: env.CLOUD_BRIDGE_VISION_MODEL || 'gemini-3.6-flash',
       supportsDirectFileInput: true,
     })));
   }
