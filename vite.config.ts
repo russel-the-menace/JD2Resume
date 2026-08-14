@@ -1,6 +1,9 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { PuppetResumePipeline } from './server/puppet-resume/pipeline';
+import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
+import { renderPuppetPdf, resolvePuppetLayout } from './server/puppet-resume/layout';
 
 const MAX_REQUEST_BYTES = 16_000_000;
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
@@ -78,17 +81,6 @@ function chatCompletionsEndpoint(baseUrl: string) {
   return normalized.endsWith('/v1')
     ? `${normalized}/chat/completions`
     : `${normalized}/v1/chat/completions`;
-}
-
-function buildResumePrompt(input: Record<string, any>) {
-  const language = input.language === 'chinese' ? 'Chinese' : 'English';
-  return `You are a precise resume editor. Return valid JSON only.\n\nCreate a ${language} resume tailored to the job description. Use only factual information from the supplied profile and base resume. Do not invent employers, job titles, dates, degrees, certifications, metrics, skills, contact data, or achievements. You may reorganize and rewrite the supplied facts for relevance and clarity. When a required factual field is absent, return an empty string or an empty array.\n\nReturn exactly this JSON shape:\n{\n  "documentName": "string",\n  "resume": {\n    "basics": { "fullName": "string", "firstName": "string", "lastName": "string", "role": "string", "email": "string", "phone": "string", "location": "string", "gender": "string", "website": "string", "photoUrl": "string" },\n    "summary": "string",\n    "experience": [{ "id": 1, "role": "string", "company": "string", "location": "string", "start": "string", "end": "string", "current": false, "bullets": ["string"] }],\n    "education": [{ "id": 1, "school": "string", "degree": "string", "location": "string", "start": "string", "end": "string" }],\n    "skills": { "expertise": "comma-separated string", "tools": "comma-separated string" }\n  }\n}\n\nInput JSON:\n${JSON.stringify({
-    profile: input.profile || {},
-    baseResume: input.baseResume || {},
-    jobDescription: input.jobDescription || 'Read the attached job description source directly.',
-  })}
-
-Final generation rules: preserve every supplied company and employment date exactly, preserve fullName/gender/email/phone exactly, and keep all real experiences in newest-first order. When a gap is at least six months, add exactly one supplemental experience covering that gap and partially overlapping an adjacent real boundary. Do not duplicate or fully overlap a real interval. Skills may be filled from the target JD; positions, summaries, and responsibilities may be rewritten for relevance.`;
 }
 
 function buildProfileImportPrompt(resumeText: string) {
@@ -173,120 +165,6 @@ function sourceFromInput(input: Record<string, any>, textField: string) {
       data: encoded,
     } satisfies SourceAttachment,
   };
-}
-
-function monthIndex(value: unknown): number | null {
-  const text = stringValue(value).trim();
-  if (text === '至今' || text.toLowerCase() === 'present') return 999999;
-  const match = /^(\d{4})[-年](\d{1,2})/.exec(text);
-  if (!match) return null;
-  const month = Number(match[2]);
-  return month >= 1 && month <= 12 ? Number(match[1]) * 12 + month : null;
-}
-
-function experienceKey(experience: Record<string, any>) {
-  return [stringValue(experience.company).trim(), stringValue(experience.start).trim(), stringValue(experience.end).trim()].join('\u0000');
-}
-
-function validateGeneratedResume(input: Record<string, any>, resume: Record<string, any>) {
-  if (!isRecord(resume.basics) || !Array.isArray(resume.experience)) return false;
-  const profile = isRecord(input.profile) ? input.profile : {};
-  const realExperiences = Array.isArray(profile.workExperiences) ? profile.workExperiences : [];
-  const generatedExperiences = resume.experience.filter(isRecord);
-  if (generatedExperiences.length < realExperiences.length) return false;
-
-  const generatedCounts = new Map<string, number>();
-  generatedExperiences.forEach((experience) => {
-    const key = experienceKey(experience);
-    generatedCounts.set(key, (generatedCounts.get(key) || 0) + 1);
-  });
-  for (const real of realExperiences) {
-    const normalized = {
-      company: real.company,
-      start: real.startDate,
-      end: real.endDate,
-    };
-    const key = experienceKey(normalized);
-    const count = generatedCounts.get(key) || 0;
-    if (count === 0) return false;
-    generatedCounts.set(key, count - 1);
-  }
-
-  const ordered = generatedExperiences
-    .map((experience) => ({ experience, start: monthIndex(experience.start), end: monthIndex(experience.end) }))
-    .filter(({ start, end }) => start !== null && end !== null && start <= end);
-  if (ordered.length !== generatedExperiences.length) return false;
-  for (let index = 1; index < ordered.length; index += 1) {
-    if (ordered[index - 1].start! < ordered[index].start!) return false;
-  }
-
-  const lockedBasics = ['fullName', 'gender', 'email', 'phone'];
-  for (const field of lockedBasics) {
-    const expected = stringValue(profile[field]).trim();
-    if (expected && stringValue(resume.basics[field]).trim() !== expected) return false;
-  }
-
-  const realCounts = new Map<string, number>();
-  realExperiences.forEach((real) => {
-    const key = experienceKey({ company: real.company, start: real.startDate, end: real.endDate });
-    realCounts.set(key, (realCounts.get(key) || 0) + 1);
-  });
-  const supplemental = generatedExperiences.filter((experience) => {
-    const key = experienceKey(experience);
-    const count = realCounts.get(key) || 0;
-    if (count > 0) {
-      realCounts.set(key, count - 1);
-      return false;
-    }
-    return true;
-  });
-  if (!realExperiences.length) return true;
-
-  const realRanges = realExperiences.map((experience) => ({
-    start: monthIndex(experience.startDate),
-    end: monthIndex(experience.endDate),
-  }));
-  const sortedRealRanges = [...realRanges]
-    .filter((range) => range.start !== null && range.end !== null)
-    .sort((first, second) => first.start! - second.start!);
-  const gaps: Array<{ start: number; end: number }> = [];
-  for (let index = 1; index < sortedRealRanges.length; index += 1) {
-    const start = sortedRealRanges[index - 1].end! + 1;
-    const end = sortedRealRanges[index].start! - 1;
-    if (end - start + 1 >= 6) gaps.push({ start, end });
-  }
-  const currentDate = new Date();
-  const currentMonth = currentDate.getFullYear() * 12 + currentDate.getMonth() + 1;
-  const lastReal = sortedRealRanges[sortedRealRanges.length - 1];
-  if (lastReal && lastReal.end! < 999999 && currentMonth - lastReal.end! + 1 >= 6) {
-    gaps.push({ start: lastReal.end! + 1, end: currentMonth });
-  }
-  for (const gap of gaps) {
-    const matches = supplemental.filter((extra) => {
-      const start = monthIndex(extra.start);
-      const end = monthIndex(extra.end);
-      return start !== null && end !== null && start <= gap.start && end >= gap.end;
-    });
-    if (matches.length !== 1) return false;
-  }
-  for (const extra of supplemental) {
-    const start = monthIndex(extra.start);
-    const end = monthIndex(extra.end);
-    if (start === null || end === null) return false;
-    let partialOverlap = false;
-    for (const real of realRanges) {
-      if (real.start === null || real.end === null) continue;
-      const overlapStart = Math.max(start, real.start);
-      const overlapEnd = Math.min(end, real.end);
-      if (overlapStart > overlapEnd) continue;
-      const coversExtra = overlapStart === start && overlapEnd === end;
-      const coversReal = overlapStart === real.start && overlapEnd === real.end;
-      if (coversExtra || coversReal) return false;
-      partialOverlap = true;
-    }
-    if (!partialOverlap) return false;
-  }
-  return true;
 }
 
 function modelMessageContent(userPrompt: string, attachment: SourceAttachment | null) {
@@ -375,7 +253,7 @@ async function requestFromProviders(
   providers: Provider[],
   systemPrompt: string,
   userPrompt: string,
-  validate: (value: any) => boolean,
+  validate: (value: any) => boolean | Promise<boolean>,
   attachment: SourceAttachment | null = null,
   maxTokens = 4_000,
   timeoutMs = PROVIDER_TIMEOUT_MS,
@@ -391,7 +269,7 @@ async function requestFromProviders(
     for (const provider of eligibleProviders) {
       try {
         const result = await requestJsonCompletion(provider, systemPrompt, userPrompt, controller.signal, attachment, maxTokens);
-        if (validate(result)) return result;
+        if (await validate(result)) return result;
       } catch (error) {
         lastError = error;
         // A configured secondary provider can complete a transient primary-provider failure.
@@ -433,6 +311,56 @@ function normalizeProfileImportResponse(value: Record<string, any>) {
   };
 }
 
+async function extractPuppetJob(
+  providers: Provider[],
+  input: Record<string, any>,
+  source: { text: string; attachment: SourceAttachment | null },
+) {
+  const prompt = `Extract the target job from the supplied JD and return JSON only.
+{
+  "title": "concise target title",
+  "experience": "original experience requirement, for example 3-5年 or 5+ years",
+  "description": "complete normalized JD text"
+}
+Do not add requirements that are absent. Preserve all responsibilities, skills, and qualification requirements.
+
+JD text:
+${source.text || 'Read the attached JD directly.'}`;
+  return requestFromProviders(
+    providers,
+    'Return structured job data as valid JSON. Do not return markdown.',
+    prompt,
+    (value) => isRecord(value) && typeof value.title === 'string' && typeof value.experience === 'string' && typeof value.description === 'string',
+    source.attachment,
+    6_000,
+  ) as Promise<{ title: string; experience: string; description: string }>;
+}
+
+function createPuppetTextGenerator(providers: Provider[]) {
+  return async (prompt: string, validator: (text: string) => boolean | Promise<boolean>) => {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const generated = await requestFromProviders(
+          providers,
+          'Return valid JSON only. Do not use markdown or add commentary.',
+          prompt,
+          async (value) => validator(JSON.stringify(value)),
+          null,
+          16_000,
+        );
+        return JSON.stringify(generated);
+      } catch (error) {
+        if (attempt === 3) throw error;
+        const minWait = attempt === 1 ? 10 : 20;
+        const maxWait = attempt === 1 ? 30 : 40;
+        const waitSeconds = Math.floor(Math.random() * (maxWait - minWait + 1)) + minWait;
+        await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1_000));
+      }
+    }
+    throw new Error('Puppet Resume generation exhausted all retries');
+  };
+}
+
 function resumeGenerationPlugin(providers: Provider[]): Plugin {
   const parseInput = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (request.method !== 'POST') {
@@ -470,16 +398,37 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
       return;
     }
     try {
-      const generated = await requestFromProviders(
-        providers,
-        'Return a complete resume as valid JSON. Do not use markdown or add commentary. Preserve every real company name and employment date exactly, preserve basic contact facts exactly, and add at most one partially-overlapping supplemental entry per gap of at least six months. Do not fully overlap a real interval or output reverse chronological order.',
-        buildResumePrompt({ ...input, jobDescription: source.text }),
-        (value) => isRecord(value) && validateGeneratedResume(input, value.resume),
-        source.attachment,
-      );
+      const job = await extractPuppetJob(providers, input, source);
+      const pipeline = new PuppetResumePipeline(createPuppetTextGenerator(providers));
+      const puppetData = await pipeline.enhance(toPuppetRequest(input, job));
+      const applicationId = stringValue(input.applicationId) || randomUUID();
+      const resume = fromPuppetResume(puppetData);
+      const customSections = resume.certificates.length ? ['certifications'] : [];
+      const documentName = `${puppetData.name} - ${puppetData.position}`;
+      const renderDocument = {
+        id: `${applicationId}-${input.language}`,
+        documentName,
+        language: input.language,
+        data: resume,
+        template: 'profile',
+        accent: '#167c65',
+        customSections,
+        customContent: {},
+        sectionOrder: ['basics', 'summary', 'education', 'experience', 'skills', ...customSections],
+        sectionOrderCustomized: false,
+        generationEvidence: input.evidence || {},
+        updatedAt: Date.now(),
+      };
+      const forwardedProtocol = Array.isArray(request.headers['x-forwarded-proto'])
+        ? request.headers['x-forwarded-proto'][0]
+        : request.headers['x-forwarded-proto'];
+      const origin = `${forwardedProtocol || 'http'}://${request.headers.host}`;
+      const layoutManifest = await resolvePuppetLayout(origin, renderDocument);
       sendJson(response, 200, {
-        ...generated,
-        applicationId: stringValue(input.applicationId) || randomUUID(),
+        documentName,
+        resume,
+        layoutManifest,
+        applicationId,
         jobId: stringValue(input.jobId),
         evidence: isRecord(input.evidence)
           ? {
@@ -570,6 +519,35 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
     }
   };
 
+  const pdfExportHandler = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+    if (request.method !== 'POST') {
+      next();
+      return;
+    }
+    try {
+      const input = await readJsonBody(request);
+      if (!isRecord(input.document) || !isRecord(input.document.layoutManifest)) {
+        sendJson(response, 400, { error: 'Provide a finalized resume document.' });
+        return;
+      }
+      const forwardedProtocol = Array.isArray(request.headers['x-forwarded-proto'])
+        ? request.headers['x-forwarded-proto'][0]
+        : request.headers['x-forwarded-proto'];
+      const origin = `${forwardedProtocol || 'http'}://${request.headers.host}`;
+      const providedManifest = input.document.layoutManifest as Record<string, any>;
+      const manifest = stringValue(providedManifest.policy)
+        ? providedManifest
+        : await resolvePuppetLayout(origin, input.document);
+      const pdf = await renderPuppetPdf(origin, { ...input.document, layoutManifest: manifest }, manifest as any);
+      response.statusCode = 200;
+      response.setHeader('Content-Type', 'application/pdf');
+      response.setHeader('Content-Disposition', 'attachment; filename="resume.pdf"');
+      response.end(pdf);
+    } catch (error) {
+      sendJson(response, 500, { error: error instanceof Error ? error.message : 'PDF generation failed.' });
+    }
+  };
+
   const configureRoutes = (server: { middlewares: { use: Function } }) => {
     server.middlewares.use('/api/generate-resume', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
       void resumeHandler(request, response, next);
@@ -579,6 +557,9 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
     });
     server.middlewares.use('/api/translate-profile', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
       void profileTranslationHandler(request, response, next);
+    });
+    server.middlewares.use('/api/export-pdf', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+      void pdfExportHandler(request, response, next);
     });
   };
 
@@ -633,21 +614,20 @@ export default defineConfig(({ mode }) => {
   const providers: Provider[] = [];
   const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://www.yunqiaoai.top';
   if (env.CLOUD_BRIDGE_API_KEY) {
-    providers.push({
+    const endpoint = chatCompletionsEndpoint(cloudBridgeBaseUrl);
+    const models = [
+      env.GEMINI_PRIMARY_MODEL || 'gemini-3.5-flash',
+      env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash',
+      env.GEMINI_ESCALATION_MODEL || 'gemini-3.1-pro-preview',
+      env.OPENAI_FALLBACK_MODEL || 'gpt-5.4-mini',
+    ];
+    providers.push(...models.map((model) => ({
       apiKey: env.CLOUD_BRIDGE_API_KEY,
-      endpoint: chatCompletionsEndpoint(cloudBridgeBaseUrl),
-      model: env.CLOUD_BRIDGE_MODEL || 'gpt-5.6-terra',
-      pdfModel: env.CLOUD_BRIDGE_PDF_MODEL || 'gemini-2.5-flash',
+      endpoint,
+      model,
+      pdfModel: env.GEMINI_VISION_MODEL || 'gemini-3.5-flash',
       supportsDirectFileInput: true,
-    });
-  }
-  if (env.DEEPSEEK_API_KEY) {
-    providers.push({
-      apiKey: env.DEEPSEEK_API_KEY,
-      endpoint: 'https://api.deepseek.com/chat/completions',
-      model: env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
-      supportsDirectFileInput: false,
-    });
+    })));
   }
   return {
     plugins: [

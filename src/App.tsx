@@ -171,6 +171,7 @@ const LIBRARY_VERSION = 2;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
 const MAX_JOB_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCE_TEXT_CHARS = 20_000;
+const RESUME_PAGE_HEIGHT = 1123;
 type CssVariables = CSSProperties & Record<`--${string}`, string>;
 
 function normalizeGenerationEvidence(value) {
@@ -189,6 +190,18 @@ function normalizeGenerationEvidence(value) {
         }
       : null,
     capturedAt: Number.isFinite(Number(source.capturedAt)) ? Number(source.capturedAt) : 0,
+  };
+}
+
+function normalizeLayoutManifest(value) {
+  const source = isRecord(value) ? value : {};
+  const allowedPolicies = new Set(['compact-gaps', 'compact-lines', 'compact-balanced', 'expand-gaps', 'expand-lines']);
+  return {
+    policy: allowedPolicies.has(source.policy) ? source.policy : '',
+    sectionGapDelta: Number.isFinite(Number(source.sectionGapDelta)) ? Number(source.sectionGapDelta) : 0,
+    lineHeightDelta: Number.isFinite(Number(source.lineHeightDelta)) ? Number(source.lineHeightDelta) : 0,
+    pageCount: Math.max(1, Number(source.pageCount) || 1),
+    fillRatio: Math.max(0, Math.min(1, Number(source.fillRatio) || 0)),
   };
 }
 
@@ -260,12 +273,16 @@ function resumeName(basics, language) {
   if (isChineseResume(language)) {
     return `${basics.fullName || basics.lastName || ''}${basics.fullName ? '' : basics.firstName || ''}`.trim();
   }
+  if (basics.fullName) return basics.fullName.trim();
   return `${basics.firstName || ''} ${basics.lastName || ''}`.trim();
 }
 
 function resumeInitials(basics, language) {
   if (isChineseResume(language)) {
     return resumeName(basics, language).slice(0, 2) || '姓名';
+  }
+  if (basics.fullName) {
+    return basics.fullName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
   }
   return `${basics.firstName?.[0] || 'Y'}${basics.lastName?.[0] || ''}`;
 }
@@ -594,6 +611,12 @@ function normalizeResumeData(value, language = 'english') {
   const source = isRecord(value) ? value : {};
   const basics = isRecord(source.basics) ? source.basics : {};
   const skills = isRecord(source.skills) ? source.skills : {};
+  const skillCategories = Array.isArray(skills.categories)
+    ? skills.categories.filter(isRecord).map((category) => ({
+        title: textValue(category.title),
+        items: Array.isArray(category.items) ? category.items.map((item) => textValue(item)).filter(Boolean) : [],
+      })).filter((category) => category.title && category.items.length)
+    : [];
   const chinese = isChineseResume(language);
   const storedFullName = textValue(basics.fullName).trim();
   const migratedChineseName = `${textValue(basics.lastName)}${textValue(basics.firstName)}`.trim();
@@ -647,6 +670,7 @@ function normalizeResumeData(value, language = 'english') {
       photoUrl: textValue(basics.photoUrl, initialResume.basics.photoUrl),
     },
     summary: textValue(source.summary, initialResume.summary),
+    yearsOfExperience: Number.isFinite(Number(source.yearsOfExperience)) ? Number(source.yearsOfExperience) : 0,
     experience,
     education: storedEducation.length
       ? storedEducation
@@ -654,7 +678,15 @@ function normalizeResumeData(value, language = 'english') {
     skills: {
       expertise: textValue(skills.expertise, initialResume.skills.expertise),
       tools: textValue(skills.tools, initialResume.skills.tools),
+      categories: skillCategories,
     },
+    certificates: Array.isArray(source.certificates)
+      ? source.certificates.filter(isRecord).map((certificate) => ({
+          name: textValue(certificate.name),
+          date: textValue(certificate.date),
+          score: textValue(certificate.score),
+        })).filter((certificate) => certificate.name)
+      : [],
   };
 }
 
@@ -844,6 +876,7 @@ function normalizeResumeDocument(value, index) {
     sectionOrder: normalizeSectionOrder(source.sectionOrder, customSections, template),
     sectionOrderCustomized: source.sectionOrderCustomized === true,
     generationEvidence: normalizeGenerationEvidence(source.generationEvidence),
+    layoutManifest: normalizeLayoutManifest(source.layoutManifest),
   };
   snapshot.customContent = normalizeCustomContent(snapshot.customSections, source.customContent, language);
   return {
@@ -1069,7 +1102,7 @@ function initializeAccountDatabase() {
 }
 
 function blankResumeSnapshot(
-  { documentName, language, generationEvidence }: { documentName?: string; language?: string; generationEvidence?: unknown } = {},
+  { documentName, language, generationEvidence, layoutManifest }: { documentName?: string; language?: string; generationEvidence?: unknown; layoutManifest?: unknown } = {},
 ) {
   const chinese = isChineseResume(language);
   return {
@@ -1130,6 +1163,7 @@ function blankResumeSnapshot(
     sectionOrder: defaultSectionOrder('modern', []),
     sectionOrderCustomized: false,
     generationEvidence: normalizeGenerationEvidence(generationEvidence),
+    layoutManifest: normalizeLayoutManifest(layoutManifest),
   };
 }
 
@@ -1149,6 +1183,7 @@ function resumeSnapshotEqual(document, snapshot) {
     sectionOrder: document.sectionOrder,
     sectionOrderCustomized: document.sectionOrderCustomized,
     generationEvidence: document.generationEvidence,
+    layoutManifest: document.layoutManifest,
   }) === JSON.stringify(snapshot);
 }
 
@@ -1555,14 +1590,19 @@ function App() {
         `${resumeName(data.basics, language) || (isChineseResume(language) ? '未命名简历' : 'Untitled resume')} - ${data.basics.role || (isChineseResume(language) ? '目标职位' : 'Target role')}`,
       );
       const generatedId = resumeId();
-      const snapshot = blankResumeSnapshot({ documentName: generatedName, language, generationEvidence: {
+      const snapshot = blankResumeSnapshot({ documentName: generatedName, language, layoutManifest: payload.layoutManifest, generationEvidence: {
         ...evidence,
         applicationId: textValue(payload.applicationId, applicationId),
       } });
+      const customSections = data.certificates.length ? ['certifications'] : [];
       generatedResumes.push({
         id: generatedId,
         ...snapshot,
         data,
+        template: 'profile',
+        customSections,
+        customContent: normalizeCustomContent(customSections, {}, language),
+        sectionOrder: defaultSectionOrder('profile', customSections),
         updatedAt: Date.now(),
       });
     }
@@ -1699,6 +1739,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
       sectionOrder,
       sectionOrderCustomized,
       generationEvidence: initialResumeState.generationEvidence,
+      layoutManifest: initialResumeState.layoutManifest,
     });
     if (!saved) {
       setSaveState('Save failed');
@@ -1713,6 +1754,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
     data,
     documentName,
     initialResumeState.generationEvidence,
+    initialResumeState.layoutManifest,
     language,
     onResumeChange,
     resumeId,
@@ -1927,6 +1969,45 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
     setToast('Demo content restored');
   };
 
+  const exportPdf = async () => {
+    setToast('Preparing PDF...');
+    try {
+      const resumeDocument = {
+        id: resumeId,
+        documentName,
+        language,
+        data,
+        template,
+        accent,
+        customSections,
+        customContent,
+        sectionOrder,
+        sectionOrderCustomized,
+        generationEvidence: initialResumeState.generationEvidence,
+        layoutManifest: initialResumeState.layoutManifest,
+        updatedAt: Date.now(),
+      };
+      const response = await fetch('/api/export-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document: resumeDocument }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(textValue(payload.error, 'PDF export failed.'));
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = `${documentName.replace(/[^\w\u4e00-\u9fff-]+/g, '-') || 'resume'}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setToast('PDF exported');
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'PDF export failed');
+    }
+  };
+
   return (
     <div className="app-shell">
       <TopBar
@@ -1937,7 +2018,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
         redo={redo}
         canUndo={history.past.length > 0}
         canRedo={history.future.length > 0}
-        onExport={() => window.print()}
+        onExport={exportPdf}
         onAi={() => setAiPanel(true)}
         onReset={resetDemo}
         onBack={onBack}
@@ -2014,6 +2095,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
           sectionOrder={sectionOrder}
           sectionOrderCustomized={sectionOrderCustomized}
           language={language}
+          layoutManifest={initialResumeState.layoutManifest}
         />
       </main>
 
@@ -4182,7 +4264,7 @@ function SkillsEditor({ skills, updateData }) {
   const update = (field, value) => {
     updateData((current) => ({
       ...current,
-      skills: { ...current.skills, [field]: value },
+      skills: { ...current.skills, [field]: value, categories: [] },
     }));
   };
   const expertise = skills.expertise.split(',').map((item) => item.trim()).filter(Boolean);
@@ -4280,18 +4362,19 @@ function PreviewPanel({
   sectionOrder,
   sectionOrderCustomized,
   language,
+  layoutManifest,
 }) {
   const [colorMenu, setColorMenu] = useState(false);
-  const [profilePageHeight, setProfilePageHeight] = useState(932);
+  const [contentHeight, setContentHeight] = useState(RESUME_PAGE_HEIGHT);
   const zoomPercent = Math.round(zoom * 100);
-  const pageHeight = template === 'profile' ? profilePageHeight : 932;
-  const pageCount = Math.max(1, Math.ceil(pageHeight / 932));
+  const pageHeight = contentHeight;
+  const pageCount = Math.max(1, Math.ceil(pageHeight / RESUME_PAGE_HEIGHT));
   const updateProfilePageHeight = useCallback((height) => {
-    setProfilePageHeight((current) => (Math.abs(current - height) < 1 ? current : height));
+    setContentHeight((current) => (Math.abs(current - height) < 1 ? current : height));
   }, []);
 
   useEffect(() => {
-    if (template !== 'profile') setProfilePageHeight(932);
+    setContentHeight(RESUME_PAGE_HEIGHT);
   }, [template]);
 
   const changeZoom = (delta) => {
@@ -4400,6 +4483,7 @@ function PreviewPanel({
           sectionOrderCustomized={sectionOrderCustomized}
           onContentHeightChange={updateProfilePageHeight}
           language={language}
+          layoutManifest={layoutManifest}
         />
       </ResumeStage>
     </section>
@@ -4450,7 +4534,7 @@ function ResumeStage({ zoom, setZoom, pageHeight, initialPosition, onPositionCha
   const hasRestoredPositionRef = useRef(false);
   const [fitScale, setFitScale] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  const pageWidth = 720;
+  const pageWidth = 794;
 
   useLayoutEffect(() => {
     const element = stageRef.current;
@@ -4589,6 +4673,7 @@ function ResumePage({
   sectionOrderCustomized,
   onContentHeightChange,
   language,
+  layoutManifest,
 }) {
   const { basics } = data;
   const initials = resumeInitials(basics, language);
@@ -4611,9 +4696,32 @@ function ResumePage({
   const pageRef = useRef(null);
 
   useLayoutEffect(() => {
-    if (!isProfileTemplate) return undefined;
+    const root = pageRef.current;
+    if (!root) return undefined;
+    const spacingElements = root.querySelectorAll('.resume-section, .resume-entry, .profile-skill-category');
+    const lineElements = root.querySelectorAll('.resume-section p, .resume-entry li, .profile-skill-category li, .certificate-list span');
+    spacingElements.forEach((element) => {
+      element.style.marginTop = '';
+      element.style.marginBottom = '';
+    });
+    lineElements.forEach((element) => { element.style.lineHeight = ''; });
+    spacingElements.forEach((element) => {
+      const computed = window.getComputedStyle(element);
+      element.style.marginTop = `${Math.max(0, Number.parseFloat(computed.marginTop) + layoutManifest.sectionGapDelta)}px`;
+      element.style.marginBottom = `${Math.max(0, Number.parseFloat(computed.marginBottom) + layoutManifest.sectionGapDelta)}px`;
+    });
+    if (layoutManifest.lineHeightDelta !== 0) {
+      lineElements.forEach((element) => {
+        const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight);
+        if (Number.isFinite(lineHeight)) element.style.lineHeight = `${Math.max(12, lineHeight + layoutManifest.lineHeightDelta)}px`;
+      });
+    }
+    return undefined;
+  }, [data, layoutManifest.lineHeightDelta, layoutManifest.sectionGapDelta]);
+
+  useLayoutEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      const contentHeight = Math.max(932, Math.ceil(pageRef.current?.scrollHeight || 932));
+      const contentHeight = Math.max(RESUME_PAGE_HEIGHT, Math.ceil(pageRef.current?.scrollHeight || RESUME_PAGE_HEIGHT));
       onContentHeightChange(contentHeight);
     });
     return () => window.cancelAnimationFrame(frame);
@@ -4622,7 +4730,8 @@ function ResumePage({
     customSections,
     data,
     displayOrder,
-    isProfileTemplate,
+    layoutManifest.lineHeightDelta,
+    layoutManifest.sectionGapDelta,
     onContentHeightChange,
   ]);
 
@@ -4688,7 +4797,7 @@ function ResumeContentSection({ sectionId, data, profile, customContent, languag
   if (sectionId === 'summary') {
     return (
       <ResumeSection title={chinese ? chineseSectionLabels.summary : profile ? 'Personal Introduction' : 'Profile'} className="profile-section">
-        <p>{data.summary}</p>
+        <p><FormattedPuppetText value={data.summary} /></p>
       </ResumeSection>
     );
   }
@@ -4715,6 +4824,20 @@ function ResumeContentSection({ sectionId, data, profile, customContent, languag
       <ResumeSection title={chinese ? chineseSectionLabels.skills : 'Skills'} className="skills-section">
         <div className="resume-skill-row"><strong>{chinese ? '专业领域' : 'Expertise'}</strong><span>{data.skills.expertise}</span></div>
         <div className="resume-skill-row"><strong>{chinese ? '工具平台' : 'Tools'}</strong><span>{data.skills.tools}</span></div>
+      </ResumeSection>
+    );
+  }
+  if (sectionId === 'certifications' && data.certificates.length) {
+    return (
+      <ResumeSection title={chinese ? chineseSectionLabels.certifications : 'Certificates'} className="certificates-section">
+        <div className="certificate-list">
+          {data.certificates.map((certificate, index) => (
+            <span key={`${certificate.name}-${index}`}>
+              <FormattedPuppetText value={certificate.name} />
+              {certificate.date && <small>{certificate.date}</small>}
+            </span>
+          ))}
+        </div>
       </ResumeSection>
     );
   }
@@ -4758,7 +4881,7 @@ function ExperienceEntries({ items, profile = false }) {
         <time>{item.start} - {item.end}</time>
       </div>
       <ul>
-        {item.bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
+        {item.bullets.map((bullet, index) => <li key={index}><FormattedPuppetText value={bullet} /></li>)}
       </ul>
     </div>
   ));
@@ -4780,24 +4903,38 @@ function EducationEntries({ items, profile = false }) {
 
 function ProfileSkills({ skills, language }) {
   const chinese = isChineseResume(language);
-  const categories = [
-    { title: chinese ? '专业领域' : 'Expertise', items: skills.expertise },
-    { title: chinese ? '工具平台' : 'Tools & Platforms', items: skills.tools },
-  ].map((category) => ({
-    ...category,
-    items: category.items.split(',').map((item) => item.trim()).filter(Boolean),
-  })).filter((category) => category.items.length);
+  const categories = skills.categories?.length
+    ? skills.categories
+    : [
+        { title: chinese ? '专业领域' : 'Expertise', items: skills.expertise },
+        { title: chinese ? '工具平台' : 'Tools & Platforms', items: skills.tools },
+      ].map((category) => ({
+        ...category,
+        items: category.items.split(',').map((item) => item.trim()).filter(Boolean),
+      })).filter((category) => category.items.length);
 
   return (
     <div className="profile-skills-grid">
       {categories.map((category) => (
         <div className="profile-skill-category" key={category.title}>
           <strong>{category.title}</strong>
-          <ul>{category.items.map((item) => <li key={item}>{item}</li>)}</ul>
+          <ul>{category.items.map((item) => <li key={item}><FormattedPuppetText value={item} /></li>)}</ul>
         </div>
       ))}
     </div>
   );
+}
+
+function FormattedPuppetText({ value }) {
+  const tokens = textValue(value).split(/(<b>.*?<\/b>|<u>.*?<\/u>|\n)/gi);
+  return tokens.map((token, index) => {
+    const bold = /^<b>(.*?)<\/b>$/i.exec(token);
+    if (bold) return <strong key={index}>{bold[1]}</strong>;
+    const underline = /^<u>(.*?)<\/u>$/i.exec(token);
+    if (underline) return <u key={index}>{underline[1]}</u>;
+    if (token === '\n') return <br key={index} />;
+    return token;
+  });
 }
 
 function ResumeSection({ title, children, className = '' }) {

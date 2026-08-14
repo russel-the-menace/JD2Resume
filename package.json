@@ -8,10 +8,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "check:types": "tsc --noEmit",
+    "check:puppet": "tsx scripts/verify-puppet-pipeline.mts",
+    "check:layout": "tsx scripts/verify-puppet-layout.mts",
     "check:ui": "tsx scripts/verify-ui.mts"
   },
   "dependencies": {
     "lucide-react": "0.563.0",
+    "puppeteer": "^24.43.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

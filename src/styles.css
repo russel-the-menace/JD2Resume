@@ -2360,8 +2360,8 @@ button:disabled {
   position: absolute;
   top: 0;
   left: 0;
-  width: 720px;
-  height: 932px;
+  width: 794px;
+  height: 1123px;
   transform-origin: top left;
 }
 
@@ -2382,9 +2382,10 @@ button:disabled {
 
 .resume-page {
   position: relative;
-  width: 720px;
-  height: 932px;
-  overflow: hidden;
+  width: 794px;
+  height: auto;
+  min-height: 1123px;
+  overflow: visible;
   color: #242824;
   background: #fff;
   box-shadow: 0 10px 30px rgba(24, 31, 27, 0.17), 0 1px 4px rgba(24, 31, 27, 0.12);
@@ -2479,6 +2480,20 @@ button:disabled {
   font-size: 8.4px;
   font-weight: 780;
   text-transform: uppercase;
+}
+
+.resume-section > h3,
+.resume-entry-heading,
+.profile-skill-category > strong {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.resume-entry li,
+.profile-skill-category li,
+.certificate-list > span {
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .resume-section h3::after {
@@ -2687,7 +2702,7 @@ button:disabled {
 
 .resume-page.template-profile {
   height: auto;
-  min-height: 932px;
+  min-height: 1123px;
   overflow: visible;
 }
 
@@ -2882,6 +2897,23 @@ button:disabled {
 
 .profile-skill-category li::marker {
   color: var(--resume-accent);
+}
+
+.certificate-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.certificate-list > span {
+  padding: 4px 9px;
+  border: 1px solid #dfe5e2;
+  background: #f7f9f8;
+}
+
+.certificate-list small {
+  margin-left: 6px;
+  color: #78817c;
 }
 
 .modal-backdrop {
@@ -3988,7 +4020,7 @@ button:disabled {
 
 @media print {
   @page {
-    size: Letter;
+    size: A4;
     margin: 0;
   }
 
@@ -3996,8 +4028,8 @@ button:disabled {
   body,
   #root,
   .app-shell {
-    width: 8.5in;
-    height: 11in;
+    width: 210mm;
+    height: auto;
     overflow: visible;
     background: #fff;
   }
@@ -4016,8 +4048,8 @@ button:disabled {
   .preview-panel,
   .resume-stage {
     display: block !important;
-    width: 8.5in;
-    height: 11in;
+    width: 210mm;
+    height: auto;
     padding: 0;
     overflow: visible;
     background: #fff;
@@ -4025,21 +4057,22 @@ button:disabled {
 
   .resume-scale-wrap,
   .resume-transform {
-    width: 8.5in !important;
-    height: 11in !important;
+    width: 210mm !important;
+    height: auto !important;
     transform: none !important;
   }
 
   .resume-page {
-    width: 8.5in;
-    height: 11in;
+    width: 210mm;
+    height: auto;
+    min-height: 297mm;
     box-shadow: none;
     transform-origin: top left;
   }
 
   .resume-page.template-profile {
     height: auto;
-    min-height: 11in;
+    min-height: 297mm;
     overflow: visible;
   }
 }
