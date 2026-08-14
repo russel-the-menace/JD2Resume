@@ -140,14 +140,13 @@ await desktopPage.route('**/api/import-profile', async (route) => {
           educations: [{
             school: '复旦大学',
             degree: '本科',
-            studyType: '全日制',
+            studyType: '本科',
             major: '视觉传达设计',
             startDate: '2014-09',
             endDate: '2018-06',
             description: '',
           }],
-          workExperiences: [],
-          skills: ['用户体验设计'],
+          workExperiences: [{ company: '一 间客厅社交主题酒馆', jobTitle: '副店长', businessDirection: '', workContent: '', startDate: '2020-01', endDate: '2021-02' }, { company: '第二公司', jobTitle: '运营', businessDirection: '', workContent: '', startDate: '2021-03', endDate: '2022-04' }],
           certificates: [],
         },
       },
@@ -180,8 +179,7 @@ await desktopPage.route('**/api/translate-profile', async (route) => {
           endDate: '2018-06',
           description: '',
         }],
-        workExperiences: [],
-        skills: ['User experience design'],
+        workExperiences: [{ company: 'One Living Room Social Bar', jobTitle: 'Assistant Manager', businessDirection: '', workContent: '', startDate: '2020-01', endDate: '2021-02' }, { company: 'Second Company', jobTitle: 'Operations', businessDirection: '', workContent: '', startDate: '2021-03', endDate: '2022-04' }],
         certificates: [],
       },
     }),
@@ -212,6 +210,21 @@ await profileDialog.getByRole('button', { name: '中文', exact: true }).click()
 report.checks.profileImportIncludesEducation = await profileDialog.getByText('复旦大学', { exact: true }).isVisible();
 report.checks.profileImportPreservesMissingFields =
   (await profileDialog.getByLabel('性别').inputValue()) === '女';
+report.checks.profileSkillsRemoved =
+  (await profileDialog.getByRole('heading', { name: '专业技能', exact: true }).count()) === 0;
+report.checks.profileEducationDisplayNormalized =
+  (await profileDialog.getByText('本科 · 视觉传达设计', { exact: true }).isVisible()) &&
+  (await profileDialog.getByText(/\(本科\)|\(全日制\)/).count()) === 0;
+report.checks.profileChineseSpacingNormalized =
+  await profileDialog.getByText('一间客厅社交主题酒馆', { exact: true }).isVisible();
+const importedWorkSection = profileDialog.locator('.profile-section-block').filter({ hasText: '工作经历' }).first();
+await importedWorkSection.getByRole('button', { name: '编辑工作经历 1' }).click();
+const importedWorkStacks = importedWorkSection.locator('.profile-entry-stack');
+await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-profile-inline-work-editor.png') });
+report.checks.profileEditorFollowsEditedEntry =
+  (await importedWorkStacks.nth(0).locator('.profile-entry-editor').count()) === 1 &&
+  (await importedWorkStacks.nth(1).locator('.profile-entry-editor').count()) === 0;
+await importedWorkStacks.nth(0).getByRole('button', { name: 'Close' }).click();
 report.checks.personalProfileSummaryRemoved =
   (await profileDialog.getByLabel('个人简介').count()) === 0;
 await desktopPage.screenshot({ path: join(tmpdir(), 'draftline-playwright-personal-profile-dialog.png') });

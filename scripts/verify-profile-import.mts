@@ -9,11 +9,11 @@ import {
 } from '../server/profile-import/pipeline';
 
 const models: ProfileImportModels = {
-  lite: 'gemini-3.1-flash-lite',
-  mini: 'gpt-5-mini',
-  standard: 'gpt-5.1',
+  lite: 'gemini-3.5-flash-lite',
+  mini: 'gemini-3.6-flash',
+  standard: 'gemini-3.7-flash',
   vision: 'gemini-3.6-flash',
-  escalation: 'gpt-5.6-terra',
+  escalation: 'gemini-3.1-pro-preview',
 };
 
 const calls: ProfileTaskRequest[] = [];
@@ -31,15 +31,13 @@ const caller = async (request: ProfileTaskRequest) => {
     if (educationAttempts === 1) throw new Error('MODULE_SCHEMA_INVALID');
     return {
       educations: [{
-        school: '复旦大学', degree: '本科', studyType: '', major: '视觉传达设计',
-        startDate: '2014-09', endDate: '2018-06', sourceLines: ['p1-l3', 'p1-l4'], descriptionSourceLines: [],
+        school: '复旦大学', degree: '本科', studyType: '本科', major: '视觉传达设计',
+        startDate: '', endDate: '', sourceLines: ['p1-l3', 'p1-l4'], descriptionSourceLines: [],
       }],
     };
   }
-  if (request.task === 'work') return { workExperiences: [] };
-  if (request.task === 'skills') {
-    return { skills: [{ value: '内容运营', sourceLines: ['p1-l5'] }], certificates: [] };
-  }
+  if (request.task === 'work') return { workExperiences: [{ company: '一 间客厅社交主题酒馆', jobTitle: '新媒体运营', businessDirection: '', startDate: '', endDate: '', sourceLines: ['p1-l5'], workContentSourceLines: [] }] };
+  if (request.task === 'certificates') return { certificates: [] };
   if (request.task === 'translation') {
     return {
       language: 'english',
@@ -47,7 +45,7 @@ const caller = async (request: ProfileTaskRequest) => {
         fullName: 'Junling Tian', gender: '', birthday: '', phone: '13800138000', phoneEn: '13800138000',
         email: 'junling@example.com', location: '', wechat: '', whatsapp: '', telegram: '', linkedin: '', website: '',
         educations: [{ school: 'Fudan University', degree: 'Bachelor', studyType: '', major: 'Visual Communication Design', startDate: '2014-09', endDate: '2018-06', description: '' }],
-        workExperiences: [], skills: ['Content Operations'], certificates: [],
+        workExperiences: [{ company: 'One Living Room Social Bar', jobTitle: 'New Media Operations', businessDirection: '', workContent: '', startDate: '2020-01', endDate: '2021-02' }], certificates: [],
       },
     };
   }
@@ -61,7 +59,7 @@ const imported = await importProfileFacts({
     '13800138000 junling@example.com',
     '复旦大学 视觉传达设计 本科',
     '2014-09 - 2018-06',
-    '专业技能 内容运营',
+    '一 间客厅社交主题酒馆 新媒体运营 2020.01 - 2021.02',
   ].join('\n'),
   attachment: null,
 }, models, caller);
@@ -69,15 +67,19 @@ const imported = await importProfileFacts({
 assert.equal(imported.language, 'chinese');
 assert.equal(imported.profile.fullName, '田俊铃');
 assert.equal(imported.profile.educations[0].school, '复旦大学');
-assert.deepEqual(imported.profile.skills, ['内容运营']);
-assert.deepEqual(calls.filter((call) => call.task === 'education').map((call) => call.model), ['gpt-5-mini', 'gpt-5.1']);
+assert.equal(imported.profile.educations[0].studyType, '全日制');
+assert.equal(imported.profile.educations[0].startDate, '2014-09');
+assert.equal(imported.profile.educations[0].endDate, '2018-06');
+assert.equal(imported.profile.workExperiences[0].company, '一间客厅社交主题酒馆');
+assert.equal(imported.profile.workExperiences[0].startDate, '2020-01');
+assert.deepEqual(calls.filter((call) => call.task === 'education').map((call) => call.model), ['gemini-3.6-flash', 'gemini-3.7-flash']);
 assert.equal(calls.filter((call) => call.task === 'basic').length, 1);
 assert.equal(calls.filter((call) => call.task === 'work').length, 1);
-assert.equal(calls.filter((call) => call.task === 'skills').length, 1);
+assert.equal(calls.filter((call) => call.task === 'certificates').length, 1);
 
 const translated = await translateProfileFacts('chinese', imported.profile, models, caller);
 assert.equal(translated.profile.fullName, 'Junling Tian');
-assert.equal(calls.find((call) => call.task === 'translation')?.model, 'gpt-5-mini');
+assert.equal(calls.find((call) => call.task === 'translation')?.model, 'gemini-3.6-flash');
 
 const browser = await puppeteer.launch({
   headless: true,

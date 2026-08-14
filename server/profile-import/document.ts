@@ -22,7 +22,11 @@ export type CanonicalDocument = {
 type PositionedText = { text: string; x: number; y: number; height: number };
 
 function normalizeLineText(value: string) {
-  return value.normalize('NFKC').replace(/\s+/g, ' ').trim();
+  return value
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .replace(/([\u3400-\u9FFF])\s+(?=[\u3400-\u9FFF])/gu, '$1')
+    .trim();
 }
 
 function groupTextItems(items: PositionedText[]) {

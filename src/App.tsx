@@ -330,7 +330,6 @@ const emptyUserProfile = {
     photoUrl: '',
     educations: [],
     workExperiences: [],
-    skills: [],
     certificates: [],
     aiMessage: '',
   },
@@ -350,7 +349,6 @@ const emptyUserProfile = {
     photoUrl: '',
     educations: [],
     workExperiences: [],
-    skills: [],
     certificates: [],
     aiMessage: '',
   },
@@ -399,17 +397,37 @@ function normalizeStringList(value) {
     : [];
 }
 
+function normalizeChineseSpacing(value) {
+  return textValue(value).trim().replace(/([\u3400-\u9FFF])\s+(?=[\u3400-\u9FFF])/gu, '$1');
+}
+
+function normalizeProfileStudyType(value, degree) {
+  const studyType = textValue(value).trim();
+  const evidence = `${degree} ${studyType}`;
+  if (/非全日制|函授|成人(?:教育|本科)?|夜校|业余|网络教育|自考/u.test(evidence)) return '非全日制';
+  if (/part[ -]?time|correspondence|adult education|night school/i.test(evidence)) return 'Part-time';
+  if (['全日制', '非全日制', 'Full-time', 'Part-time'].includes(studyType)) return studyType;
+  if (/本科/u.test(textValue(degree))) return '全日制';
+  if (/bachelor/i.test(textValue(degree))) return 'Full-time';
+  return '';
+}
+
+function displayedProfileStudyType(value) {
+  return ['非全日制', 'Part-time'].includes(textValue(value)) ? value : '';
+}
+
 function normalizeProfileEducation(value, index = 0) {
   const source = isRecord(value) ? value : {};
+  const degree = textValue(source.degree).trim();
   return {
     id: textValue(source.id, profileEntryId('education', index)),
-    school: textValue(source.school).trim(),
+    school: normalizeChineseSpacing(source.school),
     schoolEn: textValue(source.schoolEn || source.school_en).trim(),
     schoolCn: textValue(source.schoolCn || source.school_cn).trim(),
     countryChinese: textValue(source.countryChinese || source.country_chinese).trim(),
     countryEnglish: textValue(source.countryEnglish || source.country_english).trim(),
-    degree: textValue(source.degree).trim(),
-    studyType: textValue(source.studyType || source.study_type).trim(),
+    degree,
+    studyType: normalizeProfileStudyType(source.studyType || source.study_type, degree),
     major: textValue(source.major).trim(),
     majorEn: textValue(source.majorEn || source.major_en).trim(),
     startDate: textValue(source.startDate || source.startTime).trim(),
@@ -422,7 +440,7 @@ function normalizeProfileWorkExperience(value, index = 0) {
   const source = isRecord(value) ? value : {};
   return {
     id: textValue(source.id, profileEntryId('work', index)),
-    company: textValue(source.company).trim(),
+    company: normalizeChineseSpacing(source.company),
     jobTitle: textValue(source.jobTitle || source.role).trim(),
     businessDirection: textValue(source.businessDirection).trim(),
     workContent: textValue(source.workContent || source.description).trim(),
@@ -454,7 +472,6 @@ function normalizeProfileLanguage(value, language) {
     workExperiences: Array.isArray(source.workExperiences)
       ? source.workExperiences.map(normalizeProfileWorkExperience)
       : [],
-    skills: normalizeStringList(source.skills),
     certificates: normalizeStringList(source.certificates),
     aiMessage: textValue(source.aiMessage).trim(),
   };
@@ -3171,6 +3188,32 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
   const updateListItem = (field, index, value) => updateField(field, fields[field].map((item, itemIndex) => itemIndex === index ? value : item));
   const removeListItem = (field, index) => updateField(field, fields[field].filter((_, itemIndex) => itemIndex !== index));
   const showPhoto = fields.photoUrl;
+  const educationEditorPanel = educationEditor && <div className="profile-entry-editor">
+    <div className="profile-editor-heading"><strong>{educationEditor.index < 0 ? (chinese ? '添加教育经历' : 'Add education') : (chinese ? '编辑教育经历' : 'Edit education')}</strong><button className="icon-button small" type="button" onClick={() => { setEducationEditor(null); setEntryError(''); }} aria-label="Close" title="Close"><X size={15} /></button></div>
+    <div className="form-grid two-columns">
+      <ProfilePickerButton label={chinese ? '学校' : 'School'} value={educationEditor.school} placeholder={chinese ? '选择或输入学校' : 'Select or enter university'} onClick={() => openDirectoryPicker('university')} />
+      <ProfilePickerButton label={chinese ? '学历' : 'Degree'} value={[educationEditor.degree, displayedProfileStudyType(educationEditor.studyType) && `(${displayedProfileStudyType(educationEditor.studyType)})`].filter(Boolean).join(' ')} placeholder={chinese ? '请选择学历' : 'Select degree'} onClick={openDegreePicker} />
+      <ProfilePickerButton label={chinese ? '专业' : 'Major'} value={educationEditor.major} placeholder={chinese ? '选择或输入专业' : 'Select or enter major'} onClick={() => openDirectoryPicker('major')} />
+      <ProfilePickerButton label={chinese ? '入学时间' : 'Start date'} value={educationEditor.startDate} placeholder={chinese ? '请选择入学时间' : 'Choose start date'} onClick={() => openDatePicker('education.startDate', educationEditor.startDate)} />
+      <ProfilePickerButton label={chinese ? '毕业时间' : 'End date'} value={educationEditor.endDate} placeholder={chinese ? '请选择毕业时间' : 'Choose end date'} onClick={() => openDatePicker('education.endDate', educationEditor.endDate, true)} />
+    </div>
+    <label className="field"><span>{chinese ? '在校描述' : 'Description'} <small>({chinese ? '选填' : 'Optional'})</small></span><textarea rows={3} maxLength={500} value={educationEditor.description} onChange={(event) => setEducationEditor((current) => ({ ...current, description: event.target.value }))} placeholder={chinese ? '主要课程、荣誉奖励等' : 'Main courses, honors, etc.'} /></label>
+    {entryError && <p className="account-auth-error" role="alert">{entryError}</p>}
+    <div className="profile-editor-actions"><button className="secondary-button" type="button" onClick={() => setEducationEditor(null)}>{chinese ? '取消' : 'Cancel'}</button><button className="primary-button" type="button" onClick={saveEducation}><Check size={15} /> {chinese ? '保存教育经历' : 'Save education'}</button></div>
+  </div>;
+  const workEditorPanel = workEditor && <div className="profile-entry-editor">
+    <div className="profile-editor-heading"><strong>{workEditor.index < 0 ? (chinese ? '添加工作经历' : 'Add work experience') : (chinese ? '编辑工作经历' : 'Edit work experience')}</strong><button className="icon-button small" type="button" onClick={() => { setWorkEditor(null); setEntryError(''); }} aria-label="Close" title="Close"><X size={15} /></button></div>
+    <div className="form-grid two-columns">
+      <Field label={chinese ? '公司名称' : 'Company'} value={workEditor.company} onChange={(value) => setWorkEditor((current) => ({ ...current, company: value }))} />
+      <Field label={chinese ? '职位名称' : 'Job title'} value={workEditor.jobTitle} onChange={(value) => setWorkEditor((current) => ({ ...current, jobTitle: value }))} />
+      <ProfilePickerButton label={chinese ? '开始时间' : 'Start date'} value={workEditor.startDate} placeholder={chinese ? '请选择开始时间' : 'Choose start date'} onClick={() => openDatePicker('work.startDate', workEditor.startDate)} />
+      <ProfilePickerButton label={chinese ? '结束时间' : 'End date'} value={workEditor.endDate} placeholder={chinese ? '请选择结束时间' : 'Choose end date'} onClick={() => openDatePicker('work.endDate', workEditor.endDate, true)} />
+    </div>
+    <label className="field"><span>{chinese ? '工作内容' : 'Work content'} <small>({chinese ? '选填' : 'Optional'})</small></span><textarea rows={3} maxLength={1000} value={workEditor.workContent} onChange={(event) => setWorkEditor((current) => ({ ...current, workContent: event.target.value }))} placeholder={chinese ? '简要描述主要工作内容，AI 会做参考' : 'Briefly describe responsibilities'} /></label>
+    <label className="field"><span>{chinese ? '业务方向' : 'Business direction'} <small>({chinese ? '选填' : 'Optional'})</small></span><textarea rows={2} maxLength={200} value={workEditor.businessDirection} onChange={(event) => setWorkEditor((current) => ({ ...current, businessDirection: event.target.value }))} placeholder={chinese ? '简要描述公司的业务方向，AI 会做参考' : 'Brief description of company business'} /></label>
+    {entryError && <p className="account-auth-error" role="alert">{entryError}</p>}
+    <div className="profile-editor-actions"><button className="secondary-button" type="button" onClick={() => setWorkEditor(null)}>{chinese ? '取消' : 'Cancel'}</button><button className="primary-button" type="button" onClick={saveWork}><Check size={15} /> {chinese ? '保存工作经历' : 'Save work experience'}</button></div>
+  </div>;
 
   return (
     <div className="modal-backdrop" onMouseDown={(event) => {
@@ -3228,53 +3271,30 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
             <ProfileSectionHeader title={chinese ? '教育经历' : 'Education'} actionLabel={chinese ? '添加教育经历' : 'Add education'} onAction={() => openEducationEditor()} />
             {fields.educations.length === 0 && !educationEditor && <p className="profile-empty-state">{chinese ? '暂无教育经历' : 'No education added yet.'}</p>}
             <div className="profile-entry-list">
-              {fields.educations.map((education, index) => <article className="profile-entry-card" key={education.id || index}>
-                <div className="profile-entry-card-copy"><strong>{education.school || (chinese ? '未填写学校' : 'School not entered')}</strong><span>{[education.degree, education.studyType && `(${education.studyType})`, education.major].filter(Boolean).join(' · ')}</span><small>{[education.startDate, education.endDate].filter(Boolean).join(' - ')}</small></div>
-                <div className="profile-entry-card-actions"><button className="icon-button small" type="button" onClick={() => openEducationEditor(index)} aria-label={`${chinese ? '编辑教育经历' : 'Edit education'} ${index + 1}`} title="Edit"><Settings2 size={15} /></button><button className="icon-button small" type="button" onClick={() => deleteEducation(index)} aria-label={`${chinese ? '删除教育经历' : 'Delete education'} ${index + 1}`} title="Delete"><Trash2 size={15} /></button></div>
-              </article>)}
+              {fields.educations.map((education, index) => <div className="profile-entry-stack" key={education.id || index}>
+                <article className="profile-entry-card">
+                  <div className="profile-entry-card-copy"><strong>{education.school || (chinese ? '未填写学校' : 'School not entered')}</strong><span>{[education.degree, displayedProfileStudyType(education.studyType) && `(${displayedProfileStudyType(education.studyType)})`, education.major].filter(Boolean).join(' · ')}</span><small>{[education.startDate, education.endDate].filter(Boolean).join(' - ')}</small></div>
+                  <div className="profile-entry-card-actions"><button className="icon-button small" type="button" onClick={() => openEducationEditor(index)} aria-label={`${chinese ? '编辑教育经历' : 'Edit education'} ${index + 1}`} title="Edit"><Settings2 size={15} /></button><button className="icon-button small" type="button" onClick={() => deleteEducation(index)} aria-label={`${chinese ? '删除教育经历' : 'Delete education'} ${index + 1}`} title="Delete"><Trash2 size={15} /></button></div>
+                </article>
+                {educationEditor?.index === index && educationEditorPanel}
+              </div>)}
+              {educationEditor?.index < 0 && educationEditorPanel}
             </div>
-            {educationEditor && <div className="profile-entry-editor">
-              <div className="profile-editor-heading"><strong>{educationEditor.index < 0 ? (chinese ? '添加教育经历' : 'Add education') : (chinese ? '编辑教育经历' : 'Edit education')}</strong><button className="icon-button small" type="button" onClick={() => { setEducationEditor(null); setEntryError(''); }} aria-label="Close" title="Close"><X size={15} /></button></div>
-              <div className="form-grid two-columns">
-                <ProfilePickerButton label={chinese ? '学校' : 'School'} value={educationEditor.school} placeholder={chinese ? '选择或输入学校' : 'Select or enter university'} onClick={() => openDirectoryPicker('university')} />
-                <ProfilePickerButton label={chinese ? '学历' : 'Degree'} value={[educationEditor.degree, educationEditor.studyType && `(${educationEditor.studyType})`].filter(Boolean).join(' ')} placeholder={chinese ? '请选择学历' : 'Select degree'} onClick={openDegreePicker} />
-                <ProfilePickerButton label={chinese ? '专业' : 'Major'} value={educationEditor.major} placeholder={chinese ? '选择或输入专业' : 'Select or enter major'} onClick={() => openDirectoryPicker('major')} />
-                <ProfilePickerButton label={chinese ? '入学时间' : 'Start date'} value={educationEditor.startDate} placeholder={chinese ? '请选择入学时间' : 'Choose start date'} onClick={() => openDatePicker('education.startDate', educationEditor.startDate)} />
-                <ProfilePickerButton label={chinese ? '毕业时间' : 'End date'} value={educationEditor.endDate} placeholder={chinese ? '请选择毕业时间' : 'Choose end date'} onClick={() => openDatePicker('education.endDate', educationEditor.endDate, true)} />
-              </div>
-              <label className="field"><span>{chinese ? '在校描述' : 'Description'} <small>({chinese ? '选填' : 'Optional'})</small></span><textarea rows={3} maxLength={500} value={educationEditor.description} onChange={(event) => setEducationEditor((current) => ({ ...current, description: event.target.value }))} placeholder={chinese ? '主要课程、荣誉奖励等' : 'Main courses, honors, etc.'} /></label>
-              {entryError && <p className="account-auth-error" role="alert">{entryError}</p>}
-              <div className="profile-editor-actions"><button className="secondary-button" type="button" onClick={() => setEducationEditor(null)}>{chinese ? '取消' : 'Cancel'}</button><button className="primary-button" type="button" onClick={saveEducation}><Check size={15} /> {chinese ? '保存教育经历' : 'Save education'}</button></div>
-            </div>}
           </section>
 
           <section className="profile-section-block">
             <ProfileSectionHeader title={chinese ? '工作经历' : 'Work experience'} actionLabel={chinese ? '添加工作经历' : 'Add work experience'} onAction={() => openWorkEditor()} />
             {fields.workExperiences.length === 0 && !workEditor && <p className="profile-empty-state">{chinese ? '暂无工作经历' : 'No work experience added yet.'}</p>}
             <div className="profile-entry-list">
-              {fields.workExperiences.map((work, index) => <article className="profile-entry-card" key={work.id || index}>
-                <div className="profile-entry-card-copy"><strong>{work.company || (chinese ? '未填写公司' : 'Company not entered')}</strong><span>{work.jobTitle}</span><small>{[work.startDate, work.endDate].filter(Boolean).join(' - ')}</small></div>
-                <div className="profile-entry-card-actions"><button className="icon-button small" type="button" onClick={() => openWorkEditor(index)} aria-label={`${chinese ? '编辑工作经历' : 'Edit work experience'} ${index + 1}`} title="Edit"><Settings2 size={15} /></button><button className="icon-button small" type="button" onClick={() => deleteWork(index)} aria-label={`${chinese ? '删除工作经历' : 'Delete work experience'} ${index + 1}`} title="Delete"><Trash2 size={15} /></button></div>
-              </article>)}
+              {fields.workExperiences.map((work, index) => <div className="profile-entry-stack" key={work.id || index}>
+                <article className="profile-entry-card">
+                  <div className="profile-entry-card-copy"><strong>{work.company || (chinese ? '未填写公司' : 'Company not entered')}</strong><span>{work.jobTitle}</span><small>{[work.startDate, work.endDate].filter(Boolean).join(' - ')}</small></div>
+                  <div className="profile-entry-card-actions"><button className="icon-button small" type="button" onClick={() => openWorkEditor(index)} aria-label={`${chinese ? '编辑工作经历' : 'Edit work experience'} ${index + 1}`} title="Edit"><Settings2 size={15} /></button><button className="icon-button small" type="button" onClick={() => deleteWork(index)} aria-label={`${chinese ? '删除工作经历' : 'Delete work experience'} ${index + 1}`} title="Delete"><Trash2 size={15} /></button></div>
+                </article>
+                {workEditor?.index === index && workEditorPanel}
+              </div>)}
+              {workEditor?.index < 0 && workEditorPanel}
             </div>
-            {workEditor && <div className="profile-entry-editor">
-              <div className="profile-editor-heading"><strong>{workEditor.index < 0 ? (chinese ? '添加工作经历' : 'Add work experience') : (chinese ? '编辑工作经历' : 'Edit work experience')}</strong><button className="icon-button small" type="button" onClick={() => { setWorkEditor(null); setEntryError(''); }} aria-label="Close" title="Close"><X size={15} /></button></div>
-              <div className="form-grid two-columns">
-                <Field label={chinese ? '公司名称' : 'Company'} value={workEditor.company} onChange={(value) => setWorkEditor((current) => ({ ...current, company: value }))} />
-                <Field label={chinese ? '职位名称' : 'Job title'} value={workEditor.jobTitle} onChange={(value) => setWorkEditor((current) => ({ ...current, jobTitle: value }))} />
-                <ProfilePickerButton label={chinese ? '开始时间' : 'Start date'} value={workEditor.startDate} placeholder={chinese ? '请选择开始时间' : 'Choose start date'} onClick={() => openDatePicker('work.startDate', workEditor.startDate)} />
-                <ProfilePickerButton label={chinese ? '结束时间' : 'End date'} value={workEditor.endDate} placeholder={chinese ? '请选择结束时间' : 'Choose end date'} onClick={() => openDatePicker('work.endDate', workEditor.endDate, true)} />
-              </div>
-              <label className="field"><span>{chinese ? '工作内容' : 'Work content'} <small>({chinese ? '选填' : 'Optional'})</small></span><textarea rows={3} maxLength={1000} value={workEditor.workContent} onChange={(event) => setWorkEditor((current) => ({ ...current, workContent: event.target.value }))} placeholder={chinese ? '简要描述主要工作内容，AI 会做参考' : 'Briefly describe responsibilities'} /></label>
-              <label className="field"><span>{chinese ? '业务方向' : 'Business direction'} <small>({chinese ? '选填' : 'Optional'})</small></span><textarea rows={2} maxLength={200} value={workEditor.businessDirection} onChange={(event) => setWorkEditor((current) => ({ ...current, businessDirection: event.target.value }))} placeholder={chinese ? '简要描述公司的业务方向，AI 会做参考' : 'Brief description of company business'} /></label>
-              {entryError && <p className="account-auth-error" role="alert">{entryError}</p>}
-              <div className="profile-editor-actions"><button className="secondary-button" type="button" onClick={() => setWorkEditor(null)}>{chinese ? '取消' : 'Cancel'}</button><button className="primary-button" type="button" onClick={saveWork}><Check size={15} /> {chinese ? '保存工作经历' : 'Save work experience'}</button></div>
-            </div>}
-          </section>
-
-          <section className="profile-section-block">
-            <ProfileSectionHeader title={chinese ? '专业技能' : 'Skills'} actionLabel={chinese ? '添加技能' : 'Add skill'} onAction={() => addListItem('skills')} />
-            <div className="profile-list-editor">{fields.skills.length === 0 && <p className="profile-empty-state">{chinese ? '暂无技能' : 'No skills added yet.'}</p>}{fields.skills.map((skill, index) => <div className="profile-list-editor-row" key={`skill-${index}`}><input aria-label={`${chinese ? '技能' : 'Skill'} ${index + 1}`} value={skill} placeholder={chinese ? '如：TypeScript' : 'e.g. TypeScript'} onChange={(event) => updateListItem('skills', index, event.target.value)} /><button className="icon-button small" type="button" onClick={() => removeListItem('skills', index)} aria-label={`${chinese ? '删除技能' : 'Delete skill'} ${index + 1}`} title="Delete"><Trash2 size={14} /></button></div>)}</div>
           </section>
 
           <section className="profile-section-block">

@@ -3117,6 +3117,11 @@ button:disabled {
   gap: 7px;
 }
 
+.profile-entry-stack {
+  display: grid;
+  gap: 7px;
+}
+
 .profile-entry-card {
   justify-content: space-between;
   gap: 14px;

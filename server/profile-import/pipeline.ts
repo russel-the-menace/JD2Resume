@@ -8,7 +8,7 @@ import {
   type CanonicalLine,
 } from './document';
 
-export type ProfileImportTask = 'ocr' | 'basic' | 'education' | 'work' | 'skills' | 'translation';
+export type ProfileImportTask = 'ocr' | 'basic' | 'education' | 'work' | 'certificates' | 'translation';
 
 export type ProfileImportModels = {
   lite: string;
@@ -107,6 +107,10 @@ function normalizedComparable(value: string) {
   return value.normalize('NFKC').toLowerCase().replace(/[\s.,，。:：;；()（）/_-]/g, '');
 }
 
+function normalizedChineseSpacing(value: unknown) {
+  return text(value).replace(/([\u3400-\u9FFF])\s+(?=[\u3400-\u9FFF])/gu, '$1');
+}
+
 function supportedBySource(document: CanonicalDocument, value: string, ids: unknown) {
   if (!value) return true;
   const cited = sourceText(document, ids);
@@ -116,6 +120,31 @@ function supportedBySource(document: CanonicalDocument, value: string, ids: unkn
   if (!normalizedValue) return true;
   if (normalizedSource.includes(normalizedValue)) return true;
   return /^\d{4}[-./年]\d{1,2}/.test(value) && normalizedSource.includes(value.slice(0, 4));
+}
+
+function normalizedDate(value: unknown) {
+  const raw = text(value);
+  if (/^(Present|至今)$/i.test(raw)) return /present/i.test(raw) ? 'Present' : '至今';
+  const match = raw.match(/((?:19|20)\d{2})(?:[./年-](\d{1,2}))?/);
+  if (!match) return '';
+  return match[2] ? `${match[1]}-${match[2].padStart(2, '0')}` : match[1];
+}
+
+function dateRangeFromSource(value: string) {
+  const dates = [...value.matchAll(/(?:19|20)\d{2}(?:[./年-]\d{1,2}(?:月)?)?/g)].map((match) => normalizedDate(match[0]));
+  const present = /(?:至今|present|current)/i.test(value);
+  return { startDate: dates[0] || '', endDate: present ? (/present/i.test(value) ? 'Present' : '至今') : dates[1] || '' };
+}
+
+function normalizedStudyType(value: unknown, degree: string, citedSource = '') {
+  const result = text(value);
+  const evidence = `${degree} ${result} ${citedSource}`;
+  if (/非全日制|函授|成人(?:教育|本科)?|夜校|业余|网络教育|自考/u.test(evidence)) return '非全日制';
+  if (/part[ -]?time|correspondence|adult education|night school/i.test(evidence)) return 'Part-time';
+  if (['全日制', '非全日制', 'Full-time', 'Part-time'].includes(result)) return result;
+  if (/本科/u.test(degree)) return '全日制';
+  if (/bachelor/i.test(degree)) return 'Full-time';
+  return '';
 }
 
 function cleanBasic(document: CanonicalDocument, value: Record<string, any>) {
@@ -132,15 +161,18 @@ function cleanEducation(document: CanonicalDocument, value: Record<string, any>)
   return value.educations.flatMap((entry: any) => {
     if (!isRecord(entry)) return [];
     const lines = stringArray(entry.sourceLines);
-    const school = text(entry.school);
+    const school = normalizedChineseSpacing(entry.school);
     if (!school || !supportedBySource(document, school, lines)) return [];
+    const degree = text(entry.degree);
+    const citedSource = sourceText(document, lines);
+    const sourceDates = dateRangeFromSource(citedSource);
     return [{
       school,
-      degree: text(entry.degree),
-      studyType: text(entry.studyType),
+      degree,
+      studyType: normalizedStudyType(entry.studyType, degree, citedSource),
       major: text(entry.major),
-      startDate: text(entry.startDate),
-      endDate: text(entry.endDate),
+      startDate: normalizedDate(entry.startDate) || sourceDates.startDate,
+      endDate: normalizedDate(entry.endDate) || sourceDates.endDate,
       description: sourceText(document, entry.descriptionSourceLines),
     }];
   });
@@ -151,20 +183,21 @@ function cleanWork(document: CanonicalDocument, value: Record<string, any>) {
   return value.workExperiences.flatMap((entry: any) => {
     if (!isRecord(entry)) return [];
     const lines = stringArray(entry.sourceLines);
-    const company = text(entry.company);
+    const company = normalizedChineseSpacing(entry.company);
     if (!company || !supportedBySource(document, company, lines)) return [];
+    const sourceDates = dateRangeFromSource(sourceText(document, lines));
     return [{
       company,
       jobTitle: text(entry.jobTitle),
       businessDirection: text(entry.businessDirection),
       workContent: sourceText(document, entry.workContentSourceLines),
-      startDate: text(entry.startDate),
-      endDate: text(entry.endDate),
+      startDate: normalizedDate(entry.startDate) || sourceDates.startDate,
+      endDate: normalizedDate(entry.endDate) || sourceDates.endDate,
     }];
   });
 }
 
-function cleanSkills(document: CanonicalDocument, value: Record<string, any>) {
+function cleanCertificates(document: CanonicalDocument, value: Record<string, any>) {
   const cleanList = (items: unknown) => Array.isArray(items)
     ? items.flatMap((entry: any) => {
       if (typeof entry === 'string') return [];
@@ -172,7 +205,7 @@ function cleanSkills(document: CanonicalDocument, value: Record<string, any>) {
       return itemValue && supportedBySource(document, itemValue, entry?.sourceLines) ? [itemValue] : [];
     })
     : [];
-  return { skills: cleanList(value.skills), certificates: cleanList(value.certificates) };
+  return cleanList(value.certificates);
 }
 
 function basicPrompt(language: string, indexedText: string) {
@@ -180,15 +213,15 @@ function basicPrompt(language: string, indexedText: string) {
 }
 
 function educationPrompt(language: string, indexedText: string) {
-  return `Extract every explicit education entry from this ${language} resume. Return JSON only in the source language. Preserve dates exactly and do not invent missing values. sourceLines must cite the school, degree, major, and dates. descriptionSourceLines must contain only education details such as GPA, coursework, research, or honors.\n{\n  "educations": [{\n    "school": "", "degree": "", "studyType": "", "major": "",\n    "startDate": "", "endDate": "",\n    "sourceLines": ["p1-l1"], "descriptionSourceLines": ["p1-l2"]\n  }]\n}\n\nResume lines:\n${indexedText}`;
+  return `Extract every explicit education entry from this ${language} resume. Return JSON only in the source language. Read both start and end dates from the cited education lines and normalize month dates to YYYY-MM. Do not invent missing values. degree is the education level such as 本科/Bachelor and studyType must never repeat degree. Treat every 本科/Bachelor as 全日制/Full-time by default. Only return 非全日制/Part-time when the cited source explicitly contains signals such as 非全日制, 函授, 成人本科, 成人教育, 夜校, 业余, 网络教育, 自考, part-time, correspondence, adult education, or night school. sourceLines must cite the school, degree, major, and dates. descriptionSourceLines must contain only education details such as GPA, coursework, research, or honors.\n{\n  "educations": [{\n    "school": "", "degree": "", "studyType": "", "major": "",\n    "startDate": "YYYY-MM or YYYY", "endDate": "YYYY-MM or YYYY",\n    "sourceLines": ["p1-l1"], "descriptionSourceLines": ["p1-l2"]\n  }]\n}\n\nResume lines:\n${indexedText}`;
 }
 
 function workPrompt(language: string, indexedText: string) {
   return `Extract every explicit work or internship entry from this ${language} resume. Return JSON only in the source language. Preserve company names, job titles, and dates exactly. Do not rewrite responsibilities and do not copy them into the JSON. Instead cite their original line IDs in workContentSourceLines. sourceLines must cite the company, role, and dates. businessDirection must be empty unless explicitly stated.\n{\n  "workExperiences": [{\n    "company": "", "jobTitle": "", "businessDirection": "",\n    "startDate": "", "endDate": "",\n    "sourceLines": ["p1-l1"], "workContentSourceLines": ["p1-l2", "p1-l3"]\n  }]\n}\n\nResume lines:\n${indexedText}`;
 }
 
-function skillsPrompt(language: string, indexedText: string) {
-  return `Extract only explicitly listed professional skills and certificates from this ${language} resume. Return JSON only in the source language. Do not infer skills from work responsibilities. Every item must cite its source line IDs.\n{\n  "skills": [{ "value": "", "sourceLines": ["p1-l1"] }],\n  "certificates": [{ "value": "", "sourceLines": ["p1-l2"] }]\n}\n\nResume lines:\n${indexedText}`;
+function certificatesPrompt(language: string, indexedText: string) {
+  return `Extract only explicitly listed certificates from this ${language} resume. Return JSON only in the source language. Every certificate must cite its source line IDs. Do not return professional skills.\n{\n  "certificates": [{ "value": "", "sourceLines": ["p1-l2"] }]\n}\n\nResume lines:\n${indexedText}`;
 }
 
 function ocrPrompt(pageNumber: number) {
@@ -245,9 +278,9 @@ export async function importProfileFacts(
       'work', [models.standard, models.vision, models.escalation], workPrompt(language, indexedText), 4_500, caller,
       (value) => Array.isArray(value.workExperiences),
     ),
-    skills: runModule(
-      'skills', [models.lite, models.mini, models.escalation], skillsPrompt(language, indexedText), 1_500, caller,
-      (value) => Array.isArray(value.skills) && Array.isArray(value.certificates),
+    certificates: runModule(
+      'certificates', [models.lite, models.mini, models.escalation], certificatesPrompt(language, indexedText), 1_000, caller,
+      (value) => Array.isArray(value.certificates),
     ),
   };
   const entries = await Promise.all(Object.entries(moduleRequests).map(async ([name, request]) => {
@@ -260,12 +293,12 @@ export async function importProfileFacts(
   const modules = Object.fromEntries(entries) as Record<string, ModuleResult | { error: string }>;
   const educationValue = 'value' in modules.education ? cleanEducation(document, modules.education.value) : [];
   const workValue = 'value' in modules.work ? cleanWork(document, modules.work.value) : [];
-  const skillValue = 'value' in modules.skills ? cleanSkills(document, modules.skills.value) : { skills: [], certificates: [] };
+  const certificateValue = 'value' in modules.certificates ? cleanCertificates(document, modules.certificates.value) : [];
   const profile: Record<string, any> = {
     ...cleanBasic(document, basic.value),
     educations: educationValue,
     workExperiences: workValue,
-    ...skillValue,
+    certificates: certificateValue,
   };
   return {
     language,
@@ -292,12 +325,12 @@ export async function translateProfileFacts(
   caller: ProfileTaskCaller,
 ) {
   const targetLanguage = sourceLanguage === 'chinese' ? 'english' : 'chinese';
-  const prompt = `Translate this complete personal profile from ${sourceLanguage} to ${targetLanguage}. Return JSON only. Preserve every education, work experience, skill, and certificate in its original order. Preserve exact dates, emails, phones, websites, account handles, and factual meaning. Translate human-readable fields only. Do not invent missing fields and do not add a personal introduction or summary. When translating a Chinese name into English, use Western resume order: given name followed by family name. For example, 田俊铃 must be Junling Tian, not Tian Junling.\n{\n  "language": "${targetLanguage}",\n  "profile": {\n    "fullName": "", "gender": "", "birthday": "", "phone": "", "phoneEn": "",\n    "email": "", "location": "", "wechat": "", "whatsapp": "", "telegram": "",\n    "linkedin": "", "website": "",\n    "educations": [{ "school": "", "degree": "", "studyType": "", "major": "", "startDate": "", "endDate": "", "description": "" }],\n    "workExperiences": [{ "company": "", "jobTitle": "", "businessDirection": "", "workContent": "", "startDate": "", "endDate": "" }],\n    "skills": [""], "certificates": [""]\n  }\n}\n\nSource profile:\n${JSON.stringify(profile)}`;
+  const prompt = `Translate this complete personal profile from ${sourceLanguage} to ${targetLanguage}. Return JSON only. Preserve every education, work experience, and certificate in its original order. Preserve exact dates, emails, phones, websites, account handles, and factual meaning. Translate human-readable fields only. Do not invent missing fields and do not add professional skills, a personal introduction, or summary. When translating a Chinese name into English, use Western resume order: given name followed by family name. For example, 田俊铃 must be Junling Tian, not Tian Junling.\n{\n  "language": "${targetLanguage}",\n  "profile": {\n    "fullName": "", "gender": "", "birthday": "", "phone": "", "phoneEn": "",\n    "email": "", "location": "", "wechat": "", "whatsapp": "", "telegram": "",\n    "linkedin": "", "website": "",\n    "educations": [{ "school": "", "degree": "", "studyType": "", "major": "", "startDate": "", "endDate": "", "description": "" }],\n    "workExperiences": [{ "company": "", "jobTitle": "", "businessDirection": "", "workContent": "", "startDate": "", "endDate": "" }],\n    "certificates": [""]\n  }\n}\n\nSource profile:\n${JSON.stringify(profile)}`;
   const translated = await runModule(
     'translation', [models.mini, models.standard, models.escalation], prompt, 6_000, caller,
     (value) => {
       if (value.language !== targetLanguage || !isRecord(value.profile)) return false;
-      return ['educations', 'workExperiences', 'skills', 'certificates'].every((field) =>
+      return ['educations', 'workExperiences', 'certificates'].every((field) =>
         Array.isArray(value.profile[field]) && value.profile[field].length === (Array.isArray(profile[field]) ? profile[field].length : 0),
       );
     },
