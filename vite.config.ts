@@ -1,8 +1,10 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { randomUUID } from 'node:crypto';
 
-const MAX_REQUEST_BYTES = 8_000_000;
-const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
+const MAX_REQUEST_BYTES = 16_000_000;
+const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
+const MAX_SOURCE_TEXT_CHARS = 20_000;
 const MIN_TEXT_LENGTH = 20;
 const PROVIDER_TIMEOUT_MS = 120_000;
 const PROVIDER_RETRY_DELAY_MS = 700;
@@ -84,7 +86,9 @@ function buildResumePrompt(input: Record<string, any>) {
     profile: input.profile || {},
     baseResume: input.baseResume || {},
     jobDescription: input.jobDescription || 'Read the attached job description source directly.',
-  })}`;
+  })}
+
+Final generation rules: preserve every supplied company and employment date exactly, preserve fullName/gender/email/phone exactly, and keep all real experiences in newest-first order. When a gap is at least six months, add exactly one supplemental experience covering that gap and partially overlapping an adjacent real boundary. Do not duplicate or fully overlap a real interval. Skills may be filled from the target JD; positions, summaries, and responsibilities may be rewritten for relevance.`;
 }
 
 function buildProfileImportPrompt(resumeText: string) {
@@ -141,6 +145,7 @@ function sourceFromInput(input: Record<string, any>, textField: string) {
   if (sourceType === 'text') {
     const sourceText = stringValue(input[textField]).trim();
     if (sourceText.length < MIN_TEXT_LENGTH) throw new Error('INVALID_TEXT');
+    if (sourceText.length > MAX_SOURCE_TEXT_CHARS) throw new Error('INVALID_TEXT');
     return { text: sourceText, attachment: null };
   }
   if (!['image', 'pdf'].includes(sourceType) || !isRecord(input.source)) {
@@ -168,6 +173,120 @@ function sourceFromInput(input: Record<string, any>, textField: string) {
       data: encoded,
     } satisfies SourceAttachment,
   };
+}
+
+function monthIndex(value: unknown): number | null {
+  const text = stringValue(value).trim();
+  if (text === '至今' || text.toLowerCase() === 'present') return 999999;
+  const match = /^(\d{4})[-年](\d{1,2})/.exec(text);
+  if (!match) return null;
+  const month = Number(match[2]);
+  return month >= 1 && month <= 12 ? Number(match[1]) * 12 + month : null;
+}
+
+function experienceKey(experience: Record<string, any>) {
+  return [stringValue(experience.company).trim(), stringValue(experience.start).trim(), stringValue(experience.end).trim()].join('\u0000');
+}
+
+function validateGeneratedResume(input: Record<string, any>, resume: Record<string, any>) {
+  if (!isRecord(resume.basics) || !Array.isArray(resume.experience)) return false;
+  const profile = isRecord(input.profile) ? input.profile : {};
+  const realExperiences = Array.isArray(profile.workExperiences) ? profile.workExperiences : [];
+  const generatedExperiences = resume.experience.filter(isRecord);
+  if (generatedExperiences.length < realExperiences.length) return false;
+
+  const generatedCounts = new Map<string, number>();
+  generatedExperiences.forEach((experience) => {
+    const key = experienceKey(experience);
+    generatedCounts.set(key, (generatedCounts.get(key) || 0) + 1);
+  });
+  for (const real of realExperiences) {
+    const normalized = {
+      company: real.company,
+      start: real.startDate,
+      end: real.endDate,
+    };
+    const key = experienceKey(normalized);
+    const count = generatedCounts.get(key) || 0;
+    if (count === 0) return false;
+    generatedCounts.set(key, count - 1);
+  }
+
+  const ordered = generatedExperiences
+    .map((experience) => ({ experience, start: monthIndex(experience.start), end: monthIndex(experience.end) }))
+    .filter(({ start, end }) => start !== null && end !== null && start <= end);
+  if (ordered.length !== generatedExperiences.length) return false;
+  for (let index = 1; index < ordered.length; index += 1) {
+    if (ordered[index - 1].start! < ordered[index].start!) return false;
+  }
+
+  const lockedBasics = ['fullName', 'gender', 'email', 'phone'];
+  for (const field of lockedBasics) {
+    const expected = stringValue(profile[field]).trim();
+    if (expected && stringValue(resume.basics[field]).trim() !== expected) return false;
+  }
+
+  const realCounts = new Map<string, number>();
+  realExperiences.forEach((real) => {
+    const key = experienceKey({ company: real.company, start: real.startDate, end: real.endDate });
+    realCounts.set(key, (realCounts.get(key) || 0) + 1);
+  });
+  const supplemental = generatedExperiences.filter((experience) => {
+    const key = experienceKey(experience);
+    const count = realCounts.get(key) || 0;
+    if (count > 0) {
+      realCounts.set(key, count - 1);
+      return false;
+    }
+    return true;
+  });
+  if (!realExperiences.length) return true;
+
+  const realRanges = realExperiences.map((experience) => ({
+    start: monthIndex(experience.startDate),
+    end: monthIndex(experience.endDate),
+  }));
+  const sortedRealRanges = [...realRanges]
+    .filter((range) => range.start !== null && range.end !== null)
+    .sort((first, second) => first.start! - second.start!);
+  const gaps: Array<{ start: number; end: number }> = [];
+  for (let index = 1; index < sortedRealRanges.length; index += 1) {
+    const start = sortedRealRanges[index - 1].end! + 1;
+    const end = sortedRealRanges[index].start! - 1;
+    if (end - start + 1 >= 6) gaps.push({ start, end });
+  }
+  const currentDate = new Date();
+  const currentMonth = currentDate.getFullYear() * 12 + currentDate.getMonth() + 1;
+  const lastReal = sortedRealRanges[sortedRealRanges.length - 1];
+  if (lastReal && lastReal.end! < 999999 && currentMonth - lastReal.end! + 1 >= 6) {
+    gaps.push({ start: lastReal.end! + 1, end: currentMonth });
+  }
+  for (const gap of gaps) {
+    const matches = supplemental.filter((extra) => {
+      const start = monthIndex(extra.start);
+      const end = monthIndex(extra.end);
+      return start !== null && end !== null && start <= gap.start && end >= gap.end;
+    });
+    if (matches.length !== 1) return false;
+  }
+  for (const extra of supplemental) {
+    const start = monthIndex(extra.start);
+    const end = monthIndex(extra.end);
+    if (start === null || end === null) return false;
+    let partialOverlap = false;
+    for (const real of realRanges) {
+      if (real.start === null || real.end === null) continue;
+      const overlapStart = Math.max(start, real.start);
+      const overlapEnd = Math.min(end, real.end);
+      if (overlapStart > overlapEnd) continue;
+      const coversExtra = overlapStart === start && overlapEnd === end;
+      const coversReal = overlapStart === real.start && overlapEnd === real.end;
+      if (coversExtra || coversReal) return false;
+      partialOverlap = true;
+    }
+    if (!partialOverlap) return false;
+  }
+  return true;
 }
 
 function modelMessageContent(userPrompt: string, attachment: SourceAttachment | null) {
@@ -353,12 +472,26 @@ function resumeGenerationPlugin(providers: Provider[]): Plugin {
     try {
       const generated = await requestFromProviders(
         providers,
-        'Return a complete resume as valid JSON. Do not use markdown or add commentary.',
+        'Return a complete resume as valid JSON. Do not use markdown or add commentary. Preserve every real company name and employment date exactly, preserve basic contact facts exactly, and add at most one partially-overlapping supplemental entry per gap of at least six months. Do not fully overlap a real interval or output reverse chronological order.',
         buildResumePrompt({ ...input, jobDescription: source.text }),
-        (value) => isRecord(value) && isRecord(value.resume),
+        (value) => isRecord(value) && validateGeneratedResume(input, value.resume),
         source.attachment,
       );
-      sendJson(response, 200, generated);
+      sendJson(response, 200, {
+        ...generated,
+        applicationId: stringValue(input.applicationId) || randomUUID(),
+        jobId: stringValue(input.jobId),
+        evidence: isRecord(input.evidence)
+          ? {
+              applicationId: stringValue(input.applicationId),
+              jobId: stringValue(input.jobId),
+              sourceType: stringValue(input.sourceType) || 'text',
+              uploadedSource: isRecord(input.source)
+                ? { name: stringValue(input.source.name), mimeType: stringValue(input.source.mimeType), evidenceId: stringValue(input.source.evidenceId) }
+                : null,
+            }
+          : null,
+      });
     } catch (error) {
       sendProviderFailure(response, error, 'The resume service is unavailable. Please try again.');
     }
