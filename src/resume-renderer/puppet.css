@@ -9,10 +9,12 @@ html, body, #renderer-root { margin: 0; min-width: 0; min-height: 100%; overflow
   font-size: 12.5px;
   line-height: 1.8;
 }
+.puppet-document { background: transparent; }
 .puppet-measurement-host { position: fixed; top: 0; left: -100000px; width: 794px; visibility: hidden; pointer-events: none; contain: layout style; }
 .puppet-measurement-document, .puppet-page-content { width: 794px; padding: 36px 54px 40px; }
 .puppet-measurement-document { min-height: 0; }
-.puppet-page { width: 794px; height: 1123px; margin: 0 0 34px; overflow: hidden; background: #fff; box-shadow: 0 1px 6px rgba(24, 44, 34, .16); }
+.puppet-page { width: 794px; height: 1123px; margin: 0; overflow: hidden; background: #fff; box-shadow: 0 1px 6px rgba(24, 44, 34, .16); }
+.puppet-page + .puppet-page { margin-top: 34px; }
 .puppet-page-content { height: 1123px; overflow: hidden; }
 .puppet-block { position: relative; min-width: 0; overflow-wrap: break-word; }
 .puppet-header { margin: -36px -54px 0; }
