@@ -1,5 +1,10 @@
 import { BulletPhaseWorkExperience, PromptContext } from './types';
 
+const supplementalCompanyRulesChinese = `补足经历的公司名只能二选一：
+1. 英文小公司格式：使用自然的英文名称并以 "Inc" 或 "Inc." 结尾；不得含中文，不得使用 "有限公司/集团/股份有限公司"；必须避开上市公司、知名品牌和候选人的真实公司名。
+2. 城市工作室格式：严格使用 "上海/深圳/广州 + 2-18 字名称 + 工作室"，例如结构为 "深圳XXXX工作室"；不得省略城市。
+不同补足经历必须使用不同公司名。优先选择低知名度小公司风格；无法确认真实小公司是否重名时，使用原创且自然的城市工作室名称。`;
+
 export function generateChinesePrompt(context: PromptContext): string {
   const {
     targetTitle,
@@ -34,20 +39,7 @@ export function generateChinesePrompt(context: PromptContext): string {
   // 2. 补充经历部分的文本
   let supplementInstruction = '';
   if (needsSupplement) {
-    const isJunior = (context.finalTotalYears || 0) < 2;
-    const companyNamingGuide = isJunior
-      ? `* 公司名：根据"${targetTitle}"风格生成真实感强的工作室名称。
-        - 科技/开发: 如 "智创科技"、"云码技术"
-        - 运营/电商: 如 "跨境优选工作室"、"数字营销"
-        - 产品/设计: 如 "用户体验工作室"、"创新工场"
-        - Web3: 如 "链上创新"、"数字资产"`
-      : `* 公司名：必须使用一家符合"${targetTitle}"领域的**真实存在的、极小规模（超小众/非知名）的美国初创公司(Start-up)**名称。
-        - **核心要求**：**严禁虚构，也不得使用已成名公司**（如 OpenAI, Figma, Cursor, Vercel 等已具有高知名度的严禁使用）。
-        - **特征**：处于 Seed 或 A 轮极早期，员工规模通常在 10-50 人，大众知名度极低。
-        - 科技/程序: 真实的冷门硅谷 Start-up (如 "Standard Metrics", "Keepic", "Pigeon (YC S21)", "Flawless AI" 等)。
-        - 市场/运营: 垂直细分领域的真实初创品牌，不要任何行业头部品牌。
-        - 消费/美妆: 真实的、刚起步的美国实验室品牌或小众独立 DTC。
-        - 务必确保该公司在真实世界中可查（如有 Crunchbase 记录），但对普通大众甚至行业人员来说都非常陌生。`;
+    const companyNamingGuide = `* 公司名规则：${supplementalCompanyRulesChinese}`;
 
     const segmentsText = (supplementSegments || []).map((seg, idx) => `
     - **补充段落 ${idx + 1}**: ${seg.startDate} 至 ${seg.endDate} (${seg.years}年)
@@ -271,7 +263,7 @@ export function generateChineseNonJobPrompt(context: PromptContext): string {
   }).join('\n');
 
   const supplementText = needsSupplement
-    ? `需要补充约 ${supplementYears} 年经历。开始时间不得早于 ${earliestWorkDate}。\n补充片段：\n${(supplementSegments || []).map((seg, idx) => `- 片段${idx + 1}: ${seg.startDate} 至 ${seg.endDate}（${seg.years}年）`).join('\n')}\n补充经历必须插入时间线中，不得全部堆在末尾。`
+    ? `需要补充约 ${supplementYears} 年经历。开始时间不得早于 ${earliestWorkDate}。\n补充片段：\n${(supplementSegments || []).map((seg, idx) => `- 片段${idx + 1}: ${seg.startDate} 至 ${seg.endDate}（${seg.years}年）`).join('\n')}\n补充经历必须插入时间线中，不得全部堆在末尾。\n${supplementalCompanyRulesChinese}`
     : '无需补充经历。输出工作经历条数必须与用户现有条数一致，严禁新增岗位。';
 
   const existingExpText = (profile.workExperiences || []).map((exp, idx) =>
@@ -314,7 +306,7 @@ ${supplementText}
 最终时间线（必须严格遵循）：
 ${timelineList}
 
-现有经历信息（仅公司名不可改，职位和时间可动态改写）：
+现有经历信息（公司名和起止时间不可改，职位可按既有锁定规则处理）：
 ${existingExpText || '无'}
 
 ### 标题保留锁定清单（系统预判，必须硬执行）

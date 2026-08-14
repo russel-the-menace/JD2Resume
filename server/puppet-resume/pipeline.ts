@@ -5,6 +5,7 @@ import { BulletPhaseWorkExperience } from './prompts/types';
 import { ExperienceCalculator } from './utils/experienceCalculator';
 import { findMissingLockedExperiences } from './utils/lockedExperience';
 import { validateSupplementTimeline } from './utils/supplementTimeline';
+import { validateSupplementCompanyNames } from './utils/supplementCompany';
 
 export type PuppetTextGenerator = (
   prompt: string,
@@ -195,6 +196,8 @@ export class PuppetResumePipeline {
           supplementSegments,
         );
         if (timelineErrors.length) throw new Error(`补足经历时间线无效: ${timelineErrors.join('; ')}`);
+        const companyErrors = validateSupplementCompanyNames(profile.workExperiences || [], data.workExperience);
+        if (companyErrors.length) throw new Error(`补足经历公司名无效: ${companyErrors.join('; ')}`);
 
         if (!isEnglish) {
           if (data.professionalSkills.length !== 4) throw new Error('技能分类数量必须为 4 组');

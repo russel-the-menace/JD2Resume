@@ -1,5 +1,10 @@
 import { BulletPhaseWorkExperience, PromptContext } from './types';
 
+const supplementalCompanyRulesEnglish = `A supplemental company name must use exactly one of these formats:
+1. English small-company format: a natural English name ending in "Inc" or "Inc.". Do not use Chinese legal suffixes, public companies, famous brands, or any of the candidate's real company names.
+2. Chinese city-studio format: exactly "上海/深圳/广州 + a 2-18 character name + 工作室"; the city prefix is mandatory.
+Use a different company name for every supplemental role. Prefer an obscure small-company style; when a real low-profile company cannot be confidently verified as non-conflicting, use an original, natural city-studio name.`;
+
 export function generateEnglishPrompt(context: PromptContext): string {
   const {
     targetTitle,
@@ -100,12 +105,7 @@ ${needsSupplement ? `
 ${(supplementSegments || []).map((seg, idx) => `
 Supplement ${idx + 1}:
 - Period: ${seg.startDate} to ${seg.endDate} (${seg.years} years)
-- Company Name: Generate a realistic English studio/company name fitting the "${targetTitle}" domain.
-  * Tech/Dev: "Creative Tech Studio", "CloudCode Labs", "NextGen Solutions"
-  * Operations/E-commerce: "Global Choice Studio", "Digital Growth Agency"
-  * Product: "Product Innovation Lab", "UX Pioneer Studio"
-  * Web3: "Chain Innovation Lab", "Digital Asset Studio"
-  * Guideline: Sound natural, western-style, not overly "AI-generated".
+- Company Name: ${supplementalCompanyRulesEnglish}
 - Position: Flexible based on "${targetTitle}":
   * If job title is clear ("Product Manager"), use it or variations ("Product Associate").
   * Ensure seniority matches the experience level at that time (Junior for early career).
@@ -119,13 +119,13 @@ ${(allWorkExperiences || []).map((exp, idx) => {
     if (!origExp) return `${idx + 1}. [Existing Data Missing] - ${exp.startDate} to ${exp.endDate}`;
     return `${idx + 1}. [Existing] ${origExp.company} - ${origExp.startDate} to ${origExp.endDate}`;
   } else {
-    return `${idx + 1}. [Supplement] [Generate Studio Name] - ${exp.startDate} to ${exp.endDate}`;
+    return `${idx + 1}. [Supplement] [Generate Company] - ${exp.startDate} to ${exp.endDate}`;
   }
 }).join('\n')}
 
 **Supplement Rules Explanation:**
 1. **Strictly follow time segments**.
-2. **Company Names**: English style, realistic studio/agency names.
+2. **Company Names**: Strictly follow the two allowed formats above.
 3. **No Overlaps**: Must fit into the gaps.
 4. **Position Names**: Natural progression.
 5. **Timeline Order**: Newest on top, oldest at bottom. Insert supplements correctly into the timeline.
@@ -134,12 +134,12 @@ ${(allWorkExperiences || []).map((exp, idx) => {
 ### 5. Existing Work Experience (Reshape based on Business Direction)
 **⚠️ CRITICAL: Company Name Handling**:
 - If the original company name is **already in English**, you MUST preserve it exactly as provided.
-- If the original company name is in **Chinese** (or other languages), you MUST translate it into a professional English equivalent or use its official English brand name (e.g., "北京小米科技有限公司" -> "Xiaomi Technology").
+- If the original company name is in Chinese or another language, preserve it exactly; locked real company names are never translated.
 - Do NOT invent or hallucinate new company entities.
 
 ${(profile.workExperiences || []).map((exp, i) => `
 Experience ${i + 1}:
-- Company: ${exp.company} (Keep if English, translate if Chinese)
+- Company: ${exp.company} (Preserve exactly in every language)
 - Original Title: ${exp.jobTitle}
 - Business Direction: ${exp.businessDirection}
 - Work Content: ${exp.workContent || "None"} (Low weight reference: Use only if highly relevant to ${targetTitle}; otherwise IGNORE and regenerate based on target)
@@ -241,7 +241,7 @@ export function generateEnglishNonJobPrompt(context: PromptContext): string {
   }).join('\n');
 
   const supplementText = needsSupplement
-    ? `Supplement is required: approximately ${supplementYears} years. Start date cannot be earlier than ${earliestWorkDate}.\nSegments:\n${(supplementSegments || []).map((seg, idx) => `- Segment ${idx + 1}: ${seg.startDate} to ${seg.endDate} (${seg.years} years)`).join('\n')}\nSupplement entries must be inserted into timeline, not appended blindly.`
+    ? `Supplement is required: approximately ${supplementYears} years. Start date cannot be earlier than ${earliestWorkDate}.\nSegments:\n${(supplementSegments || []).map((seg, idx) => `- Segment ${idx + 1}: ${seg.startDate} to ${seg.endDate} (${seg.years} years)`).join('\n')}\nSupplement entries must be inserted into timeline, not appended blindly.\n${supplementalCompanyRulesEnglish}`
     : 'No supplement is required. Output workExperience count must equal the existing count; no new role is allowed.';
 
   const seniorityRule = seniorityThresholdDate
@@ -309,7 +309,7 @@ ${lockDecisions || 'None'}
   - For existing and strongly-related roles, use the original user input (title/business direction/work content) as the expansion base; improve depth and metrics, but do not replace the narrative with a different function.
 5. Company name handling must follow old constraints:
   - if original company name is already English, preserve exactly.
-  - if original company name is Chinese, translate to professional English / official brand naming.
+  - if original company name is Chinese or another language, preserve exactly; do not translate it.
   - do not invent unrelated company entities for existing roles.
 6. personalIntroduction must be exactly 2 paragraphs in implied first-person style (no “I/My”), use no decimal years, and contain only 1-2 short <b> emphasis segments. Do not use <u> in the introduction.
 7. professionalSkills must have exactly 4 categories with 4 items each, role-relevant.

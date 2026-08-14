@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { PuppetResumePipeline } from '../server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from '../server/puppet-resume/adapter';
 import { ExperienceCalculator } from '../server/puppet-resume/utils/experienceCalculator';
+import { validateSupplementCompanyNames } from '../server/puppet-resume/utils/supplementCompany';
 
 const input = {
   applicationId: 'application-test',
@@ -144,6 +145,22 @@ const singleExperienceCalculation = ExperienceCalculator.calculate({
 assert.equal(singleExperienceCalculation.allWorkExperiences.length, 2);
 assert.equal(singleExperienceCalculation.supplementSegments.length, 1);
 assert.ok(singleExperienceCalculation.supplementSegments[0].startDate >= singleExperienceCalculation.earliestWorkDate);
+
+const lockedCompany = { company: 'Real Company', startDate: '2020-01', endDate: '至今' };
+assert.deepEqual(validateSupplementCompanyNames([lockedCompany], [
+  lockedCompany,
+  { company: 'Quiet Harbor Inc', startDate: '2017-01', endDate: '2020-01' },
+]), []);
+assert.deepEqual(validateSupplementCompanyNames([], [
+  { company: '深圳微澜内容工作室', startDate: '2024-01', endDate: '2025-01' },
+]), []);
+assert.match(
+  validateSupplementCompanyNames([], [
+    { company: 'Apple Inc', startDate: '2024-01', endDate: '2025-01' },
+    { company: '上海星河有限公司', startDate: '2023-01', endDate: '2024-01' },
+  ]).join('; '),
+  /知名公司重名.*必须使用.*格式|必须使用.*格式.*知名公司重名/,
+);
 
 const chineseNameRequest = toPuppetRequest({
   ...input,
