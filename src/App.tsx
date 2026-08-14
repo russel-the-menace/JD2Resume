@@ -7,6 +7,8 @@ import {
   useState,
 } from 'react';
 import type { CSSProperties } from 'react';
+import { ResumePreviewFrame } from './components/resume-preview/ResumePreviewFrame';
+import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from './resume-renderer/types';
 import {
   AlignLeft,
   ArrowLeft,
@@ -215,6 +217,23 @@ function normalizeLayoutManifest(value) {
     pageFillRatios: Array.isArray(source.pageFillRatios)
       ? source.pageFillRatios.map((ratio) => Math.max(0, Math.min(1, Number(ratio) || 0)))
       : [],
+  };
+}
+
+function normalizeRenderState(value) {
+  const source = isRecord(value) ? value : {};
+  const plan = isRecord(source.pagePlan) && Number(source.pagePlan.schemaVersion) === 2 && Array.isArray(source.pagePlan.pages)
+    ? source.pagePlan as PagePlanV2
+    : null;
+  return {
+    status: ['idle', 'valid', 'failed'].includes(source.status) ? source.status : 'idle',
+    draftRevision: Math.max(0, Number(source.draftRevision) || 0),
+    currentSnapshotHash: textValue(source.currentSnapshotHash),
+    rendererVersion: textValue(source.rendererVersion),
+    pagePlan: plan,
+    layoutReport: isRecord(source.layoutReport) ? source.layoutReport as LayoutReportV2 : null,
+    lastValidSnapshotHash: textValue(source.lastValidSnapshotHash),
+    lastValidAt: Math.max(0, Number(source.lastValidAt) || 0),
   };
 }
 
@@ -921,6 +940,7 @@ function normalizeResumeDocument(value, index) {
     sectionOrderCustomized: source.sectionOrderCustomized === true,
     generationEvidence: normalizeGenerationEvidence(source.generationEvidence),
     layoutManifest: normalizeLayoutManifest(source.layoutManifest),
+    renderState: normalizeRenderState(source.renderState),
   };
   snapshot.customContent = normalizeCustomContent(snapshot.customSections, source.customContent, language);
   return {
@@ -1208,6 +1228,7 @@ function blankResumeSnapshot(
     sectionOrderCustomized: false,
     generationEvidence: normalizeGenerationEvidence(generationEvidence),
     layoutManifest: normalizeLayoutManifest(layoutManifest),
+    renderState: normalizeRenderState(null),
   };
 }
 
@@ -1228,6 +1249,7 @@ function resumeSnapshotEqual(document, snapshot) {
     sectionOrderCustomized: document.sectionOrderCustomized,
     generationEvidence: document.generationEvidence,
     layoutManifest: document.layoutManifest,
+    renderState: document.renderState,
   }) === JSON.stringify(snapshot);
 }
 
@@ -1860,6 +1882,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
     initialResumeState.sectionOrderCustomized,
   );
   const [documentName, setDocumentName] = useState(initialResumeState.documentName);
+  const [renderState, setRenderState] = useState(initialResumeState.renderState);
   const [previewPosition, setPreviewPosition] = useState(initialWorkspaceState.previewPosition);
   const [saveState, setSaveState] = useState('Saved');
   const [toast, setToast] = useState('');
@@ -1913,6 +1936,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
       sectionOrderCustomized,
       generationEvidence: initialResumeState.generationEvidence,
       layoutManifest: initialResumeState.layoutManifest,
+      renderState,
     });
     if (!saved) {
       setSaveState('Save failed');
@@ -1928,6 +1952,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
     documentName,
     initialResumeState.generationEvidence,
     initialResumeState.layoutManifest,
+    renderState,
     language,
     onResumeChange,
     resumeId,
@@ -2158,6 +2183,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
         sectionOrderCustomized,
         generationEvidence: initialResumeState.generationEvidence,
         layoutManifest: initialResumeState.layoutManifest,
+        renderState,
         updatedAt: Date.now(),
       };
       const response = await fetch('/api/export-pdf', {
@@ -2269,6 +2295,22 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
           sectionOrderCustomized={sectionOrderCustomized}
           language={language}
           layoutManifest={initialResumeState.layoutManifest}
+          renderState={renderState}
+          onValidPlan={(pagePlan, report) => {
+            setRenderState((current) => {
+              if (current.pagePlan?.snapshotHash === pagePlan.snapshotHash && current.pagePlan?.revision === pagePlan.revision) return current;
+              return {
+                status: 'valid',
+                draftRevision: pagePlan.revision,
+                currentSnapshotHash: pagePlan.snapshotHash,
+                rendererVersion: pagePlan.rendererVersion,
+                pagePlan,
+                layoutReport: report,
+                lastValidSnapshotHash: pagePlan.snapshotHash,
+                lastValidAt: Date.now(),
+              };
+            });
+          }}
         />
       </main>
 
@@ -4567,15 +4609,24 @@ function PreviewPanel({
   sectionOrderCustomized,
   language,
   layoutManifest,
+  renderState,
+  onValidPlan,
 }) {
   const [colorMenu, setColorMenu] = useState(false);
   const [contentHeight, setContentHeight] = useState(RESUME_PAGE_HEIGHT);
   const zoomPercent = Math.round(zoom * 100);
+  const canonicalDocument = useMemo(() => ({
+    id: 'preview', documentName: 'Preview', language, data, template: 'profile' as const, accent,
+    customSections, customContent, sectionOrder, sectionOrderCustomized,
+  }) satisfies RendererResumeDocument, [accent, customContent, customSections, data, language, sectionOrder, sectionOrderCustomized]);
+  const canonicalPageCount = Math.max(1, Number(renderState?.pagePlan?.pages?.length) || 1);
   const serverPageCount = Math.max(1, Number(layoutManifest.pageCount) || 1);
   const hasServerLayout = Boolean(
     layoutManifest.policy && layoutManifest.pageFillRatios.length === serverPageCount,
   );
-  const pageCount = hasServerLayout
+  const pageCount = template === 'profile'
+    ? canonicalPageCount
+    : hasServerLayout
     ? serverPageCount
     : Math.max(1, Math.ceil(contentHeight / RESUME_PAGE_HEIGHT));
   const previewHeight = pageCount * (RESUME_PAGE_HEIGHT + RESUME_PAGE_GAP);
@@ -4683,7 +4734,9 @@ function PreviewPanel({
         initialPosition={previewPosition}
         onPositionChange={onPreviewPositionChange}
       >
-        <div className="resume-pages" aria-label={`${pageCount}-page resume preview`}>
+        {template === 'profile' ? (
+          <ResumePreviewFrame document={canonicalDocument} lastPlan={renderState?.pagePlan || null} onValidPlan={onValidPlan} />
+        ) : <div className="resume-pages" aria-label={`${pageCount}-page resume preview`}>
           {Array.from({ length: pageCount }, (_, pageIndex) => (
             <div className="resume-sheet" data-page={pageIndex + 1} key={pageIndex}>
               <div className="resume-sheet-clip">
@@ -4710,7 +4763,7 @@ function PreviewPanel({
               </span>
             </div>
           ))}
-        </div>
+        </div>}
       </ResumeStage>
     </section>
   );

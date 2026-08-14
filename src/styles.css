@@ -2383,6 +2383,53 @@ button:disabled {
   padding-bottom: 34px;
 }
 
+.canonical-preview {
+  position: relative;
+  width: 794px;
+  min-height: 1123px;
+  background: #fff;
+}
+
+.canonical-preview-frame {
+  display: block;
+  width: 794px;
+  min-height: 1123px;
+  border: 0;
+  background: #e8ece9;
+}
+
+.canonical-preview-cover {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #eef5f1;
+  background: rgba(28, 44, 36, .82);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.canonical-preview-cover svg {
+  animation: profile-import-spin 900ms linear infinite;
+}
+
+.canonical-preview-retry {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: inherit;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, .45);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.canonical-preview-retry svg { animation: none; }
+
 .resume-sheet {
   position: relative;
   width: 794px;
