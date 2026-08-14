@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { PuppetResumePipeline } from './server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
 import { renderPuppetPdf, resolvePuppetLayout } from './server/puppet-resume/layout';
+import { statePersistencePlugin } from './server/persistence';
 
 const MAX_REQUEST_BYTES = 16_000_000;
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
@@ -630,6 +631,7 @@ export default defineConfig(({ mode }) => {
   }
   return {
     plugins: [
+      statePersistencePlugin(env.DATABASE_URL || ''),
       resumeGenerationPlugin(providers),
       profileDirectoryPlugin(env.DIRECTORY_API_BASE_URL || 'https://feiwan.online/api'),
     ],

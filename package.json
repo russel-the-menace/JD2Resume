@@ -5,15 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:remote-db": "node scripts/run-with-remote-db.mjs dev",
     "build": "vite build",
     "preview": "vite preview",
+    "preview:remote-db": "node scripts/run-with-remote-db.mjs preview",
     "check:types": "tsc --noEmit",
     "check:puppet": "tsx scripts/verify-puppet-pipeline.mts",
     "check:layout": "tsx scripts/verify-puppet-layout.mts",
+    "check:persistence": "tsx scripts/verify-persistence.mts",
     "check:ui": "tsx scripts/verify-ui.mts"
   },
   "dependencies": {
     "lucide-react": "0.563.0",
+    "postgres": "3.4.7",
     "puppeteer": "25.7.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"

@@ -6,6 +6,12 @@ node_modules/
 .env.*
 !.env.example
 
+# Local server access keys
+/yeatom-key.pem
+/yeatom-key.pub
+/deploy/database/.env
+/.server.env
+
 # Generated Vite dependency pre-bundle metadata
 node_modules/.vite/deps/_metadata.json
 

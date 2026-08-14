@@ -160,6 +160,7 @@ const USER_DATABASE_STORAGE_KEY = 'draftline-user-database-v1';
 const CURRENT_ACCOUNT_STORAGE_KEY = 'draftline-current-account-v1';
 const ACCOUNT_STORAGE_PREFIX = 'draftline-account-data-v1';
 const ACCOUNT_MIGRATION_STORAGE_KEY = 'draftline-account-migration-v1';
+const REMOTE_SYNC_DIRTY_KEY = 'draftline-remote-sync-dirty-v1';
 const DEFAULT_ACCOUNT = {
   id: 'yeatom',
   username: 'yeatom',
@@ -1261,9 +1262,13 @@ function App() {
   const accountLibraryKey = accountStorageKey(currentAccount.id, LIBRARY_STORAGE_KEY);
   const accountProfileKey = accountStorageKey(currentAccount.id, USER_PROFILE_STORAGE_KEY);
   const accountWorkspaceKey = accountStorageKey(currentAccount.id, WORKSPACE_STORAGE_KEY);
+  const accountSyncDirtyKey = accountStorageKey(currentAccount.id, REMOTE_SYNC_DIRTY_KEY);
   const libraryRef = useRef(initialLibrary);
+  const remoteRevisionRef = useRef(null);
+  const remoteSaveTimerRef = useRef(null);
   const [library, setLibrary] = useState(initialLibrary);
   const [userProfile, setUserProfile] = useState(initialProfile);
+  const [remoteSyncReady, setRemoteSyncReady] = useState(false);
   const [profileImporting, setProfileImporting] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
@@ -1273,10 +1278,101 @@ function App() {
 
   const persistLibrary = useCallback((nextLibrary) => {
     if (!writeStoredJson(accountLibraryKey, nextLibrary)) return false;
+    writeStoredJson(accountSyncDirtyKey, { changedAt: Date.now() });
     libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
     return true;
-  }, [accountLibraryKey]);
+  }, [accountLibraryKey, accountSyncDirtyKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setRemoteSyncReady(false);
+    remoteRevisionRef.current = null;
+
+    const hydrate = async () => {
+      try {
+        const response = await fetch(`/api/account-state?accountId=${encodeURIComponent(currentAccount.id)}`, {
+          signal: controller.signal,
+        });
+        if (response.status === 404) {
+          setRemoteSyncReady(true);
+          return;
+        }
+        if (!response.ok) return;
+        const snapshot = await response.json();
+        if (!isRecord(snapshot) || !isRecord(snapshot.payload) || !Number.isInteger(snapshot.revision)) return;
+        remoteRevisionRef.current = snapshot.revision;
+
+        const locallyDirty = storedValueExists(accountSyncDirtyKey);
+        if (!locallyDirty) {
+          const remoteLibrary = isRecord(snapshot.payload.library) && Array.isArray(snapshot.payload.library.resumes)
+            ? {
+                version: LIBRARY_VERSION,
+                resumes: snapshot.payload.library.resumes.map(normalizeResumeDocument),
+              }
+            : null;
+          const remoteProfile = isRecord(snapshot.payload.profile)
+            ? normalizeUserProfile(snapshot.payload.profile)
+            : null;
+          if (remoteLibrary) {
+            writeStoredJson(accountLibraryKey, remoteLibrary);
+            libraryRef.current = remoteLibrary;
+            setLibrary(remoteLibrary);
+          }
+          if (remoteProfile) {
+            writeStoredJson(accountProfileKey, remoteProfile);
+            setUserProfile(remoteProfile);
+          }
+        }
+        setRemoteSyncReady(true);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return;
+      }
+    };
+
+    void hydrate();
+    return () => controller.abort();
+  }, [accountLibraryKey, accountProfileKey, accountSyncDirtyKey, currentAccount.id]);
+
+  useEffect(() => {
+    if (!remoteSyncReady) return undefined;
+    if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
+    const accountId = currentAccount.id;
+    const payload = {
+      version: 1,
+      library,
+      profile: userProfile,
+      savedAt: Date.now(),
+    };
+    remoteSaveTimerRef.current = window.setTimeout(async () => {
+      const save = async (baseRevision) => fetch('/api/account-state', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId, baseRevision, payload }),
+      });
+      try {
+        let response = await save(remoteRevisionRef.current);
+        if (response.status === 409) {
+          const conflict = await response.json().catch(() => ({}));
+          const currentRevision = Number(conflict?.current?.revision);
+          if (Number.isInteger(currentRevision) && currentRevision > 0) {
+            remoteRevisionRef.current = currentRevision;
+            response = await save(currentRevision);
+          }
+        }
+        if (!response.ok) return;
+        const saved = await response.json();
+        if (!Number.isInteger(saved.revision)) return;
+        remoteRevisionRef.current = saved.revision;
+        removeStoredValue(accountSyncDirtyKey);
+      } catch {
+        // Local storage remains the offline source until the next successful sync.
+      }
+    }, 600);
+    return () => {
+      if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
+    };
+  }, [accountSyncDirtyKey, currentAccount.id, library, remoteSyncReady, userProfile]);
 
   useEffect(() => {
     const syncFromLocation = () => {
@@ -1432,9 +1528,10 @@ function App() {
   const saveUserProfile = useCallback((nextProfile) => {
     const normalized = normalizeUserProfile(nextProfile);
     if (!writeStoredJson(accountProfileKey, normalized)) return false;
+    writeStoredJson(accountSyncDirtyKey, { changedAt: Date.now() });
     setUserProfile(normalized);
     return true;
-  }, [accountProfileKey]);
+  }, [accountProfileKey, accountSyncDirtyKey]);
 
   const searchProfileDirectory = useCallback(async ({ type, keyword, level = '' }) => {
     const endpoint = type === 'major' ? '/api/searchMajors' : '/api/searchUniversities';

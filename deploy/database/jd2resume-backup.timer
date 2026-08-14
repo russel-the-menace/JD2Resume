@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the JD2Resume database backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=10m
+Unit=jd2resume-backup.service
+
+[Install]
+WantedBy=timers.target
