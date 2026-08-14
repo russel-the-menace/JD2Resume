@@ -43,6 +43,16 @@ function sendJson(response: ServerResponse, status: number, body: Record<string,
 }
 
 function sendProviderFailure(response: ServerResponse, error: unknown, fallback: string) {
+  if (error instanceof Error && error.message === 'PROFILE_DATE_INTEGRITY_FAILED') {
+    const errorDetails = (error as Error & { details?: unknown }).details;
+    const details = isRecord(errorDetails) ? errorDetails : {};
+    sendJson(response, 500, {
+      error: 'Profile import stopped because locally detected dates were lost during structuring.',
+      code: 'PROFILE_DATE_INTEGRITY_FAILED',
+      traceId: stringValue(details.traceId),
+    });
+    return;
+  }
   if (error instanceof Error && error.message === 'DIRECT_FILE_PROVIDER_UNAVAILABLE') {
     sendJson(response, 503, { error: 'File imports require a configured ChatGPT-compatible provider.' });
     return;
@@ -476,6 +486,10 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
       }, profileModels, (task) => requestProfileTask(providers, task));
       sendJson(response, 200, imported);
     } catch (error) {
+      console.error('[Profile Import] Request failed', {
+        error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+        details: isRecord(error) && isRecord(error.details) ? error.details : undefined,
+      });
       sendProviderFailure(response, error, 'The profile import service is unavailable. Please try again.');
     }
   };

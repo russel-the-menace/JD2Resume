@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import {
   documentFromText,
   extractSinglePdfPage,
   extractPdfDocument,
   indexedDocumentText,
+  replaceCorruptedPageLines,
   replacePageWithOcr,
   type CanonicalDocument,
   type CanonicalLine,
@@ -122,6 +124,13 @@ function supportedBySource(document: CanonicalDocument, value: string, ids: unkn
   return /^\d{4}[-./年]\d{1,2}/.test(value) && normalizedSource.includes(value.slice(0, 4));
 }
 
+function supportedByDocument(document: CanonicalDocument, value: string) {
+  if (!value) return true;
+  const normalizedValue = normalizedComparable(value);
+  if (!normalizedValue) return true;
+  return normalizedComparable(document.lines.map((line) => line.text).join('\n')).includes(normalizedValue);
+}
+
 function normalizedDate(value: unknown) {
   const raw = text(value);
   if (/^(Present|至今)$/i.test(raw)) return /present/i.test(raw) ? 'Present' : '至今';
@@ -184,7 +193,7 @@ function cleanEducation(document: CanonicalDocument, value: Record<string, any>)
     if (!isRecord(entry)) return [];
     const lines = stringArray(entry.sourceLines);
     const school = normalizedChineseSpacing(entry.school);
-    if (!school || !supportedBySource(document, school, lines)) return [];
+    if (!school || !supportedByDocument(document, school)) return [];
     const degree = text(entry.degree);
     const citedSource = sourceText(document, lines);
     const sourceDates = dateRangeFromEvidence(document, lines, school);
@@ -206,7 +215,7 @@ function cleanWork(document: CanonicalDocument, value: Record<string, any>) {
     if (!isRecord(entry)) return [];
     const lines = stringArray(entry.sourceLines);
     const company = normalizedChineseSpacing(entry.company);
-    if (!company || !supportedBySource(document, company, lines)) return [];
+    if (!company || !supportedByDocument(document, company)) return [];
     const sourceDates = dateRangeFromEvidence(document, lines, company);
     return [{
       company,
@@ -250,32 +259,83 @@ function ocrPrompt(pageNumber: number) {
   return `Perform OCR on resume page ${pageNumber}. Return JSON only as {"lines":["first visual line","second visual line"]}. Preserve the visual reading order, exact names, dates, email addresses, phone numbers, schools, employers, and punctuation. Do not summarize, translate, infer, or restructure the content.`;
 }
 
+function corruptedLinesOcrPrompt(pageNumber: number, corruptedLineCount: number) {
+  return `The PDF text layer for resume page ${pageNumber} is readable except for exactly ${corruptedLineCount} lines whose font encoding is broken. Read the rendered page and return only the exact visible text of those broken lines, in top-to-bottom order. Broken lines contain contact details or date ranges. Return JSON only as {"lines":["replacement 1"]}. The lines array must contain exactly ${corruptedLineCount} strings. Preserve every digit and punctuation mark. Do not return any other page text, summarize, translate, infer, or add labels.`;
+}
+
 async function canonicalDocumentFromSource(
   source: ImportSource,
   models: ProfileImportModels,
   caller: ProfileTaskCaller,
 ) {
-  if (source.sourceType === 'text') return documentFromText(source.text);
+  if (source.sourceType === 'text') return { document: documentFromText(source.text), ocrPages: [] as Array<{ page: number; reasons: string[] }> };
   if (source.sourceType === 'image' && source.attachment) {
     const ocr = await runModule(
       'ocr', [models.vision, models.escalation], ocrPrompt(1), 6_000, caller,
       (value) => Array.isArray(value.lines) && value.lines.some((line: unknown) => text(line)),
       { sourceType: 'image', name: source.attachment.name, mimeType: source.attachment.mimeType, data: source.attachment.data },
     );
-    return documentFromText(stringArray(ocr.value.lines).join('\n'));
+    return { document: documentFromText(stringArray(ocr.value.lines).join('\n')), ocrPages: [{ page: 1, reasons: ['image-source'] }] };
   }
   if (source.sourceType !== 'pdf' || !source.attachment) throw new Error('PROFILE_SOURCE_INVALID');
   let document = await extractPdfDocument(source.attachment.data);
-  for (const page of document.pages.filter((candidate) => candidate.needsOcr)) {
+  const ocrPages = document.pages
+    .filter((candidate) => candidate.needsOcr)
+    .map((page) => ({
+      page: page.page,
+      reasons: page.ocrReasons,
+      mode: page.ocrReasons.length === 1 && page.ocrReasons[0] === 'invalid-text-encoding' ? 'corrupted-lines' : 'full-page',
+    }));
+  const repairs = await Promise.all(document.pages.filter((candidate) => candidate.needsOcr).map(async (page) => {
     const pagePdf = await extractSinglePdfPage(source.attachment.data, page.page);
+    const corruptedLineCount = page.lines.filter((line) => /[\u0000\uFFFD]/u.test(line.text)).length;
+    const repairCorruptedLines = page.ocrReasons.length === 1
+      && page.ocrReasons[0] === 'invalid-text-encoding'
+      && corruptedLineCount > 0;
     const ocr = await runModule(
-      'ocr', [models.vision, models.escalation], ocrPrompt(page.page), 6_000, caller,
-      (value) => Array.isArray(value.lines) && value.lines.some((line: unknown) => text(line)),
+      'ocr', [models.vision, models.standard, models.escalation],
+      repairCorruptedLines ? corruptedLinesOcrPrompt(page.page, corruptedLineCount) : ocrPrompt(page.page),
+      repairCorruptedLines ? 4_000 : 6_000,
+      caller,
+      (value) => Array.isArray(value.lines)
+        && (repairCorruptedLines ? value.lines.length === corruptedLineCount : value.lines.length > 0)
+        && value.lines.every((line: unknown) => text(line) && !/[\u0000\uFFFD]/u.test(text(line))),
       { sourceType: 'pdf', name: `${source.attachment.name}-page-${page.page}.pdf`, mimeType: 'application/pdf', data: pagePdf },
     );
-    document = replacePageWithOcr(document, page.page, stringArray(ocr.value.lines));
+    return { page: page.page, repairCorruptedLines, lines: stringArray(ocr.value.lines) };
+  }));
+  for (const repair of repairs.sort((first, second) => first.page - second.page)) {
+    document = repair.repairCorruptedLines
+      ? replaceCorruptedPageLines(document, repair.page, repair.lines)
+      : replacePageWithOcr(document, repair.page, repair.lines);
   }
-  return document;
+  return { document, ocrPages };
+}
+
+function assertDateIntegrity(
+  document: CanonicalDocument,
+  rawEntries: unknown,
+  cleanEntries: Array<{ startDate: string; endDate: string }>,
+  anchorField: 'school' | 'company',
+  traceId: string,
+) {
+  if (!Array.isArray(rawEntries)) return;
+  rawEntries.forEach((entry, index) => {
+    if (!isRecord(entry)) return;
+    const anchor = text(entry[anchorField]);
+    if (!anchor || !supportedByDocument(document, anchor)) return;
+    const evidence = dateRangeFromEvidence(document, entry.sourceLines, anchor);
+    const cleanEntry = cleanEntries.find((candidate: any) =>
+      normalizedComparable(text(candidate[anchorField])) === normalizedComparable(anchor));
+    const missingEntry = !cleanEntry && Boolean(evidence.startDate || evidence.endDate);
+    const missingStart = Boolean(evidence.startDate && !cleanEntry?.startDate);
+    const missingEnd = Boolean(evidence.endDate && !cleanEntry?.endDate);
+    if (missingEntry || missingStart || missingEnd) {
+      const error = new Error('PROFILE_DATE_INTEGRITY_FAILED');
+      Object.assign(error, { details: { traceId, section: anchorField === 'school' ? 'education' : 'work', index, missingEntry, missingStart, missingEnd } });
+      throw error;
+    }
+  });
 }
 
 export async function importProfileFacts(
@@ -283,8 +343,17 @@ export async function importProfileFacts(
   models: ProfileImportModels,
   caller: ProfileTaskCaller,
 ) {
-  const document = await canonicalDocumentFromSource(source, models, caller);
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  const { document, ocrPages } = await canonicalDocumentFromSource(source, models, caller);
   if (!document.lines.length) throw new Error('PROFILE_TEXT_EMPTY');
+  console.info('[Profile Import] Document prepared', {
+    traceId,
+    sourceType: source.sourceType,
+    pages: document.pages.length,
+    lines: document.lines.length,
+    ocrPages,
+  });
   const language = detectLanguage(document);
   const indexedText = indexedDocumentText(document);
   const basicRequest = runModule(
@@ -317,6 +386,19 @@ export async function importProfileFacts(
   const educationValue = 'value' in modules.education ? cleanEducation(document, modules.education.value) : [];
   const workValue = 'value' in modules.work ? cleanWork(document, modules.work.value) : [];
   const certificateValue = 'value' in modules.certificates ? cleanCertificates(document, modules.certificates.value) : [];
+  if ('value' in modules.education) {
+    assertDateIntegrity(document, modules.education.value.educations, educationValue, 'school', traceId);
+  }
+  if ('value' in modules.work) {
+    assertDateIntegrity(document, modules.work.value.workExperiences, workValue, 'company', traceId);
+  }
+  console.info('[Profile Import] Structured fields verified', {
+    traceId,
+    durationMs: Date.now() - startedAt,
+    education: educationValue.map((entry) => ({ hasStartDate: Boolean(entry.startDate), hasEndDate: Boolean(entry.endDate) })),
+    work: workValue.map((entry) => ({ hasStartDate: Boolean(entry.startDate), hasEndDate: Boolean(entry.endDate) })),
+    certificates: certificateValue.length,
+  });
   const profile: Record<string, any> = {
     ...cleanBasic(document, basic.value),
     educations: educationValue,
@@ -327,8 +409,10 @@ export async function importProfileFacts(
     language,
     profile,
     parseReport: {
+      traceId,
       pages: document.pages.length,
       lines: document.lines.length,
+      ocrPages,
       modules: {
         basic: { model: basic.model, attempts: basic.attempts, status: 'completed' },
         ...Object.fromEntries(Object.entries(modules).map(([name, result]) => [name,

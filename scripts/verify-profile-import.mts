@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
-import { extractPdfDocument } from '../server/profile-import/document';
+import { documentFromText, extractPdfDocument, replaceCorruptedPageLines } from '../server/profile-import/document';
 import {
   importProfileFacts,
   translateProfileFacts,
@@ -39,7 +39,7 @@ const caller = async (request: ProfileTaskRequest) => {
     return {
       educations: [{
         school: '复旦大学', degree: '本科', studyType: '本科', major: '视觉传达设计',
-        startDate: '', endDate: '', sourceLines: ['p1-l3'], descriptionSourceLines: [],
+        startDate: '', endDate: '', sourceLines: ['p1-l4'], descriptionSourceLines: [],
       }],
     };
   }
@@ -84,6 +84,12 @@ assert.equal(calls.filter((call) => call.task === 'basic').length, 1);
 assert.equal(calls.filter((call) => call.task === 'work').length, 1);
 assert.equal(calls.filter((call) => call.task === 'certificates').length, 1);
 assert.equal(parallelTaskStartedBeforeBasicFinished, true);
+
+const corruptedDocument = documentFromText('公司\n\u0000\u0000\u0000\u0000.\u0000\u0000-\u0000\u0000\u0000\u0000.\u0000\u0000\n职位');
+const repairedDocument = replaceCorruptedPageLines(corruptedDocument, 1, ['2020.01-2021.02']);
+assert.equal(repairedDocument.lines.length, corruptedDocument.lines.length);
+assert.equal(repairedDocument.lines[1].text, '2020.01-2021.02');
+assert.equal(repairedDocument.lines[0].text, '公司');
 
 const translated = await translateProfileFacts('chinese', imported.profile, models, caller);
 assert.equal(translated.profile.fullName, 'Junling Tian');

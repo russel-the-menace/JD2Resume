@@ -12,6 +12,7 @@ export type CanonicalPage = {
   page: number;
   lines: CanonicalLine[];
   needsOcr: boolean;
+  ocrReasons: string[];
 };
 
 export type CanonicalDocument = {
@@ -47,13 +48,16 @@ function groupTextItems(items: PositionedText[]) {
     .filter(Boolean);
 }
 
-function pageNeedsOcr(lines: string[]) {
+function pageOcrReasons(lines: string[]) {
+  const reasons: string[] = [];
   const text = lines.join('');
-  if (text.length < 40 || lines.length < 3) return true;
+  if (text.length < 40 || lines.length < 3) reasons.push('sparse-text');
+  if (/[\u0000\uFFFD]/u.test(text)) reasons.push('invalid-text-encoding');
   const suspicious = [...text].filter((character) =>
     character === '\uFFFD' || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uE000-\uF8FF]/u.test(character),
   ).length;
-  return suspicious / Math.max(text.length, 1) > 0.05;
+  if (suspicious / Math.max(text.length, 1) > 0.05) reasons.push('high-garbled-ratio');
+  return [...new Set(reasons)];
 }
 
 function canonicalLines(page: number, values: string[]): CanonicalLine[] {
@@ -87,11 +91,12 @@ export async function extractPdfDocument(encodedPdf: string): Promise<CanonicalD
         } satisfies PositionedText];
       });
       const lineValues = groupTextItems(positioned);
-      const needsOcr = pageNeedsOcr(lineValues);
+      const ocrReasons = pageOcrReasons(lineValues);
       pages.push({
         page: pageNumber,
         lines: canonicalLines(pageNumber, lineValues),
-        needsOcr,
+        needsOcr: ocrReasons.length > 0,
+        ocrReasons,
       });
       page.cleanup();
     }
@@ -103,13 +108,28 @@ export async function extractPdfDocument(encodedPdf: string): Promise<CanonicalD
 
 export function documentFromText(text: string): CanonicalDocument {
   const lines = canonicalLines(1, text.split(/\r?\n/).map(normalizeLineText).filter(Boolean));
-  return { pages: [{ page: 1, lines, needsOcr: false }], lines };
+  return { pages: [{ page: 1, lines, needsOcr: false, ocrReasons: [] }], lines };
 }
 
 export function replacePageWithOcr(document: CanonicalDocument, pageNumber: number, ocrLines: string[]) {
   const pages = document.pages.map((page) => page.page === pageNumber
-    ? { ...page, lines: canonicalLines(pageNumber, ocrLines.map(normalizeLineText).filter(Boolean)), needsOcr: false }
+    ? { ...page, lines: canonicalLines(pageNumber, ocrLines.map(normalizeLineText).filter(Boolean)), needsOcr: false, ocrReasons: [] }
     : page);
+  return { pages, lines: pages.flatMap((page) => page.lines) };
+}
+
+export function replaceCorruptedPageLines(document: CanonicalDocument, pageNumber: number, replacements: string[]) {
+  let replacementIndex = 0;
+  const pages = document.pages.map((page) => {
+    if (page.page !== pageNumber) return page;
+    const lines = page.lines.map((line) => {
+      if (!/[\u0000\uFFFD]/u.test(line.text)) return line;
+      const replacement = normalizeLineText(replacements[replacementIndex] || '');
+      replacementIndex += 1;
+      return replacement ? { ...line, text: replacement } : line;
+    });
+    return { ...page, lines, needsOcr: false, ocrReasons: [] };
+  });
   return { pages, lines: pages.flatMap((page) => page.lines) };
 }
 
