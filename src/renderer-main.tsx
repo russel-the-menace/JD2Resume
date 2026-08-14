@@ -13,7 +13,7 @@ window.addEventListener('message', async (event) => {
   activeController?.abort(); const controller = new AbortController(); activeController = controller; activeRequestId = event.data.requestId; const { requestId, snapshot } = event.data;
   post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_STARTED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash });
   try { const result = await runCanonicalLayout(snapshot, controller.signal); if (controller.signal.aborted || activeRequestId !== requestId) return; post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_SUCCEEDED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash, ...result }); }
-  catch (error) { if (controller.signal.aborted || activeRequestId !== requestId) return; const failureCode = rendererFailureCode(error); post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_FAILED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash, failureCode, report: failureReport(snapshot.revision, snapshot.snapshotHash, failureCode, error) }); }
+  catch (error) { if (controller.signal.aborted || activeRequestId !== requestId) return; const failureCode = rendererFailureCode(error); const report = failureReport(snapshot.revision, snapshot.snapshotHash, failureCode, error); console.warn(`[Renderer] Layout failed ${JSON.stringify({ failureCode, attempts: report.attempts })}`); post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_FAILED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash, failureCode, report }); }
 });
 async function runExportReplay() {
   const params = new URLSearchParams(window.location.search); const token = params.get('session');
