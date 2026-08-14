@@ -169,8 +169,28 @@ const DEFAULT_ACCOUNT = {
 const STORAGE_VERSION = 1;
 const LIBRARY_VERSION = 2;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
-const MAX_JOB_SOURCE_BYTES = 5 * 1024 * 1024;
+const MAX_JOB_SOURCE_BYTES = 10 * 1024 * 1024;
+const MAX_SOURCE_TEXT_CHARS = 20_000;
 type CssVariables = CSSProperties & Record<`--${string}`, string>;
+
+function normalizeGenerationEvidence(value) {
+  const source = isRecord(value) ? value : {};
+  const uploadedSource = isRecord(source.uploadedSource) ? source.uploadedSource : null;
+  return {
+    applicationId: textValue(source.applicationId),
+    jobId: textValue(source.jobId),
+    sourceType: ['text', 'image', 'pdf'].includes(source.sourceType) ? source.sourceType : 'text',
+    jobDescription: textValue(source.jobDescription).slice(0, MAX_SOURCE_TEXT_CHARS),
+    uploadedSource: uploadedSource
+      ? {
+          name: textValue(uploadedSource.name),
+          mimeType: textValue(uploadedSource.mimeType),
+          evidenceId: textValue(uploadedSource.evidenceId),
+        }
+      : null,
+    capturedAt: Number.isFinite(Number(source.capturedAt)) ? Number(source.capturedAt) : 0,
+  };
+}
 
 const sectionSuggestions = [
   { id: 'projects', label: 'Projects', icon: LayoutGrid },
@@ -506,6 +526,19 @@ function readFileAsDataUrl(file): Promise<string> {
   });
 }
 
+function validateSourcePayload(
+  { text = '', sourceType = 'text', sourceFile }: { text?: unknown; sourceType?: string; sourceFile?: File | null } = {},
+) {
+  const normalizedText = textValue(text).trim();
+  if (sourceType === 'text' && normalizedText.length > MAX_SOURCE_TEXT_CHARS) {
+    throw new Error(`Text source cannot exceed ${MAX_SOURCE_TEXT_CHARS.toLocaleString()} characters.`);
+  }
+  if (sourceType !== 'text' && sourceFile && sourceFile.size > MAX_JOB_SOURCE_BYTES) {
+    throw new Error('The source file must be 10 MB or smaller.');
+  }
+  return normalizedText;
+}
+
 function accountInitials(username) {
   const name = normalizedUsername(username);
   if (!name) return '??';
@@ -810,6 +843,7 @@ function normalizeResumeDocument(value, index) {
     customContent: {},
     sectionOrder: normalizeSectionOrder(source.sectionOrder, customSections, template),
     sectionOrderCustomized: source.sectionOrderCustomized === true,
+    generationEvidence: normalizeGenerationEvidence(source.generationEvidence),
   };
   snapshot.customContent = normalizeCustomContent(snapshot.customSections, source.customContent, language);
   return {
@@ -1035,7 +1069,7 @@ function initializeAccountDatabase() {
 }
 
 function blankResumeSnapshot(
-  { documentName, language }: { documentName?: string; language?: string } = {},
+  { documentName, language, generationEvidence }: { documentName?: string; language?: string; generationEvidence?: unknown } = {},
 ) {
   const chinese = isChineseResume(language);
   return {
@@ -1095,6 +1129,7 @@ function blankResumeSnapshot(
     customContent: {},
     sectionOrder: defaultSectionOrder('modern', []),
     sectionOrderCustomized: false,
+    generationEvidence: normalizeGenerationEvidence(generationEvidence),
   };
 }
 
@@ -1113,6 +1148,7 @@ function resumeSnapshotEqual(document, snapshot) {
     customContent: document.customContent,
     sectionOrder: document.sectionOrder,
     sectionOrderCustomized: document.sectionOrderCustomized,
+    generationEvidence: document.generationEvidence,
   }) === JSON.stringify(snapshot);
 }
 
@@ -1413,18 +1449,16 @@ function App() {
   }, []);
 
   const importProfileFromResume = useCallback(async ({ resumeText, sourceType = 'text', sourceFile }) => {
-    if (sourceType === 'text' && !resumeText.trim()) {
+    const normalizedText = validateSourcePayload({ text: resumeText, sourceType, sourceFile });
+    if (sourceType === 'text' && !normalizedText) {
       throw new Error('Enter resume content before importing personal details.');
     }
     if (sourceType !== 'text' && !sourceFile) {
       throw new Error('Choose a resume file before importing personal details.');
     }
-    if (sourceFile && sourceFile.size > MAX_JOB_SOURCE_BYTES) {
-      throw new Error('The source file must be 5 MB or smaller.');
-    }
     const sourceData = sourceFile ? await readFileAsDataUrl(sourceFile) : '';
     return runProfileRequest('/api/import-profile', {
-      resumeText: resumeText.trim(),
+      resumeText: normalizedText,
       sourceType,
       source: sourceData
         ? {
@@ -1442,6 +1476,11 @@ function App() {
     sourceType = 'text',
     sourceFile,
   }) => {
+    const normalizedJobDescription = validateSourcePayload({
+      text: jobDescription,
+      sourceType,
+      sourceFile,
+    });
     const languages = outputLanguage === 'both' ? ['chinese', 'english'] : [outputLanguage];
     const incompleteProfiles = languages
       .map((language) => ({ language, fields: missingProfileFields(userProfile, language) }))
@@ -1449,23 +1488,32 @@ function App() {
     if (incompleteProfiles.length) {
       throw new Error('Complete the selected personal profile before generating a resume.');
     }
-    if (sourceType === 'text' && !jobDescription.trim()) {
+    if (sourceType === 'text' && !normalizedJobDescription) {
       throw new Error('Enter a job description before generating a resume.');
     }
     if (sourceType !== 'text' && !sourceFile) {
       throw new Error('Choose a source file before generating a resume.');
     }
-    if (sourceFile && sourceFile.size > MAX_JOB_SOURCE_BYTES) {
-      throw new Error('The source file must be 5 MB or smaller.');
-    }
-
     const sourceData = sourceFile
       ? await readFileAsDataUrl(sourceFile)
       : '';
+    const applicationId = resumeId();
+    const evidenceId = sourceFile ? resumeId() : '';
+    const evidence = {
+      applicationId,
+      jobId: '',
+      sourceType,
+      jobDescription: normalizedJobDescription,
+      uploadedSource: sourceFile
+        ? { name: sourceFile.name, mimeType: sourceFile.type, evidenceId }
+        : null,
+      capturedAt: Date.now(),
+    };
     const source = sourceData
       ? {
           name: sourceFile.name,
           mimeType: sourceFile.type,
+          evidenceId,
           data: sourceData.split(',')[1] || '',
         }
       : null;
@@ -1479,10 +1527,16 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          jobDescription,
+          applicationId,
+          jobId: null,
+          jobDescription: normalizedJobDescription,
           language,
           sourceType,
           source,
+          evidence: {
+            ...evidence,
+            jobDescription: normalizedJobDescription,
+          },
           profile: userProfile[language],
           baseResume: baseResume?.data || null,
         }),
@@ -1501,7 +1555,10 @@ function App() {
         `${resumeName(data.basics, language) || (isChineseResume(language) ? '未命名简历' : 'Untitled resume')} - ${data.basics.role || (isChineseResume(language) ? '目标职位' : 'Target role')}`,
       );
       const generatedId = resumeId();
-      const snapshot = blankResumeSnapshot({ documentName: generatedName, language });
+      const snapshot = blankResumeSnapshot({ documentName: generatedName, language, generationEvidence: {
+        ...evidence,
+        applicationId: textValue(payload.applicationId, applicationId),
+      } });
       generatedResumes.push({
         id: generatedId,
         ...snapshot,
@@ -1641,6 +1698,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
       customContent,
       sectionOrder,
       sectionOrderCustomized,
+      generationEvidence: initialResumeState.generationEvidence,
     });
     if (!saved) {
       setSaveState('Save failed');
@@ -1654,6 +1712,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
     customSections,
     data,
     documentName,
+    initialResumeState.generationEvidence,
     language,
     onResumeChange,
     resumeId,
@@ -3046,7 +3105,7 @@ function ProfileImportDialog({ onCancel, onImport }) {
     const file = event.target.files?.[0] || null;
     if (file && file.size > MAX_JOB_SOURCE_BYTES) {
       setSourceFile(null);
-      setError('The source file must be 5 MB or smaller.');
+      setError('The source file must be 10 MB or smaller.');
       event.target.value = '';
       return;
     }
@@ -3099,11 +3158,13 @@ function ProfileImportDialog({ onCancel, onImport }) {
               <textarea
                 value={resumeText}
                 rows={13}
+                maxLength={MAX_SOURCE_TEXT_CHARS}
                 placeholder="Paste the resume content"
                 onChange={(event) => setResumeText(event.target.value)}
                 disabled={isImporting}
                 aria-label="Resume content"
               />
+              <small className="profile-character-count">{resumeText.length.toLocaleString()} / {MAX_SOURCE_TEXT_CHARS.toLocaleString()}</small>
             </label>
           ) : (
             <label className="job-source-picker">
@@ -3214,7 +3275,7 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
     const file = event.target.files?.[0] || null;
     if (file && file.size > MAX_JOB_SOURCE_BYTES) {
       setSourceFile(null);
-      setError('The source file must be 5 MB or smaller.');
+      setError('The source file must be 10 MB or smaller.');
       event.target.value = '';
       return;
     }
@@ -3292,11 +3353,13 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
               <textarea
                 value={jobDescription}
                 rows={13}
+                maxLength={MAX_SOURCE_TEXT_CHARS}
                 placeholder="Paste the role, responsibilities, and requirements"
                 onChange={(event) => setJobDescription(event.target.value)}
                 disabled={isGenerating}
                 aria-label="Job description"
               />
+              <small className="profile-character-count">{jobDescription.length.toLocaleString()} / {MAX_SOURCE_TEXT_CHARS.toLocaleString()}</small>
             </label>
           ) : (
             <label className="job-source-picker">
