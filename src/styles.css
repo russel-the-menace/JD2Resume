@@ -2375,6 +2375,51 @@ button:disabled {
   transform-origin: top left;
 }
 
+.resume-pages {
+  display: flex;
+  width: 794px;
+  flex-direction: column;
+  gap: 34px;
+  padding-bottom: 34px;
+}
+
+.resume-sheet {
+  position: relative;
+  width: 794px;
+  height: 1123px;
+  flex: 0 0 1123px;
+}
+
+.resume-sheet-clip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(24, 31, 27, 0.17), 0 1px 4px rgba(24, 31, 27, 0.12);
+}
+
+.resume-sheet-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 794px;
+}
+
+.resume-sheet .resume-page {
+  box-shadow: none;
+}
+
+.resume-sheet-number {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 4px;
+  color: #68716b;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 16px;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .resume-stage {
     cursor: grab;
@@ -4094,6 +4139,41 @@ button:disabled {
     width: 210mm !important;
     height: auto !important;
     transform: none !important;
+  }
+
+  .resume-pages {
+    display: block !important;
+    width: 210mm !important;
+    height: auto !important;
+    padding: 0;
+  }
+
+  .resume-sheet {
+    display: none !important;
+  }
+
+  .resume-sheet:first-child {
+    display: block !important;
+    position: static;
+    width: 210mm !important;
+    height: auto !important;
+  }
+
+  .resume-sheet:first-child .resume-sheet-clip {
+    width: 210mm !important;
+    height: auto !important;
+    overflow: visible;
+    box-shadow: none;
+  }
+
+  .resume-sheet:first-child .resume-sheet-content {
+    position: static;
+    width: 210mm !important;
+    transform: none !important;
+  }
+
+  .resume-sheet-number {
+    display: none !important;
   }
 
   .resume-page {

@@ -177,6 +177,7 @@ const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
 const MAX_JOB_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCE_TEXT_CHARS = 20_000;
 const RESUME_PAGE_HEIGHT = 1123;
+const RESUME_PAGE_GAP = 34;
 type CssVariables = CSSProperties & Record<`--${string}`, string>;
 
 function normalizeGenerationEvidence(value) {
@@ -4570,8 +4571,8 @@ function PreviewPanel({
   const [colorMenu, setColorMenu] = useState(false);
   const [contentHeight, setContentHeight] = useState(RESUME_PAGE_HEIGHT);
   const zoomPercent = Math.round(zoom * 100);
-  const pageHeight = contentHeight;
-  const pageCount = Math.max(1, Math.ceil(pageHeight / RESUME_PAGE_HEIGHT));
+  const pageCount = Math.max(1, Math.ceil(contentHeight / RESUME_PAGE_HEIGHT));
+  const previewHeight = pageCount * (RESUME_PAGE_HEIGHT + RESUME_PAGE_GAP);
   const updateProfilePageHeight = useCallback((height) => {
     setContentHeight((current) => (Math.abs(current - height) < 1 ? current : height));
   }, []);
@@ -4672,22 +4673,38 @@ function PreviewPanel({
       <ResumeStage
         zoom={zoom}
         setZoom={setZoom}
-        pageHeight={pageHeight}
+        pageHeight={previewHeight}
         initialPosition={previewPosition}
         onPositionChange={onPreviewPositionChange}
       >
-        <ResumePage
-          data={data}
-          template={template}
-          accent={accent}
-          customSections={customSections}
-          customContent={customContent}
-          sectionOrder={sectionOrder}
-          sectionOrderCustomized={sectionOrderCustomized}
-          onContentHeightChange={updateProfilePageHeight}
-          language={language}
-          layoutManifest={layoutManifest}
-        />
+        <div className="resume-pages" aria-label={`${pageCount}-page resume preview`}>
+          {Array.from({ length: pageCount }, (_, pageIndex) => (
+            <div className="resume-sheet" data-page={pageIndex + 1} key={pageIndex}>
+              <div className="resume-sheet-clip">
+                <div
+                  className="resume-sheet-content"
+                  style={{ transform: `translateY(-${pageIndex * RESUME_PAGE_HEIGHT}px)` }}
+                >
+                  <ResumePage
+                    data={data}
+                    template={template}
+                    accent={accent}
+                    customSections={customSections}
+                    customContent={customContent}
+                    sectionOrder={sectionOrder}
+                    sectionOrderCustomized={sectionOrderCustomized}
+                    onContentHeightChange={pageIndex === 0 ? updateProfilePageHeight : null}
+                    language={language}
+                    layoutManifest={layoutManifest}
+                  />
+                </div>
+              </div>
+              <span className="resume-sheet-number" aria-hidden="true">
+                {pageIndex + 1} / {pageCount}
+              </span>
+            </div>
+          ))}
+        </div>
       </ResumeStage>
     </section>
   );
@@ -4751,7 +4768,7 @@ function ResumeStage({ zoom, setZoom, pageHeight, initialPosition, onPositionCha
         Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
       const availableWidth = Math.max(bounds.width - horizontalPadding, 280);
       const availableHeight = Math.max(bounds.height - verticalPadding, 420);
-      const nextScale = Math.min(availableWidth / pageWidth, availableHeight / pageHeight, 1);
+      const nextScale = Math.min(availableWidth / pageWidth, availableHeight / RESUME_PAGE_HEIGHT, 1);
       setFitScale((current) => (Math.abs(current - nextScale) < 0.0005 ? current : nextScale));
     };
     updateScale();
@@ -4903,6 +4920,7 @@ function ResumePage({
   const pageRef = useRef(null);
 
   useLayoutEffect(() => {
+    if (!onContentHeightChange) return undefined;
     const frame = window.requestAnimationFrame(() => {
       const contentHeight = Math.max(RESUME_PAGE_HEIGHT, Math.ceil(pageRef.current?.scrollHeight || RESUME_PAGE_HEIGHT));
       onContentHeightChange(contentHeight);

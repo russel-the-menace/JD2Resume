@@ -557,6 +557,26 @@ report.checks.profileEducationStaysOnOneLine = await desktopPage
 report.checks.profileContentFits = await desktopPage.locator('.resume-page.template-profile').evaluate((element) =>
   element.clientHeight === element.scrollHeight,
 );
+const compactSummary = '<b>Product designer</b> focused on high-impact workflows.\n\n\nBuilds durable systems through clear cross-functional collaboration.';
+const longSummary = Array.from(
+  { length: 70 },
+  (_, index) => `Portfolio narrative ${index + 1} covering strategy, execution, measurable outcomes, and cross-functional delivery.`,
+).join(' ');
+await desktopPage.locator('.summary-textarea').fill(longSummary);
+await desktopPage.waitForFunction(() => document.querySelectorAll('.resume-sheet').length >= 2);
+const previewSheets = desktopPage.locator('.resume-sheet');
+const firstPreviewSheet = await previewSheets.nth(0).boundingBox();
+const secondPreviewSheet = await previewSheets.nth(1).boundingBox();
+report.checks.multiPagePreviewUsesSeparateSheets = Boolean(
+  firstPreviewSheet && secondPreviewSheet &&
+  secondPreviewSheet.y - (firstPreviewSheet.y + firstPreviewSheet.height) > 10 &&
+  (await desktopPage.locator('.resume-sheet-number').nth(0).textContent())?.includes('/'),
+);
+report.checks.multiPagePreviewScrollsAtReadableScale = await desktopPage.locator('.resume-stage').evaluate((element) =>
+  element.scrollHeight > element.clientHeight,
+);
+await desktopPage.locator('.summary-textarea').fill(compactSummary);
+await desktopPage.waitForFunction(() => document.querySelectorAll('.resume-sheet').length === 1);
 
 await desktopPage.getByRole('button', { name: 'Personal details' }).click();
 report.checks.personalWebsiteField =
