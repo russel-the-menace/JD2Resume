@@ -174,7 +174,7 @@ const DEFAULT_ACCOUNT = {
   createdAt: 0,
 };
 const STORAGE_VERSION = 1;
-const LIBRARY_VERSION = 2;
+const LIBRARY_VERSION = 3;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
 const MAX_JOB_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCE_TEXT_CHARS = 20_000;
@@ -226,7 +226,7 @@ function normalizeRenderState(value) {
     ? source.pagePlan as PagePlanV2
     : null;
   return {
-    status: ['idle', 'valid', 'failed'].includes(source.status) ? source.status : 'idle',
+    status: ['dirty', 'rendering', 'valid', 'failed'].includes(source.status) ? source.status : 'dirty',
     draftRevision: Math.max(0, Number(source.draftRevision) || 0),
     currentSnapshotHash: textValue(source.currentSnapshotHash),
     rendererVersion: textValue(source.rendererVersion),
@@ -939,7 +939,8 @@ function normalizeResumeDocument(value, index) {
     sectionOrder: normalizeSectionOrder(source.sectionOrder, customSections, template),
     sectionOrderCustomized: source.sectionOrderCustomized === true,
     generationEvidence: normalizeGenerationEvidence(source.generationEvidence),
-    layoutManifest: normalizeLayoutManifest(source.layoutManifest),
+    // Keep the previous server-produced result through the V2 -> V3 rollback window.
+    legacyLayoutManifest: normalizeLayoutManifest(source.legacyLayoutManifest || source.layoutManifest),
     renderState: normalizeRenderState(source.renderState),
   };
   snapshot.customContent = normalizeCustomContent(snapshot.customSections, source.customContent, language);
@@ -1227,7 +1228,7 @@ function blankResumeSnapshot(
     sectionOrder: defaultSectionOrder('modern', []),
     sectionOrderCustomized: false,
     generationEvidence: normalizeGenerationEvidence(generationEvidence),
-    layoutManifest: normalizeLayoutManifest(layoutManifest),
+    legacyLayoutManifest: normalizeLayoutManifest(layoutManifest),
     renderState: normalizeRenderState(null),
   };
 }
@@ -1248,7 +1249,7 @@ function resumeSnapshotEqual(document, snapshot) {
     sectionOrder: document.sectionOrder,
     sectionOrderCustomized: document.sectionOrderCustomized,
     generationEvidence: document.generationEvidence,
-    layoutManifest: document.layoutManifest,
+    legacyLayoutManifest: document.legacyLayoutManifest,
     renderState: document.renderState,
   }) === JSON.stringify(snapshot);
 }
@@ -1924,9 +1925,14 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
 
   // A page plan belongs to one immutable snapshot only. Invalidate it before the edited frame paints.
   useLayoutEffect(() => {
-    setRenderState((current) => current.status === 'idle' && !current.pagePlan
-      ? current
-      : { ...current, status: 'idle', pagePlan: null, layoutReport: null, currentSnapshotHash: '' });
+    setRenderState((current) => ({
+      ...current,
+      status: 'dirty',
+      draftRevision: current.draftRevision + 1,
+      pagePlan: null,
+      layoutReport: null,
+      currentSnapshotHash: '',
+    }));
   }, [accent, customContent, customSections, data, documentName, sectionOrder, sectionOrderCustomized, template]);
 
   const canExport = template === 'profile' && renderState.status === 'valid' && Boolean(renderState.pagePlan);
@@ -1944,7 +1950,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
       sectionOrder,
       sectionOrderCustomized,
       generationEvidence: initialResumeState.generationEvidence,
-      layoutManifest: initialResumeState.layoutManifest,
+      legacyLayoutManifest: initialResumeState.legacyLayoutManifest,
       renderState,
     });
     if (!saved) {
@@ -1960,7 +1966,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
     data,
     documentName,
     initialResumeState.generationEvidence,
-    initialResumeState.layoutManifest,
+    initialResumeState.legacyLayoutManifest,
     renderState,
     language,
     onResumeChange,
@@ -2195,7 +2201,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
         sectionOrder,
         sectionOrderCustomized,
         generationEvidence: initialResumeState.generationEvidence,
-        layoutManifest: initialResumeState.layoutManifest,
+        legacyLayoutManifest: initialResumeState.legacyLayoutManifest,
         renderState,
         updatedAt: Date.now(),
       };
@@ -2325,7 +2331,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
           language={language}
           documentId={resumeId}
           documentName={documentName}
-          layoutManifest={initialResumeState.layoutManifest}
+          layoutManifest={initialResumeState.legacyLayoutManifest}
           renderState={renderState}
           allowContentRefinement={Boolean(initialResumeState.generationEvidence?.applicationId)}
           onLayoutFailure={refineGeneratedLayout}
@@ -4773,7 +4779,7 @@ function PreviewPanel({
         onPositionChange={onPreviewPositionChange}
       >
         {template === 'profile' ? (
-          <ResumePreviewFrame document={canonicalDocument} lastPlan={renderState?.pagePlan || null} onValidPlan={onValidPlan} allowContentRefinement={allowContentRefinement} onLayoutFailure={onLayoutFailure} />
+          <ResumePreviewFrame document={canonicalDocument} revision={renderState.draftRevision} lastPlan={renderState?.pagePlan || null} onValidPlan={onValidPlan} allowContentRefinement={allowContentRefinement} onLayoutFailure={onLayoutFailure} />
         ) : <div className="resume-pages" aria-label={`${pageCount}-page resume preview`}>
           {Array.from({ length: pageCount }, (_, pageIndex) => (
             <div className="resume-sheet" data-page={pageIndex + 1} key={pageIndex}>
