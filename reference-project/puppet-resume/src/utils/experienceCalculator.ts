@@ -88,7 +88,8 @@ export class ExperienceCalculator {
         // 3. Logic Branching
         if (existingExps.length === 0) {
             // --- Case 0: No Experience ---
-            // Rule: Supplement based on job requirements, max 2 years per segment.
+            // The empty timeline is a single gap. Generate at most one segment,
+            // with no artificial count or duration cap.
             const reqMin = this.parseExperienceRequirement(job.experience).min || 1; 
             
             // Calculate target Start Time
@@ -99,46 +100,12 @@ export class ExperienceCalculator {
             const constraint = new Date(careerConstraintDate + '-01');
             if (targetStart < constraint) targetStart = constraint;
 
-            // Generate chunks from targetStart to Now
-            let cursor = new Date(targetStart);
-            const nowTime = new Date(nowStr + '-01').getTime();
-
-            // Safety loop limit
-            let loopLimit = 0;
-            while (cursor.getTime() < nowTime && loopLimit < 10) {
-                loopLimit++;
-                // Max 2 years per segment
-                let end = new Date(cursor);
-                end.setFullYear(end.getFullYear() + 2);
-                
-                // Cap at now
-                if (end.getTime() > nowTime) {
-                    end = new Date(nowTime);
-                } 
-
-                const sStr = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
-                // Avoid overlap if making multiple? 
-                // Let's assume contiguous.
-                // End date is inclusive in visualization usually.
-                // Next start is next month.
-                
-                // However, calcYears logic uses diff.
-                // Let's set end date of *this segment*.
-                const eStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}`;
-                
-                const y = this.calcYears(sStr, eStr);
-                if (y > 0) {
-                    supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
-                }
-
-                // Advance cursor for next segment
-                cursor = new Date(end);
-                // cursor.setMonth(cursor.getMonth() + 1); // If we want gap? No, continuous.
-                // If continuous, next start is same as this end? No, next month.
-                // If i worked until 2022-01, next job starts 2022-02.
-                // But if I split one big 4y block into two 2y blocks?
-                // Job A: 2020-01 to 2022-01. Job B: 2022-01 to 2024-01?
-                // Overlap 1 month is fine for logic usually.
+            const end = new Date(nowStr + '-01');
+            const sStr = `${targetStart.getFullYear()}-${String(targetStart.getMonth() + 1).padStart(2, '0')}`;
+            const eStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}`;
+            const y = this.calcYears(sStr, eStr);
+            if (y >= 0.5) {
+                supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
             }
         } else {
             // --- User Has Experience ---
@@ -157,11 +124,13 @@ export class ExperienceCalculator {
                 const gapEnd = new Date(next.startUnix);
                 gapEnd.setMonth(gapEnd.getMonth() - 1);
 
-                const gapMonths = (gapEnd.getTime() - gapStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+                const gapMonths = this.monthsInclusive(gapStart, gapEnd);
                 
                 if (gapMonths >= 6) { // Half year
-                    const sStr = `${gapStart.getFullYear()}-${String(gapStart.getMonth() + 1).padStart(2, '0')}`;
-                    const eStr = `${gapEnd.getFullYear()}-${String(gapEnd.getMonth() + 1).padStart(2, '0')}`;
+                    // Include one boundary month from each adjacent real job so
+                    // the supplement partially, but never fully, overlaps it.
+                    const sStr = curr.endDateNormalized;
+                    const eStr = next.startDateNormalized;
                     const y = this.calcYears(sStr, eStr);
                     supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
                     console.log('[ExperienceCalculator] supplement-added-middle-gap:', {
@@ -186,10 +155,10 @@ export class ExperienceCalculator {
             // Gap ends Now
             const trailingEnd = new Date(nowStr + '-01');
             
-            const trailingGapMonths = (trailingEnd.getTime() - trailingStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+            const trailingGapMonths = this.monthsInclusive(trailingStart, trailingEnd);
             
             if (trailingGapMonths >= 6) {
-                const sStr = `${trailingStart.getFullYear()}-${String(trailingStart.getMonth() + 1).padStart(2, '0')}`;
+                const sStr = last.endDateNormalized;
                 const eStr = nowStr; 
                 const y = this.calcYears(sStr, eStr);
                 supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
@@ -237,10 +206,10 @@ export class ExperienceCalculator {
                 const prependEnd = new Date(firstExistingStart);
                 prependEnd.setMonth(prependEnd.getMonth() - 1);
 
-                if (prependStart < prependEnd) {
-                    const sStr = `${prependStart.getFullYear()}-${String(prependStart.getMonth() + 1).padStart(2, '0')}`;
-                    const eStr = `${prependEnd.getFullYear()}-${String(prependEnd.getMonth() + 1).padStart(2, '0')}`;
-                    const y = this.calcYears(sStr, eStr);
+                const sStr = `${prependStart.getFullYear()}-${String(prependStart.getMonth() + 1).padStart(2, '0')}`;
+                const eStr = firstExistingStartStr;
+                const y = this.calcYears(sStr, eStr);
+                if (prependStart <= prependEnd && this.monthsInclusive(prependStart, prependEnd) >= 6) {
                     supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
                     console.log('[ExperienceCalculator] prepend-added:', {
                         start: sStr,
@@ -343,9 +312,13 @@ export class ExperienceCalculator {
     }
 
     private static calcYears(start: string, end: string): number {
-        const s = new Date(start + '-01');
-        const e = new Date(end + '-01');
-        const diffM = (e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+        const [startYear, startMonth] = start.split('-').map(Number);
+        const [endYear, endMonth] = end.split('-').map(Number);
+        const diffM = (endYear - startYear) * 12 + endMonth - startMonth;
         return Math.max(0, Math.round(diffM / 12 * 10) / 10);
+    }
+
+    private static monthsInclusive(start: Date, end: Date): number {
+        return (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1;
     }
 }

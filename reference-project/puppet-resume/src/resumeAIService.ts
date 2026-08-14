@@ -6,6 +6,7 @@ import { generateExtractionPrompt } from "./prompts/ExtractionPrompt";
 import { ExperienceCalculator } from "./utils/experienceCalculator";
 import { BulletPhaseWorkExperience } from "./prompts/types";
 import { findMissingLockedExperiences } from './utils/lockedExperience';
+import { validateSupplementTimeline } from './utils/supplementTimeline';
 const pdf = require('pdf-parse');
 
 export class ResumeAIService {
@@ -176,6 +177,15 @@ export class ResumeAIService {
               .map((exp) => `${exp.company} (${exp.startDate}-${exp.endDate})`)
               .join(', ');
             throw new Error(`已有公司或工作时间被删除/修改: ${missing}`);
+          }
+
+          const timelineErrors = validateSupplementTimeline(
+            profile.workExperiences || [],
+            data.workExperience,
+            supplementSegments,
+          );
+          if (timelineErrors.length) {
+            throw new Error(`补足经历时间线无效: ${timelineErrors.join('; ')}`);
           }
 
           if (!isEnglish) {

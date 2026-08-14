@@ -14,6 +14,19 @@ interface LayoutStrategy {
     skillItemsPerCat: number;  // 每个分类的技能点数
 }
 
+interface LayoutQuality {
+  pageCount: number;
+  fillRatio: number;
+  hasOrphans: boolean;
+  details: string;
+}
+
+interface LayoutAdjustmentPolicy {
+  id: string;
+  sectionGapDelta: number;
+  lineHeightDelta: number;
+}
+
 /**
  * 渲染配置选项
  */
@@ -25,6 +38,13 @@ export interface RenderOptions {
 export class ResumeGenerator {
   private browser: Browser | null = null;
   private templatePath: string;
+  private readonly layoutPolicies: LayoutAdjustmentPolicy[] = [
+    { id: 'compact-gaps', sectionGapDelta: -1, lineHeightDelta: 0 },
+    { id: 'compact-lines', sectionGapDelta: 0, lineHeightDelta: -1 },
+    { id: 'compact-balanced', sectionGapDelta: -1, lineHeightDelta: -1 },
+    { id: 'expand-gaps', sectionGapDelta: 1, lineHeightDelta: 0 },
+    { id: 'expand-lines', sectionGapDelta: 0, lineHeightDelta: 1 },
+  ];
 
   constructor() {
     // 尝试从多个可能的位置查找模板文件
@@ -42,17 +62,11 @@ export class ResumeGenerator {
    * 获取布局策略
    */
   private getLayoutStrategy(jobCount: number, hasCertificates: boolean): LayoutStrategy {
-      // 循环逻辑 (Cycle of 3):
-      // Page Count: Base 2, increases every 3 jobs (1-3 -> 2pg, 4-6 -> 3pg, 7-9 -> 4pg)
-      // Layout Style: Cycles every 3 jobs (1, 2, 3 pattern)
-      
-      const cycleIndex = (jobCount - 1) % 3; // 0, 1, 2
+      // Page count is measured from full rendered content. Job count only
+      // selects a skill-grid style and never dictates the number of pages.
+      const cycleIndex = jobCount > 0 ? (jobCount - 1) % 3 : 0;
       let strategy: LayoutStrategy;
-
-      // Determine Page Count
-      // Job 1-3: 2 Pages. Job 4-6: 3 Pages.
-      // Formula: 2 + floor((jobCount - 1) / 3)
-      const targetPages = 2 + Math.floor((jobCount - 1) / 3);
+      const targetPages = 1;
 
       switch (cycleIndex) {
           case 0: // Matches Job 1, 4, 7...
@@ -118,24 +132,28 @@ export class ResumeGenerator {
     }
   }
 
-  /**
-   * 自动探测 Chrome 路径 (仅限 Linux)
-   */
+  /** 自动探测系统 Chrome/Chromium 路径。 */
   public detectExecutablePath(): string | undefined {
-    if (process.platform !== 'linux') return undefined;
-
-    // 常见路径列表
-    const paths = [
-      '/usr/bin/google-chrome',
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium',
-      '/snap/bin/chromium'
-    ];
+    const paths = process.platform === 'darwin'
+      ? [
+          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+          '/Applications/Chromium.app/Contents/MacOS/Chromium',
+        ]
+      : process.platform === 'linux'
+        ? [
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/chromium',
+            '/snap/bin/chromium',
+          ]
+        : [];
 
     for (const p of paths) {
       if (existsSync(p)) return p;
     }
+
+    if (process.platform !== 'linux') return undefined;
 
     try {
       // 尝试使用 which 命令
@@ -799,12 +817,7 @@ export class ResumeGenerator {
    * 评估当前布局质量
    * 返回: { pageCount, fillRatio, hasOrphans, details }
    */
-  private async assessLayoutQuality(page: Page): Promise<{
-    pageCount: number,
-    fillRatio: number, // 最后一页填充率 (0-1)
-    hasOrphans: boolean,
-    details: string
-  }> {
+  private async assessLayoutQuality(page: Page): Promise<LayoutQuality> {
      return await page.evaluate((PAGE_HEIGHT) => {
         // 使用最后一个可见元素的底部来计算真实占用页数，而不是 scrollHeight
         // scrollHeight 不包含分页产生的空白
@@ -826,21 +839,79 @@ export class ResumeGenerator {
         let hasOrphans = false;
         let details = "";
         
-        // 检查标题孤儿：标题在页面底部 80px 内 (Danger Zone)
+        // A title is orphaned when its first visible content starts on another page.
         const headers = document.querySelectorAll('.section-title, .work-header, .education-header');
         headers.forEach((h) => {
              const rect = h.getBoundingClientRect();
              const absoluteTop = rect.top + window.scrollY; 
-             
              const topInPage = absoluteTop % PAGE_HEIGHT;
-             if (topInPage > (PAGE_HEIGHT - 80)) {
+
+             let next = h.nextElementSibling;
+             if (!next && h.parentElement) next = h.parentElement.nextElementSibling;
+             const nextRect = next?.getBoundingClientRect();
+             const nextTop = nextRect ? nextRect.top + window.scrollY : absoluteTop;
+             const separatedFromContent = Math.floor(absoluteTop / PAGE_HEIGHT) !== Math.floor(nextTop / PAGE_HEIGHT);
+
+             if (topInPage > (PAGE_HEIGHT - 80) || separatedFromContent) {
                  hasOrphans = true;
-                 details += `Orphan Header at px ${Math.round(absoluteTop)} (Page Bottom); `;
+                 details += `Orphan header at px ${Math.round(absoluteTop)}; `;
              }
         });
 
         return { pageCount, fillRatio, hasOrphans, details };
      }, this.A4_USABLE_HEIGHT);
+  }
+
+  private async applyLayoutPolicy(page: Page, policy: LayoutAdjustmentPolicy): Promise<void> {
+      await page.evaluate((currentPolicy) => {
+          const adjustPx = (element: Element, property: 'marginTop' | 'marginBottom', delta: number) => {
+              const htmlElement = element as HTMLElement;
+              const computed = Number.parseFloat(window.getComputedStyle(htmlElement)[property]) || 0;
+              htmlElement.style[property] = `${Math.max(0, computed + delta)}px`;
+          };
+
+          document.querySelectorAll('.section, .work-item, .education-item, .skill-category').forEach((element) => {
+              adjustPx(element, 'marginTop', currentPolicy.sectionGapDelta);
+              adjustPx(element, 'marginBottom', currentPolicy.sectionGapDelta);
+          });
+
+          if (currentPolicy.lineHeightDelta !== 0) {
+              document.querySelectorAll('.personal-intro, .responsibility-item, .skill-item, .certificate-item').forEach((element) => {
+                  const htmlElement = element as HTMLElement;
+                  const computed = Number.parseFloat(window.getComputedStyle(htmlElement).lineHeight);
+                  if (Number.isFinite(computed)) {
+                      htmlElement.style.lineHeight = `${Math.max(12, computed + currentPolicy.lineHeightDelta)}px`;
+                  }
+              });
+          }
+      }, policy);
+  }
+
+  private async resolveValidatedLayout(page: Page, html: string): Promise<LayoutQuality> {
+      const attemptedPolicies = new Set<string>();
+      const report: Array<Record<string, unknown>> = [];
+
+      for (const policy of this.layoutPolicies.slice(0, 5)) {
+          if (attemptedPolicies.has(policy.id)) continue;
+          attemptedPolicies.add(policy.id);
+
+          await page.setContent(html, { waitUntil: 'load' });
+          await this.applyLayoutPolicy(page, policy);
+          await this.applySmartPageBreaks(page, this.ORPHAN_THRESHOLD);
+          const quality = await this.assessLayoutQuality(page);
+
+          const valid = !quality.hasOrphans && quality.pageCount >= 1 &&
+              !(quality.pageCount > 1 && quality.fillRatio < 0.15);
+          report.push({ attempt: attemptedPolicies.size, policy: policy.id, valid, ...quality });
+          if (valid) {
+              console.log(`[Layout Validation] Accepted policy ${policy.id}: ${JSON.stringify(quality)}`);
+              return quality;
+          }
+      }
+
+      const serializedReport = JSON.stringify({ attempts: report }, null, 2);
+      console.error(`[Layout Validation] Failed after 5 unique adjustments:\n${serializedReport}`);
+      throw new Error(`Layout validation failed after 5 unique adjustments. Report: ${serializedReport}`);
   }
 
   /**
@@ -858,9 +929,9 @@ export class ResumeGenerator {
 
       // 2. 获取命运确定的策略
       const strategy = this.getLayoutStrategy(jobCount, hasCertificates);
-      const targetPages = strategy.targetPages;
+      let targetPages = strategy.targetPages;
 
-      console.log(`[Layout Strategy] Jobs: ${jobCount}, HasCerts: ${hasCertificates}, TargetPages: ${targetPages}, SkillCols: ${strategy.skillColumns}, SkillCats: ${strategy.skillCategories}, ItemsPerCat: ${strategy.skillItemsPerCat}`);
+      console.log(`[Layout Strategy] Jobs: ${jobCount}, HasCerts: ${hasCertificates}, SkillCols: ${strategy.skillColumns}, SkillCats: ${strategy.skillCategories}, ItemsPerCat: ${strategy.skillItemsPerCat}`);
 
       const PAGE_HEIGHT = this.A4_USABLE_HEIGHT;
 
@@ -869,6 +940,8 @@ export class ResumeGenerator {
       const calibOps: RenderOptions = { jobConfig: maxConfig, strategy: strategy };
       const calibHtml = this.generateHTML(data, calibOps);
       await page.setContent(calibHtml, { waitUntil: 'load' }); // load to render grid
+      await this.applySmartPageBreaks(page, this.ORPHAN_THRESHOLD);
+      const naturalQuality = await this.assessLayoutQuality(page);
       
       // Step B: Extract Layout Blocks inline (Reusing existing extraction logic flow)
       
@@ -1125,93 +1198,34 @@ export class ResumeGenerator {
       console.log(`1. 固定空间计算: ${Math.round(staticTotal)} (约占 ${Math.ceil(staticTotal/PAGE_HEIGHT)} 页)`);
       if (staticTotal > PAGE_HEIGHT) console.log(`   [警报] 固定高度超过 ${Math.ceil(staticTotal/PAGE_HEIGHT)-1} 页！`);
 
-      // 2. Greedy Allocation based on Strategy Target
-      // 初始分配：第一份工作 6 条职责，其他工作 4 条，以保证高质量呈现
-      let currentConfig: number[] = new Array(numJobs).fill(0).map((_, i) => i === 0 ? 6 : 4);
-      
-      // 获取 AI 提供给这段经历的实际最大职责数 (通常由 AI 服务层强制为 8)
+      // Start with every generated responsibility. Natural pagination must not
+      // delete content merely to hit a smaller page count.
       const maxBulletsPerJob = new Array(numJobs).fill(0);
       allBlocks.forEach(b => {
           if (b.type === 'job_bullet' && typeof b.jobIndex === 'number') {
               maxBulletsPerJob[b.jobIndex] = Math.max(maxBulletsPerJob[b.jobIndex], (b.bulletIndex || 0) + 1);
           }
       });
-      // 安全限制，防止初始值超过 AI 实际生成的条数
-      currentConfig = currentConfig.map((v, i) => Math.min(v, maxBulletsPerJob[i]));
+      const fullSim = simulateLayout(maxBulletsPerJob, this.ORPHAN_THRESHOLD);
+      targetPages = Math.max(1, naturalQuality.pageCount);
+      const fullLastPageFill = naturalQuality.fillRatio;
+      strategy.targetPages = targetPages;
+      console.log(`[Natural Layout] DOM pages: ${naturalQuality.pageCount}, last-page fill: ${(fullLastPageFill * 100).toFixed(1)}%, simulation estimate: ${fullSim.pages}`);
+      const currentConfig = [...maxBulletsPerJob];
       
-      // Check if base config already explodes
+      // The simulator is diagnostic only. It must never remove generated
+      // responsibilities to force the document into its estimated page count.
       const baseSim = simulateLayout(currentConfig);
-      if (baseSim.pages > targetPages) {
-          // 如果基准配置（6/4/4...）已经超页，则向下裁剪
-          console.warn(`[Solver] Base config exceeds target ${targetPages}. Pruning down...`);
-          let canPrune = true;
-          while (canPrune) {
-              canPrune = false;
-              // 从最后一份工作开始往回减，直到不超页或减到 3 条为止
-              for (let j = numJobs - 1; j >= 0; j--) {
-                  if (currentConfig[j] > 3) {
-                      currentConfig[j]--;
-                      if (simulateLayout(currentConfig).pages <= targetPages) {
-                          // 减完这一条就达标了
-                          canPrune = false;
-                          break; 
-                      }
-                      canPrune = true; // 还能继续试
-                  }
-              }
-              if (currentConfig.every(v => v <= 3)) break; // 全减到 3 了还没法满足，就只能这样了
-          }
-      } else {
-          // 如果没超页，则向上增加（贪婪模式）
-          let changed = true;
-          while(changed) {
-              changed = false;
-              for (let j = 0; j < numJobs; j++) {
-                  if (currentConfig[j] < maxBulletsPerJob[j]) {
-                      // Try adding
-                      currentConfig[j]++;
-                      const sim = simulateLayout(currentConfig);
-                      if (sim.pages <= targetPages) {
-                          changed = true; // Keep it
-                      } else {
-                          currentConfig[j]--; // Revert
-                      }
-                  }
-              }
-          }
+      if (baseSim.pages !== targetPages) {
+          console.log(`[Natural Layout] Simulation differs from DOM (${baseSim.pages} vs ${targetPages}); DOM result wins.`);
       }
 
-      // --- SECOND ROUND: Aggressive Filling (Relaxed Constraints) ---
-      // 尝试通过放宽排版约束（如允许标题更靠近底部），进一步利用页面空间（针对 90%+ 填充率的情况）
-      let finalDangerZone = 0; // 改为 0 (Relaxed)，让布局默认尽可能写满
-      {
-          const RELAXED_DANGER_ZONE = 0; // 从 50px 放宽到 0px
-          console.log(`[Solver] Round 2: Attempting Aggressive Fill (DangerZone: ${RELAXED_DANGER_ZONE}px)...`);
-          
-          let changed = true;
-          while(changed) {
-              changed = false;
-              for (let j = 0; j < numJobs; j++) {
-                  if (currentConfig[j] < maxBulletsPerJob[j]) {
-                      currentConfig[j]++;
-                      const sim = simulateLayout(currentConfig, RELAXED_DANGER_ZONE);
-                      if (sim.pages <= targetPages) {
-                          changed = true; // Squeezed in!
-                          finalDangerZone = RELAXED_DANGER_ZONE; // Commit to relaxed zone
-                          console.log(`   -> [Round 2] Added bullet to Job ${j} (Count: ${currentConfig[j]})`);
-                      } else {
-                          currentConfig[j]--; // Revert
-                      }
-                  }
-              }
-          }
-      }
+      const finalDangerZone = this.ORPHAN_THRESHOLD;
 
       // Calculate Final Stats
-      const finalSim = simulateLayout(currentConfig, finalDangerZone);
-      const fillPercent = ((finalSim.lastPageHeight / PAGE_HEIGHT) * 100).toFixed(1);
+      const fillPercent = (naturalQuality.fillRatio * 100).toFixed(1);
       const remainingPercent = (100 - parseFloat(fillPercent)).toFixed(1);
-      const remainingPx = Math.round(PAGE_HEIGHT - finalSim.lastPageHeight);
+      const remainingPx = Math.round(PAGE_HEIGHT * (1 - naturalQuality.fillRatio));
 
       console.log(`3. 最佳填充方案: [${currentConfig}]`);
       console.log(`4. 最后一页剩余率: ${remainingPercent}% (剩余 ${remainingPx}px / 总高 ${Math.round(PAGE_HEIGHT)}px)`);
@@ -1246,21 +1260,6 @@ export class ResumeGenerator {
   private getJobConfig(arr: number[], idx: number | undefined) {
       if (typeof idx === 'number' && idx >= 0 && idx < arr.length) return arr[idx];
       return 0;
-  }
-
-  /**
-   * 最终布局校验 (Safety Net)
-   */
-  private async validateLayoutResult(page: Page): Promise<{ pageCount: number, fillRatio: number }> {
-      const quality = await this.assessLayoutQuality(page);
-      if (quality.hasOrphans) {
-          console.warn(`[Layout Warning] Final PDF may have layout issues: ${quality.details}`);
-      }
-      if (quality.fillRatio < 0.15 && quality.pageCount > 1) {
-          console.warn(`[Layout Warning] Last page is too empty (${(quality.fillRatio * 100).toFixed(0)}%)`);
-      }
-      console.log(`[Validation Passed] Final Layout Check OK. Pages: ${quality.pageCount}`);
-      return quality;
   }
 
   /**
@@ -1306,7 +1305,7 @@ export class ResumeGenerator {
       // 所以理论上直接 generate PDF 即可。
 
       // Step 4: 最终校验并获取精确页数，防止产生空白页
-      const quality = await this.validateLayoutResult(page);
+      const quality = await this.resolveValidatedLayout(page, finalHtml);
 
       // 检查头像图片 (保持原有逻辑)
       if (data.avatar) {
@@ -1370,4 +1369,3 @@ export class ResumeGenerator {
     return (await this.generatePDF(data)) as Buffer;
   }
 }
-
