@@ -8,6 +8,7 @@ export const PAGE_MARGIN_BOTTOM_PX = 40;
 export const PAGE_MARGIN_LEFT_PX = 50;
 export const PAGE_CONTENT_WIDTH_PX = 694 as const;
 export const PAGE_CONTENT_HEIGHT_PX = 1043 as const;
+export const PREVIEW_PAGE_GAP_PX = 34;
 export const MIN_PAGE_FILL_RATIO = 0.92;
 export const TARGET_BOTTOM_MARGIN_PX = 42;
 export const CALIBRATION_STEPS = 8;

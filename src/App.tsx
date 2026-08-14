@@ -9,6 +9,7 @@ import {
 import type { CSSProperties } from 'react';
 import { ResumePreviewFrame } from './components/resume-preview/ResumePreviewFrame';
 import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from './resume-renderer/types';
+import { A4_HEIGHT_PX, A4_WIDTH_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
 import {
   AlignLeft,
   ArrowLeft,
@@ -178,8 +179,6 @@ const LIBRARY_VERSION = 3;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
 const MAX_JOB_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCE_TEXT_CHARS = 20_000;
-const RESUME_PAGE_HEIGHT = 1123;
-const RESUME_PAGE_GAP = 34;
 type CssVariables = CSSProperties & Record<`--${string}`, string>;
 
 function normalizeGenerationEvidence(value) {
@@ -4657,7 +4656,7 @@ function PreviewPanel({
   onLayoutFailure,
 }) {
   const [colorMenu, setColorMenu] = useState(false);
-  const [contentHeight, setContentHeight] = useState(RESUME_PAGE_HEIGHT);
+  const [contentHeight, setContentHeight] = useState(A4_HEIGHT_PX);
   const zoomPercent = Math.round(zoom * 100);
   const canonicalDocument = useMemo(() => ({
     id: documentId, documentName, language, data, template: 'profile' as const, accent,
@@ -4672,14 +4671,14 @@ function PreviewPanel({
     ? canonicalPageCount
     : hasServerLayout
     ? serverPageCount
-    : Math.max(1, Math.ceil(contentHeight / RESUME_PAGE_HEIGHT));
-  const previewHeight = pageCount * (RESUME_PAGE_HEIGHT + RESUME_PAGE_GAP);
+    : Math.max(1, Math.ceil(contentHeight / A4_HEIGHT_PX));
+  const previewHeight = pageCount * (A4_HEIGHT_PX + PREVIEW_PAGE_GAP_PX);
   const updateProfilePageHeight = useCallback((height) => {
     setContentHeight((current) => (Math.abs(current - height) < 1 ? current : height));
   }, []);
 
   useEffect(() => {
-    setContentHeight(RESUME_PAGE_HEIGHT);
+    setContentHeight(A4_HEIGHT_PX);
   }, [template]);
 
   const changeZoom = (delta) => {
@@ -4786,7 +4785,7 @@ function PreviewPanel({
               <div className="resume-sheet-clip">
                 <div
                   className="resume-sheet-content"
-                  style={{ transform: `translateY(-${pageIndex * RESUME_PAGE_HEIGHT}px)` }}
+                  style={{ transform: `translateY(-${pageIndex * A4_HEIGHT_PX}px)` }}
                 >
                   <ResumePage
                     data={data}
@@ -4857,7 +4856,7 @@ function ResumeStage({ zoom, setZoom, pageHeight, initialPosition, onPositionCha
   const hasRestoredPositionRef = useRef(false);
   const [fitScale, setFitScale] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  const pageWidth = 794;
+  const pageWidth = A4_WIDTH_PX;
 
   useLayoutEffect(() => {
     const element = stageRef.current;
@@ -4871,7 +4870,7 @@ function ResumeStage({ zoom, setZoom, pageHeight, initialPosition, onPositionCha
         Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
       const availableWidth = Math.max(bounds.width - horizontalPadding, 280);
       const availableHeight = Math.max(bounds.height - verticalPadding, 420);
-      const nextScale = Math.min(availableWidth / pageWidth, availableHeight / RESUME_PAGE_HEIGHT, 1);
+      const nextScale = Math.min(availableWidth / pageWidth, availableHeight / A4_HEIGHT_PX, 1);
       setFitScale((current) => (Math.abs(current - nextScale) < 0.0005 ? current : nextScale));
     };
     updateScale();
@@ -5025,7 +5024,7 @@ function ResumePage({
   useLayoutEffect(() => {
     if (!onContentHeightChange) return undefined;
     const frame = window.requestAnimationFrame(() => {
-      const contentHeight = Math.max(RESUME_PAGE_HEIGHT, Math.ceil(pageRef.current?.scrollHeight || RESUME_PAGE_HEIGHT));
+      const contentHeight = Math.max(A4_HEIGHT_PX, Math.ceil(pageRef.current?.scrollHeight || A4_HEIGHT_PX));
       onContentHeightChange(contentHeight);
     });
     return () => window.cancelAnimationFrame(frame);
