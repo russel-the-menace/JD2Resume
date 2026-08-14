@@ -2332,8 +2332,8 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
           documentName={documentName}
           layoutManifest={initialResumeState.legacyLayoutManifest}
           renderState={renderState}
-          allowContentRefinement={Boolean(initialResumeState.generationEvidence?.applicationId)}
-          onLayoutFailure={refineGeneratedLayout}
+          allowContentRefinement={false}
+          onLayoutFailure={undefined}
           onValidPlan={(pagePlan, report) => {
             setRenderState((current) => {
               if (current.pagePlan?.snapshotHash === pagePlan.snapshotHash && current.pagePlan?.revision === pagePlan.revision) return current;

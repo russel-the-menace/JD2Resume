@@ -720,6 +720,25 @@ function profileDirectoryPlugin(baseUrl: string): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const providers: Provider[] = [];
+  const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://www.yunqiaoai.top';
+  if (env.CLOUD_BRIDGE_API_KEY) {
+    const endpoint = chatCompletionsEndpoint(cloudBridgeBaseUrl);
+    const models = env.CLOUD_BRIDGE_PRIMARY_MODEL ? [
+      env.CLOUD_BRIDGE_PRIMARY_MODEL,
+      env.CLOUD_BRIDGE_SECONDARY_MODEL || 'gemini-3.6-flash',
+      env.CLOUD_BRIDGE_TERTIARY_MODEL || 'gemini-3.1-pro-preview',
+    ] : ['gemini-3.6-flash', 'gemini-3.7-flash', env.CLOUD_BRIDGE_TERTIARY_MODEL || 'gemini-3.1-pro-preview'];
+    providers.push(...models.map((model) => ({
+      kind: 'chat' as const,
+      apiKey: env.CLOUD_BRIDGE_API_KEY,
+      endpoint,
+      model,
+      pdfModel: env.CLOUD_BRIDGE_VISION_MODEL || 'gemini-3.6-flash',
+      supportsDirectFileInput: true,
+    })));
+  }
+  // The bridge is the low-latency generation path. Direct Google endpoints remain
+  // fallbacks because they can be unreachable for tens of seconds on this network.
   const geminiBaseUrl = env.GOOGLE_AI_API_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
   const generationModel = env.GEMINI_GENERATION_MODEL || 'gemini-3.7-flash';
   const googleKeys = [env.GOOGLE_AI_STUDIO_PRIMARY_KEY, env.GOOGLE_AI_STUDIO_SECONDARY_KEY].filter(Boolean);
@@ -730,23 +749,6 @@ export default defineConfig(({ mode }) => {
     model: generationModel,
     supportsDirectFileInput: true,
   })));
-  const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://www.yunqiaoai.top';
-  if (env.CLOUD_BRIDGE_API_KEY) {
-    const endpoint = chatCompletionsEndpoint(cloudBridgeBaseUrl);
-    const models = [
-      env.CLOUD_BRIDGE_PRIMARY_MODEL || 'gemini-3.7-flash',
-      env.CLOUD_BRIDGE_SECONDARY_MODEL || 'gemini-3.6-flash',
-      env.CLOUD_BRIDGE_TERTIARY_MODEL || 'gemini-3.1-pro-preview',
-    ];
-    providers.push(...models.map((model) => ({
-      kind: 'chat' as const,
-      apiKey: env.CLOUD_BRIDGE_API_KEY,
-      endpoint,
-      model,
-      pdfModel: env.CLOUD_BRIDGE_VISION_MODEL || 'gemini-3.6-flash',
-      supportsDirectFileInput: true,
-    })));
-  }
   const profileModels: ProfileImportModels = {
     lite: env.GEMINI_PROFILE_LITE_MODEL || 'gemini-3.5-flash-lite',
     mini: env.GEMINI_PROFILE_FLASH_MODEL || 'gemini-3.6-flash',
