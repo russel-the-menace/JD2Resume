@@ -67,6 +67,46 @@ function validateResponsibilityLength(value: string, isEnglish: boolean, maxChar
   return { valid: length >= minimum && length <= maximum, length, minimum, maximum };
 }
 
+function tagSegments(value: string, tag: 'b' | 'u'): string[] {
+  const expression = new RegExp(`<${tag}>(.*?)<\\/${tag}>`, 'gi');
+  return [...String(value).matchAll(expression)].map((match) => match[1]);
+}
+
+function assertValidTagPairs(value: string, tag: 'b' | 'u'): void {
+  const openings = String(value).match(new RegExp(`<${tag}>`, 'gi'))?.length || 0;
+  const closings = String(value).match(new RegExp(`<\\/${tag}>`, 'gi'))?.length || 0;
+  if (openings !== closings || openings !== tagSegments(value, tag).length) {
+    throw new Error(`<${tag}> 标记必须成对且不可嵌套`);
+  }
+}
+
+function validateResponsibilityHighlights(
+  responsibilities: string[],
+  isEnglish: boolean,
+  maxCharPerLine: number,
+  experienceIndex: number,
+): void {
+  if (responsibilities.some((item) => /<\/?b>/i.test(item))) {
+    throw new Error(`工作职责禁止使用加深标记 index=${experienceIndex}`);
+  }
+
+  const highlighted = responsibilities.filter((item) => /<\/?u>/i.test(item));
+  if (highlighted.length < 1 || highlighted.length > 2) {
+    throw new Error(`每段工作经历必须仅有 1-2 条职责包含下划线 index=${experienceIndex}`);
+  }
+
+  highlighted.forEach((item) => {
+    assertValidTagPairs(item, 'u');
+    const segments = tagSegments(item, 'u');
+    if (segments.length !== 1) throw new Error(`单条职责只允许一处下划线 index=${experienceIndex}`);
+    const segmentLength = responsibilityLength(segments[0], isEnglish);
+    const fullLength = responsibilityLength(item, isEnglish);
+    if (segmentLength <= 0 || segmentLength >= fullLength || segmentLength > maxCharPerLine * 0.6) {
+      throw new Error(`下划线必须只标记简短的重要数据或关键短语 index=${experienceIndex}`);
+    }
+  });
+}
+
 /** Puppet Resume's two-phase content generation pipeline. */
 export class PuppetResumePipeline {
   constructor(private readonly generateText: PuppetTextGenerator) {}
@@ -120,9 +160,24 @@ export class PuppetResumePipeline {
         for (const field of ['position', 'yearsOfExperience', 'personalIntroduction', 'professionalSkills']) {
           if (isIllegal(data[field])) throw new Error(`关键字段 "${field}" 内容非法、缺失或包含无效嵌套内容`);
         }
+        assertValidTagPairs(data.personalIntroduction, 'b');
+        const introductionBoldCount = tagSegments(data.personalIntroduction, 'b').length;
+        if (introductionBoldCount < 1 || introductionBoldCount > 2) {
+          throw new Error('个人介绍必须仅有 1-2 处加深内容');
+        }
+        if (/<\/?u>/i.test(data.personalIntroduction)) throw new Error('个人介绍禁止使用下划线');
+        const nonIntroductionText = JSON.stringify({
+          position: data.position,
+          professionalSkills: data.professionalSkills,
+          workExperience: data.workExperience,
+        });
+        if (/<\/?(?:b|u)>/i.test(nonIntroductionText)) {
+          throw new Error('非职责阶段仅允许在个人介绍中使用加深标记');
+        }
         if (!Array.isArray(data.workExperience) || data.workExperience.length === 0) {
           throw new Error('workExperience 不能为空');
         }
+        if (data.workExperience.length < 2) throw new Error('workExperience 至少需要 2 段');
         if (data.workExperience.some((experience: any) => isIllegal(experience.company))) {
           throw new Error('workExperience 骨架字段不完整');
         }
@@ -189,6 +244,7 @@ export class PuppetResumePipeline {
               );
             }
           });
+          validateResponsibilityHighlights(experience.responsibilities, isEnglish, maxCharPerLine, index);
         });
         return true;
       } catch (error: any) {

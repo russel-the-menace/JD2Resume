@@ -159,7 +159,7 @@ Experience ${i + 1}:
    - **Content Focus**:
      - **First Paragraph**: 3-4 lines. Focus on technical expertise, industry tenure, and core value proposition (Professional Persona).
      - **Second Paragraph**: 2 lines. Focus on leadership style, high-level methodology (e.g., data-driven, user-centric), or soft skills/achievements.
-   - **Bolding Requirement**: You MUST include **EXACTLY TWO bold keywords** (using <b> tags) within the Personal Introduction. These should be placed on the most critical skills or achievements that highlight the candidate's core competencies.
+   - **Bolding Requirement**: Include only 1-2 short <b> emphasis segments in the Personal Introduction. Do not use <u> here.
    - **Crucial**: DO NOT use decimals for years of experience (e.g., "5.8 years"). Round to integers (e.g., "6 years") or use phrases like "Over 5 years".
 5. **Professional Skills**: 4 categories, 4 items each.
    - **Principle**: Base skills on ${targetTitle} requirements. You may IGNORE user's original skills if irrelevant.
@@ -170,19 +170,15 @@ Experience ${i + 1}:
    - **Avoid Weak Verbs**: Avoid "Responsible for", "Helped with", "Assisted".
    - **Quantifiable Results**: MUST use numbers, percentages, metrics.
    - **STAR Method**: Situation, Task, Action, Result.
-   - **Bolding Requirements (Mandatory)**:
-     - **The first bullet point** in each role MUST include exactly one segment of bolded text (using <b> tags) on a key achievement or metric.
-     - **Exactly two additional bullet points** among the remaining items MUST each include exactly one segment of bolded text (using <b> tags).
-     - **Total**: Each job description should have exactly 3 bullet points containing bolded text.
-   - **Examples**:
-     * ✅ "Engineered core optimization reducing latency from <b>500ms to 200ms (+60%)</b>, supporting 3x DAU growth."
-     * ✅ "Spearheaded <b>0-to-1 project architecture</b>, driven 200% user growth to 300k DAU."
-     * ❌ "Responsible for system optimization." (Too weak)
+   - **Highlighting Requirements (Mandatory)**:
+     - Do not use <b> in any responsibility.
+     - In each role, select only 1-2 important bullets; each selected bullet contains exactly one short <u> segment around a metric or key phrase, never the whole sentence.
+     - The underlined phrase does not have to be numeric.
    - Ensure the user sounds like a **Key Contributor**, not just a participant.
 7. **No Abbreviations for Professional Terms**: DO NOT use acronyms or abbreviations followed by parentheses for professional methodologies or concepts (e.g., ❌ Ecosystem-Led Growth (ELG)). Always use the full form: ✅ Ecosystem-Led Growth. This applies to all industry-specific terminology.
 8. **Formatting**:
-   - **Personal Introduction**: MUST have exactly 2 bold keywords (<b>...</b>).
-   - **Work Experience**: MUST follow the specific 1+2 bolding rule defined in section 6.
+   - **Personal Introduction**: Use only 1-2 bold segments (<b>...</b>).
+   - **Work Experience**: No bold text; use the 1-2 underline rule defined in section 6.
    - **Constraint**: Do NOT use markdown bold like **text** in JSON strings.
 
 ### 7. Output Format (Pure JSON)
@@ -315,9 +311,9 @@ ${lockDecisions || 'None'}
   - if original company name is already English, preserve exactly.
   - if original company name is Chinese, translate to professional English / official brand naming.
   - do not invent unrelated company entities for existing roles.
-6. personalIntroduction must be exactly 2 paragraphs in implied first-person style (no “I/My”), no decimal years, and include exactly 2 <b> keywords.
+6. personalIntroduction must be exactly 2 paragraphs in implied first-person style (no “I/My”), use no decimal years, and contain only 1-2 short <b> emphasis segments. Do not use <u> in the introduction.
 7. professionalSkills must have exactly 4 categories with 4 items each, role-relevant.
-8. Do not use markdown bold (**text**) inside JSON strings; only use <b> tags where required.
+8. Outside the 1-2 <b> segments in personalIntroduction, do not use <b>, <u>, or markdown emphasis in any phase-one field.
 9. Output JSON only.
 10. For experiences marked as "LOCK=must keep exactly", output workExperience.position must exactly match original title text (except trimming spaces); no translation, no semantic rename, no seniority downgrade.
 
@@ -406,8 +402,9 @@ ${anchors}
 4. Use strong action verbs; avoid weak phrasing like “Responsible for” or “Helped with”.
 5. Follow STAR logic and keep each bullet outcome-oriented.
 5.1 Prefer ${Math.floor((context.maxCharPerLine || 90) * 1.7)}-${Math.floor((context.maxCharPerLine || 90) * 2.1)} visible characters after removing HTML tags. Count and verify every bullet before the first response; do not make bullets so short that they occupy one line or so long that they spill into a third line.
-6. Bolding rule per role: first bullet must contain exactly one <b> segment; among remaining bullets, exactly two bullets each contain one <b> segment (total 3 bullets with <b> per role).
-7. Avoid acronym-with-parentheses style for professional methodologies (write full terms when possible).
+6. Do not use <b> in any responsibility. Bold emphasis is reserved for the personal introduction.
+7. In each work experience, select only 1-2 of the most important bullets for underline emphasis. Each selected bullet must contain exactly one short <u> segment around a key metric or key phrase, never the full sentence. The underlined phrase does not have to be numeric.
+7.1 Avoid acronym-with-parentheses style for professional methodologies (write full terms when possible).
 8. Do not add, remove, or rewrite non-responsibility fields.
 9. Even if context is sparse, still provide 8 high-quality bullets. Every bullet must fill approximately two lines without spilling into a clear third line.
 

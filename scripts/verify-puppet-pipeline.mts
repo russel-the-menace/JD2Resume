@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { PuppetResumePipeline } from '../server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from '../server/puppet-resume/adapter';
+import { ExperienceCalculator } from '../server/puppet-resume/utils/experienceCalculator';
 
 const input = {
   applicationId: 'application-test',
@@ -20,6 +21,13 @@ const input = {
       workContent: 'Built distributed services',
       startDate: '2020-01',
       endDate: 'Present',
+    }, {
+      company: 'Earlier Company',
+      jobTitle: 'Junior Software Engineer',
+      businessDirection: 'Developer tools',
+      workContent: 'Built internal automation',
+      startDate: '2017-01',
+      endDate: '2019-12',
     }],
     educations: [{
       school: 'Test University',
@@ -51,28 +59,46 @@ const phaseOne = {
     startDate: '2020-01',
     endDate: '至今',
     responsibilities: [],
+  }, {
+    company: 'Earlier Company',
+    position: 'Junior Software Engineer',
+    startDate: '2017-01',
+    endDate: '2019-12',
+    responsibilities: [],
   }],
 };
 const responsibilities = Array.from({ length: 8 }, (_, index) =>
   index === 0
-    ? 'Engineered <b>core services</b> with measurable reliability gains across distributed workloads, improving delivery confidence, observability, and incident response for product teams.'
+    ? 'Engineered core services with <u>measurable reliability gains</u> across distributed workloads, improving delivery confidence, observability, and incident response for product teams.'
     : `Delivered measurable platform result ${index + 1} by improving service reliability, automated validation, operational monitoring, and release quality across remote product teams.`
 );
 const phaseTwo = {
-  workExperience: [{
-    company: 'Real Company',
-    position: 'Software Engineer',
-    startDate: '2020-01',
-    endDate: '至今',
-    responsibilities,
-  }],
+  workExperience: phaseOne.workExperience.map((experience) => ({ ...experience, responsibilities })),
 };
 
 const prompts: string[] = [];
 const responses = [phaseOne, phaseTwo];
 const pipeline = new PuppetResumePipeline(async (prompt, validator) => {
   prompts.push(prompt);
-  const response = JSON.stringify(responses[prompts.length - 1]);
+  const responseIndex = prompts.length - 1;
+  if (responseIndex === 0) {
+    await assert.rejects(
+      async () => validator(JSON.stringify({ ...phaseOne, personalIntroduction: 'Introduction without emphasis.\n\nSecond paragraph.' })),
+      /个人介绍必须仅有 1-2 处加深内容/,
+    );
+  } else {
+    const invalidBulletPhase = {
+      workExperience: phaseTwo.workExperience.map((experience) => ({
+        ...experience,
+        responsibilities: experience.responsibilities.map((item) => item.replace(/<\/?u>/g, '')),
+      })),
+    };
+    await assert.rejects(
+      async () => validator(JSON.stringify(invalidBulletPhase)),
+      /每段工作经历必须仅有 1-2 条职责包含下划线/,
+    );
+  }
+  const response = JSON.stringify(responses[responseIndex]);
   assert.equal(await validator(response), true);
   return response;
 });
@@ -87,11 +113,37 @@ const mainResume = fromPuppetResume(puppetResume);
 assert.equal(prompts.length, 2);
 assert.match(prompts[0], /Phase 1 \(Non-Job Bullet\)/);
 assert.match(prompts[1], /Phase 2 \(Job Bullet\)/);
+assert.equal(puppetResume.workExperience.length, 2);
 assert.equal(puppetResume.workExperience[0].responsibilities?.length, 8);
 assert.equal(mainResume.experience[0].company, 'Real Company');
 assert.equal(mainResume.experience[0].end, 'Present');
 assert.equal(mainResume.skills.categories.length, 4);
+assert.doesNotMatch(prompts[1], /first bullet must contain exactly one <b>/i);
 console.log('Puppet Resume two-phase pipeline verified.');
+
+const minimumExperienceCalculation = ExperienceCalculator.calculate({
+  ...request.resume_profile,
+  workExperiences: [],
+  educations: [{
+    school: 'Test University',
+    degree: 'Bachelor',
+    major: 'Computer Science',
+    startDate: '2022-09',
+    endDate: '2026-06',
+    description: '',
+  }],
+}, request.job_data);
+assert.equal(minimumExperienceCalculation.earliestWorkDate, '2023-02');
+assert.equal(minimumExperienceCalculation.allWorkExperiences.length, 2);
+assert.ok(minimumExperienceCalculation.allWorkExperiences.every((experience) => experience.startDate >= '2023-02'));
+
+const singleExperienceCalculation = ExperienceCalculator.calculate({
+  ...request.resume_profile,
+  workExperiences: request.resume_profile.workExperiences.slice(0, 1),
+}, request.job_data);
+assert.equal(singleExperienceCalculation.allWorkExperiences.length, 2);
+assert.equal(singleExperienceCalculation.supplementSegments.length, 1);
+assert.ok(singleExperienceCalculation.supplementSegments[0].startDate >= singleExperienceCalculation.earliestWorkDate);
 
 const chineseNameRequest = toPuppetRequest({
   ...input,

@@ -15,6 +15,8 @@ export interface ExperienceCalculationResult {
 }
 
 export class ExperienceCalculator {
+    private static readonly MIN_WORK_EXPERIENCES = 2;
+
     public static calculate(profile: ResumeProfile, job: JobData): ExperienceCalculationResult {
         const now = new Date();
         const currentYear = now.getFullYear();
@@ -29,8 +31,9 @@ export class ExperienceCalculator {
         const sortedEdus = [...(profile.educations || [])].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
 
         if (sortedEdus.length > 0) {
-            // Career Start constraint: University Start Date (first one)
-            if (sortedEdus[0].startDate) careerConstraintDate = sortedEdus[0].startDate;
+            // The earliest plausible internship starts after the first university
+            // semester. For a September intake, this resolves to the February break.
+            if (sortedEdus[0].startDate) careerConstraintDate = this.shiftMonth(sortedEdus[0].startDate, 5);
 
             // Graduation Date: End Date of the first completed degree (usually Bachelor)
             // Heuristic: Use the first one that has a valid end date
@@ -88,8 +91,6 @@ export class ExperienceCalculator {
         // 3. Logic Branching
         if (existingExps.length === 0) {
             // --- Case 0: No Experience ---
-            // The empty timeline is a single gap. Generate at most one segment,
-            // with no artificial count or duration cap.
             const reqMin = this.parseExperienceRequirement(job.experience).min || 1;
 
             // Calculate target Start Time
@@ -100,13 +101,19 @@ export class ExperienceCalculator {
             const constraint = new Date(careerConstraintDate + '-01');
             if (targetStart < constraint) targetStart = constraint;
 
-            const end = new Date(nowStr + '-01');
-            const sStr = `${targetStart.getFullYear()}-${String(targetStart.getMonth() + 1).padStart(2, '0')}`;
-            const eStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}`;
-            const y = this.calcYears(sStr, eStr);
-            if (y >= 0.5) {
-                supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
+            const startIndex = targetStart.getFullYear() * 12 + targetStart.getMonth();
+            const endIndex = currentYear * 12 + currentMonth - 1;
+            if (endIndex - startIndex + 1 < this.MIN_WORK_EXPERIENCES) {
+                throw new Error(`可用工作时间线不足，无法生成至少 ${this.MIN_WORK_EXPERIENCES} 段工作经历`);
             }
+
+            const secondStartIndex = startIndex + Math.floor((endIndex - startIndex + 1) / 2);
+            const firstEndIndex = secondStartIndex - 1;
+            const olderStart = this.monthFromIndex(startIndex);
+            const olderEnd = this.monthFromIndex(firstEndIndex);
+            const newerStart = this.monthFromIndex(secondStartIndex);
+            supplementSegments.push({ startDate: olderStart, endDate: olderEnd, years: this.calcYears(olderStart, olderEnd) });
+            supplementSegments.push({ startDate: newerStart, endDate: nowStr, years: this.calcYears(newerStart, nowStr) });
         } else {
             // --- User Has Experience ---
 
@@ -227,6 +234,42 @@ export class ExperienceCalculator {
             }
         }
 
+        if (existingExps.length + supplementSegments.length < this.MIN_WORK_EXPERIENCES) {
+            const first = existingExps[0];
+            const last = existingExps[existingExps.length - 1];
+            const leadingStart = new Date(careerConstraintDate + '-01');
+            const leadingEnd = new Date(first.startUnix);
+            leadingEnd.setMonth(leadingEnd.getMonth() - 1);
+            const leadingGapMonths = this.monthsInclusive(leadingStart, leadingEnd);
+            const leadingSegment = {
+                startDate: careerConstraintDate,
+                endDate: first.startDateNormalized,
+                years: this.calcYears(careerConstraintDate, first.startDateNormalized),
+            };
+            const duplicateLeading = supplementSegments.some((segment) =>
+                segment.startDate === leadingSegment.startDate && segment.endDate === leadingSegment.endDate);
+
+            if (leadingGapMonths >= 6 && !duplicateLeading) {
+                supplementSegments.push(leadingSegment);
+            } else {
+                const trailingStart = new Date(last.endUnix);
+                trailingStart.setMonth(trailingStart.getMonth() + 1);
+                const trailingGapMonths = this.monthsInclusive(trailingStart, new Date(nowStr + '-01'));
+                const trailingSegment = {
+                    startDate: last.endDateNormalized,
+                    endDate: nowStr,
+                    years: this.calcYears(last.endDateNormalized, nowStr),
+                };
+                const duplicateTrailing = supplementSegments.some((segment) =>
+                    segment.startDate === trailingSegment.startDate && segment.endDate === trailingSegment.endDate);
+                if (trailingGapMonths >= 6 && !duplicateTrailing) supplementSegments.push(trailingSegment);
+            }
+
+            if (existingExps.length + supplementSegments.length < this.MIN_WORK_EXPERIENCES) {
+                throw new Error(`现有时间线没有至少 6 个月的可补空档，无法生成至少 ${this.MIN_WORK_EXPERIENCES} 段工作经历`);
+            }
+        }
+
         console.log('[ExperienceCalculator] supplement-segments-summary:', {
             count: supplementSegments.length,
             segments: supplementSegments.map(seg => ({
@@ -316,6 +359,18 @@ export class ExperienceCalculator {
         const [endYear, endMonth] = end.split('-').map(Number);
         const diffM = (endYear - startYear) * 12 + endMonth - startMonth;
         return Math.max(0, Math.round(diffM / 12 * 10) / 10);
+    }
+
+    private static shiftMonth(value: string, offset: number): string {
+        const [year, month] = value.split('-').map(Number);
+        if (!year || !month) return value;
+        return this.monthFromIndex(year * 12 + month - 1 + offset);
+    }
+
+    private static monthFromIndex(index: number): string {
+        const year = Math.floor(index / 12);
+        const month = index % 12 + 1;
+        return `${year}-${String(month).padStart(2, '0')}`;
     }
 
     private static monthsInclusive(start: Date, end: Date): number {
