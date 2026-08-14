@@ -501,11 +501,11 @@ report.checks.profileContentFits = await desktopPage.locator('.resume-page.templ
 await desktopPage.getByRole('button', { name: 'Personal details' }).click();
 report.checks.personalWebsiteField =
   (await desktopPage.getByLabel('Personal website').getAttribute('placeholder')) === '[Website name]https://...';
-await desktopPage.getByLabel('Personal website').fill('[Github]https://github.com/russel-the-menace');
+await desktopPage.getByLabel('Personal website').fill('[Github]https://github.com/theo-the-menace');
 const websiteLink = desktopPage.locator('.resume-website-link');
 report.checks.markdownWebsiteLink =
   (await websiteLink.textContent()) === 'Github' &&
-  (await websiteLink.getAttribute('href')) === 'https://github.com/russel-the-menace' &&
+  (await websiteLink.getAttribute('href')) === 'https://github.com/theo-the-menace' &&
   (await websiteLink.evaluate((element) => window.getComputedStyle(element).textDecorationLine.includes('underline')));
 report.checks.englishGender =
   (await desktopPage.getByLabel('Gender').inputValue()) === 'Male' &&
@@ -529,7 +529,7 @@ report.checks.printWebsiteLink = await websiteLink.isVisible();
 const exportedPdfPath = join(tmpdir(), 'draftline-playwright-markdown-website-link.pdf');
 await desktopPage.pdf({ path: exportedPdfPath, printBackground: true });
 report.checks.exportedPdfWebsiteLink = (await readFile(exportedPdfPath)).includes(
-  'https://github.com/russel-the-menace',
+  'https://github.com/theo-the-menace',
 );
 await desktopPage.emulateMedia({ media: 'screen' });
 await desktopPage.getByLabel('Upload profile photo').setInputFiles({
