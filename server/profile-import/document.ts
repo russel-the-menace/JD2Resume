@@ -60,7 +60,7 @@ function pageOcrReasons(lines: string[]) {
   return [...new Set(reasons)];
 }
 
-function canonicalLines(page: number, values: string[]): CanonicalLine[] {
+export function canonicalLines(page: number, values: string[]): CanonicalLine[] {
   return values.map((text, index) => ({
     id: `p${page}-l${index + 1}`,
     page,
