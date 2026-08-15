@@ -117,6 +117,65 @@ function validateResponsibilityHighlights(
   });
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+
+  async function run() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => run()),
+  );
+  return results;
+}
+
+function validateRoleBulletResponse(
+  text: string,
+  locked: BulletPhaseWorkExperience,
+  isEnglish: boolean,
+  maxCharPerLine: number,
+  experienceIndex: number,
+) {
+  assertNoIllegalOutput(text);
+  try {
+    const data = parseAIJson(text);
+    if (!Array.isArray(data.workExperience) || data.workExperience.length !== 1) {
+      throw new Error('单段职责响应必须只包含 1 段经历');
+    }
+    const experience = data.workExperience[0];
+    if (experience.company !== locked.company) throw new Error(`职责阶段非法修改公司名 index=${experienceIndex}`);
+    if (experience.startDate !== locked.startDate || experience.endDate !== locked.endDate) {
+      throw new Error(`职责阶段非法修改工作时间 index=${experienceIndex}`);
+    }
+    if (!Array.isArray(experience.responsibilities) || experience.responsibilities.length !== 8) {
+      throw new Error(`职责数量不足 8 条 index=${experienceIndex}`);
+    }
+    if (experience.responsibilities.some(isIllegal)) throw new Error(`职责内容存在非法值 index=${experienceIndex}`);
+    experience.responsibilities.forEach((item: string, itemIndex: number) => {
+      const length = validateResponsibilityLength(item, isEnglish, maxCharPerLine);
+      if (!length.valid) {
+        throw new Error(
+          `职责长度不适合双行排版 index=${experienceIndex}, item=${itemIndex}, length=${Math.round(length.length)}, expected=${Math.round(length.minimum)}-${Math.round(length.maximum)}`,
+        );
+      }
+    });
+    validateResponsibilityHighlights(experience.responsibilities, isEnglish, maxCharPerLine, experienceIndex);
+    return true;
+  } catch (error: any) {
+    throw new Error(`职责阶段校验未通过: ${error.message}`);
+  }
+}
+
 /** Puppet Resume's two-phase content generation pipeline. */
 export class PuppetResumePipeline {
   constructor(private readonly generateText: PuppetTextGenerator) {}
@@ -236,51 +295,24 @@ export class PuppetResumePipeline {
       startDate: experience.startDate,
       endDate: experience.endDate,
     }));
-    const bulletPrompt = isEnglish
-      ? generateEnglishJobBulletPrompt(promptContext, workSkeleton)
-      : generateChineseJobBulletPrompt(promptContext, workSkeleton);
-    const bulletResponse = await this.generateText(bulletPrompt, (text) => {
-      assertNoIllegalOutput(text);
-      try {
-        const data = parseAIJson(text);
-        if (!Array.isArray(data.workExperience)) throw new Error('workExperience 必须为数组');
-        if (data.workExperience.length !== workSkeleton.length) {
-          throw new Error(`职责阶段岗位数不一致（expected=${workSkeleton.length}, got=${data.workExperience.length}）`);
-        }
-        data.workExperience.forEach((experience: any, index: number) => {
-          const locked = workSkeleton[index];
-          if (experience.company !== locked.company) throw new Error(`职责阶段非法修改公司名 index=${index}`);
-          if (experience.startDate !== locked.startDate || experience.endDate !== locked.endDate) {
-            throw new Error(`职责阶段非法修改工作时间 index=${index}`);
-          }
-          if (!Array.isArray(experience.responsibilities) || experience.responsibilities.length !== 8) {
-            throw new Error(`职责数量不足 8 条 index=${index}`);
-          }
-          if (experience.responsibilities.some(isIllegal)) throw new Error(`职责内容存在非法值 index=${index}`);
-          experience.responsibilities.forEach((item: string, itemIndex: number) => {
-            const length = validateResponsibilityLength(item, isEnglish, maxCharPerLine);
-            if (!length.valid) {
-              throw new Error(
-                `职责长度不适合双行排版 index=${index}, item=${itemIndex}, length=${Math.round(length.length)}, expected=${Math.round(length.minimum)}-${Math.round(length.maximum)}`,
-              );
-            }
-          });
-          validateResponsibilityHighlights(experience.responsibilities, isEnglish, maxCharPerLine, index);
-        });
-        return true;
-      } catch (error: any) {
-        throw new Error(`职责阶段校验未通过: ${error.message}`);
-      }
-    }, {
-      stage: 'role-bullets',
-      maxTokens: isEnglish ? 7_000 : 5_000,
-      timeoutMs: 32_000,
+    const generatedRoles = await mapWithConcurrency(workSkeleton, 3, async (experience, index) => {
+      const rolePrompt = isEnglish
+        ? generateEnglishJobBulletPrompt(promptContext, [experience])
+        : generateChineseJobBulletPrompt(promptContext, [experience]);
+      const response = await this.generateText(
+        rolePrompt,
+        (text) => validateRoleBulletResponse(text, experience, isEnglish, maxCharPerLine, index),
+        {
+          stage: 'role-bullets',
+          maxTokens: isEnglish ? 2_200 : 1_600,
+          timeoutMs: 32_000,
+        },
+      );
+      return parseAIJson(response).workExperience[0];
     });
-
-    const bulletData = parseAIJson(bulletResponse);
     const workExperience = workSkeleton.map((experience, index) => ({
       ...experience,
-      responsibilities: bulletData.workExperience[index]?.responsibilities || [],
+      responsibilities: generatedRoles[index].responsibilities,
     }));
     return {
       ...baseData,
