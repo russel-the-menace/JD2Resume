@@ -23,7 +23,7 @@ const MAX_REQUEST_BYTES = 16_000_000;
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCE_TEXT_CHARS = 20_000;
 const MIN_TEXT_LENGTH = 20;
-const PROVIDER_TIMEOUT_MS = 120_000;
+const GENERATION_DEADLINE_MS = 55_000;
 const PROVIDER_RETRY_DELAY_MS = 700;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -220,7 +220,7 @@ async function requestJsonCompletion(
   signal: AbortSignal,
   attachment: SourceAttachment | null = null,
   maxTokens = 4_000,
-  maxAttempts = 2,
+  maxAttempts = 1,
 ) {
   const isGemini = provider.kind === 'gemini';
   const isGateway = provider.kind === 'gateway';
@@ -361,7 +361,7 @@ async function requestFromProviders(
   validate: (value: any) => boolean | Promise<boolean>,
   attachment: SourceAttachment | null = null,
   maxTokens = 4_000,
-  timeoutMs = PROVIDER_TIMEOUT_MS,
+  timeoutMs = GENERATION_DEADLINE_MS,
   diagnostics: { traceId: string; stage: string; attempt?: number } | null = null,
 ) {
   const eligibleProviders = attachment
@@ -370,9 +370,16 @@ async function requestFromProviders(
   if (!eligibleProviders.length) throw new Error('DIRECT_FILE_PROVIDER_UNAVAILABLE');
   let lastError: unknown = null;
   const unavailableEndpoints = new Set<string>();
+  const deadlineAt = Date.now() + timeoutMs;
   for (const provider of eligibleProviders) {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) throw new Error('GENERATION_DEADLINE_EXCEEDED');
     const controller = new AbortController();
-    const providerTimeout = setTimeout(() => controller.abort(), provider.timeoutMs || timeoutMs);
+    const providerTimeout = setTimeout(
+      () => controller.abort(),
+      Math.min(provider.timeoutMs || remainingMs, remainingMs),
+    );
+    const startedAt = Date.now();
     try {
       const endpointKey = `${provider.kind}:${provider.endpoint}`;
       if (unavailableEndpoints.has(endpointKey)) {
@@ -384,7 +391,6 @@ async function requestFromProviders(
         });
         continue;
       }
-      const startedAt = Date.now();
       const result = await requestJsonCompletion(provider, systemPrompt, userPrompt, controller.signal, attachment, maxTokens);
       if (await validate(result)) {
         if (diagnostics) console.info('[Resume Generation] Provider completed', {
@@ -404,6 +410,7 @@ async function requestFromProviders(
         ...diagnostics,
         provider: provider.kind,
         model: provider.model,
+        durationMs: Date.now() - startedAt,
         error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
       });
     } finally {
@@ -436,12 +443,13 @@ ${source.text || 'Read the attached JD directly.'}`;
     (value) => isRecord(value) && typeof value.title === 'string' && typeof value.experience === 'string' && typeof value.description === 'string',
     source.attachment,
     6_000,
-    PROVIDER_TIMEOUT_MS,
+    GENERATION_DEADLINE_MS,
     traceId ? { traceId, stage: 'jd-extraction' } : null,
   ) as Promise<{ title: string; experience: string; description: string }>;
 }
 
 function createPuppetTextGenerator(providers: Provider[], traceId: string) {
+  const deadlineAt = Date.now() + GENERATION_DEADLINE_MS;
   return async (
     prompt: string,
     validator: (text: string) => boolean | Promise<boolean>,
@@ -449,6 +457,8 @@ function createPuppetTextGenerator(providers: Provider[], traceId: string) {
   ) => {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
+        const remainingMs = deadlineAt - Date.now();
+        if (remainingMs <= 0) throw new Error('GENERATION_DEADLINE_EXCEEDED');
         const generated = await requestFromProviders(
           providers,
           'Return valid JSON only. Do not use markdown or add commentary.',
@@ -456,7 +466,7 @@ function createPuppetTextGenerator(providers: Provider[], traceId: string) {
           (value) => validator(JSON.stringify(value)),
           null,
           options.maxTokens,
-          options.timeoutMs,
+          Math.min(options.timeoutMs, remainingMs),
           { traceId, stage: options.stage, attempt },
         );
         return JSON.stringify(generated);
@@ -656,7 +666,7 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
         (value) => isRecord(value) && isRecord(value.data) && preservesLayoutLocks(input.data, value.data),
         null,
         8_000,
-        PROVIDER_TIMEOUT_MS,
+        GENERATION_DEADLINE_MS,
         { traceId, stage: 'layout-refinement' },
       );
       sendJson(response, 200, { data: result.data });
