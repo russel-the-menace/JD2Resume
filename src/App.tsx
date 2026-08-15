@@ -1068,6 +1068,7 @@ function App() {
   const [connectionState, setConnectionState] = useState<'connecting' | 'unavailable' | 'ready'>('connecting');
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [profileImporting, setProfileImporting] = useState(false);
+  const [generationLoading, setGenerationLoading] = useState(false);
   const [editorProfileOpen, setEditorProfileOpen] = useState(false);
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
@@ -1427,6 +1428,8 @@ function App() {
     sourceType = 'text',
     sourceFile,
   }) => {
+    setGenerationLoading(true);
+    try {
     const normalizedJobDescription = validateSourcePayload({
       text: jobDescription,
       sourceType,
@@ -1534,6 +1537,9 @@ function App() {
       throw new Error('The generated resume could not be saved to the server.');
     }
     openResume(generatedResumes[0].id);
+    } finally {
+      setGenerationLoading(false);
+    }
   }, [openResume, persistLibrary, userProfile]);
 
   if (sessionState === 'checking') return <RemoteConnectionGate unavailable={false} onRetry={() => window.location.reload()} />;
@@ -1686,6 +1692,7 @@ function App() {
       )}
       {editorProfileOpen && <PersonalProfileDialog profile={userProfile} onCancel={() => setEditorProfileOpen(false)} onComplete={() => setEditorProfileOpen(false)} onSave={saveUserProfile} onImport={importProfileFromResume} onTranslate={translateImportedProfile} onSearchDirectory={searchProfileDirectory} />}
       {profileImporting && <ProfileImportLoadingOverlay />}
+      {generationLoading && <GenerationLoadingOverlay />}
     </>
   );
 }
@@ -3311,6 +3318,17 @@ function ProfileImportLoadingOverlay() {
       <div className="profile-import-loading-content">
         <LoaderCircle size={24} />
         <strong>Importing personal details</strong>
+      </div>
+    </div>
+  );
+}
+
+function GenerationLoadingOverlay() {
+  return (
+    <div className="profile-import-loading" role="status" aria-live="assertive">
+      <div className="profile-import-loading-content">
+        <LoaderCircle size={24} />
+        <strong>Generating resume</strong>
       </div>
     </div>
   );
