@@ -9,6 +9,7 @@ import {
   type CanonicalDocument,
   type CanonicalLine,
 } from './document';
+import { resolveDomesticUniversity } from './universityMatcher';
 
 export type ProfileImportTask = 'ocr' | 'basic' | 'education' | 'work' | 'certificates' | 'translation';
 
@@ -196,13 +197,15 @@ function cleanEducation(document: CanonicalDocument, value: Record<string, any>)
   return value.educations.flatMap((entry: any) => {
     if (!isRecord(entry)) return [];
     const lines = stringArray(entry.sourceLines);
-    const school = normalizedOrganizationName(entry.school);
-    if (!school || !supportedByDocument(document, school)) return [];
+    const extractedSchool = normalizedOrganizationName(entry.school);
+    if (!extractedSchool || !supportedByDocument(document, extractedSchool)) return [];
+    const university = resolveDomesticUniversity(extractedSchool);
     const degree = text(entry.degree);
     const citedSource = sourceText(document, lines);
-    const sourceDates = dateRangeFromEvidence(document, lines, school);
+    const sourceDates = dateRangeFromEvidence(document, lines, extractedSchool);
     return [{
-      school,
+      school: university.school,
+      schoolEn: university.schoolEn,
       degree,
       studyType: normalizedStudyType(entry.studyType, degree, citedSource),
       major: text(entry.major),
@@ -329,8 +332,11 @@ function assertDateIntegrity(
     const anchor = text(entry[anchorField]);
     if (!anchor || !supportedByDocument(document, anchor)) return;
     const evidence = dateRangeFromEvidence(document, entry.sourceLines, anchor);
+    const comparableAnchor = anchorField === 'school'
+      ? resolveDomesticUniversity(anchor).school
+      : anchor;
     const cleanEntry = cleanEntries.find((candidate: any) =>
-      normalizedComparable(text(candidate[anchorField])) === normalizedComparable(anchor));
+      normalizedComparable(text(candidate[anchorField])) === normalizedComparable(comparableAnchor));
     const missingEntry = !cleanEntry && Boolean(evidence.startDate || evidence.endDate);
     const missingStart = Boolean(evidence.startDate && !cleanEntry?.startDate);
     const missingEnd = Boolean(evidence.endDate && !cleanEntry?.endDate);

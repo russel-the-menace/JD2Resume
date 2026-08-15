@@ -73,7 +73,8 @@ const imported = await importProfileFacts({
 
 assert.equal(imported.language, 'chinese');
 assert.equal(imported.profile.fullName, '田俊铃');
-assert.equal(imported.profile.educations[0].school, '复旦大学');
+assert.equal(imported.profile.educations[0].school, '复旦大学(985)');
+assert.equal(imported.profile.educations[0].schoolEn, 'Fudan University');
 assert.equal(imported.profile.educations[0].studyType, '全日制');
 assert.equal(imported.profile.educations[0].startDate, '2014-09');
 assert.equal(imported.profile.educations[0].endDate, '2018-06');

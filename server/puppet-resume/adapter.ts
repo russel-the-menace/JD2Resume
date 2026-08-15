@@ -30,6 +30,7 @@ export function toPuppetRequest(
     location: text(source.location),
     educations: Array.isArray(source.educations) ? source.educations.map((education: any) => ({
       school: text(education.school),
+      schoolEn: text(education.schoolEn || education.school_en),
       degree: text(education.degree),
       major: text(education.major),
       startDate: text(education.startDate || education.start),

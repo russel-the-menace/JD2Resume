@@ -141,6 +141,7 @@ export interface UserResumeProfile {
   phone: string;
   educations: {
     school: string;
+    schoolEn?: string;
     degree: string;
     major: string;
     startDate: string;
@@ -251,7 +252,9 @@ export function mapFrontendRequestToResumeData(payload: GenerateFromFrontendRequ
       }
 
       return {
-        school: edu.school,
+        // Prefer the canonical English name, while preserving an unmatched school
+        // instead of dropping the education entry from an English resume.
+        school: isEnglish ? (edu.schoolEn || edu.school) : edu.school,
         degree: finalDegree,
         graduationDate: `${edu.startDate} - ${edu.endDate}`,
         description: edu.description
