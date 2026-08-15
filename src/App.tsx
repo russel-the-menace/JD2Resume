@@ -167,7 +167,36 @@ const LIBRARY_VERSION = 3;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
 const MAX_JOB_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCE_TEXT_CHARS = 20_000;
+const REMEMBERED_ACCOUNTS_STORAGE_KEY = 'jd2resume-remembered-accounts-v1';
 type CssVariables = CSSProperties & Record<`--${string}`, string>;
+
+function rememberedAccounts() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(REMEMBERED_ACCOUNTS_STORAGE_KEY) || '[]');
+    if (!Array.isArray(stored)) return [];
+    return stored
+      .filter((account) => isRecord(account) && textValue(account.id) && textValue(account.username) && textValue(account.token))
+      .map((account) => ({
+        id: textValue(account.id),
+        username: textValue(account.username),
+        token: textValue(account.token),
+        lastUsedAt: Number(account.lastUsedAt) || 0,
+      }))
+      .sort((first, second) => second.lastUsedAt - first.lastUsedAt)
+      .slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+function storeRememberedAccounts(accounts) {
+  try {
+    window.localStorage.setItem(REMEMBERED_ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+  } catch {
+    // Sign-in still works when browser storage is unavailable.
+  }
+}
 
 function normalizeGenerationEvidence(value) {
   const source = isRecord(value) ? value : {};
@@ -1044,6 +1073,7 @@ function App() {
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [savedAccounts, setSavedAccounts] = useState(rememberedAccounts);
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
     const resume = new URLSearchParams(window.location.search).get('resume');
@@ -1056,17 +1086,39 @@ function App() {
     return true;
   }, []);
 
-  useEffect(() => {
-    void fetch('/api/auth/session').then(async (response) => {
-      if (!response.ok) throw new Error('AUTH_UNAVAILABLE');
-      return response.json();
-    }).then((payload) => {
-      if (payload?.account?.id && payload?.account?.username) {
-        setCurrentAccount(payload.account);
-        setSessionState('signed-in');
-      } else setSessionState('signed-out');
-    }).catch(() => setSessionState('signed-out'));
+  const rememberAccount = useCallback((account, token) => {
+    if (!account?.id || !account?.username || !token) return;
+    setSavedAccounts((current) => {
+      const next = [{ id: account.id, username: account.username, token, lastUsedAt: Date.now() }, ...current.filter((item) => item.id !== account.id)].slice(0, 12);
+      storeRememberedAccounts(next);
+      return next;
+    });
   }, []);
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        let response = await fetch('/api/auth/session');
+        let payload = response.ok ? await response.json() : {};
+        if (!payload?.account) {
+          const saved = rememberedAccounts()[0];
+          if (saved) {
+            response = await fetch('/api/auth/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: saved.token }) });
+            payload = response.ok ? await response.json() : {};
+          }
+        }
+        if (payload?.account?.id && payload?.account?.username) {
+          setCurrentAccount(payload.account);
+          setSessionState('signed-in');
+          const token = rememberedAccounts().find((account) => account.id === payload.account.id)?.token;
+          if (token) rememberAccount(payload.account, token);
+        } else setSessionState('signed-out');
+      } catch {
+        setSessionState('signed-out');
+      }
+    };
+    void restoreSession();
+  }, [rememberAccount]);
 
   const saveRemoteSnapshot = useCallback(async ({ accountId, payload, signature }) => {
     const save = async (baseRevision) => fetch('/api/account-state', {
@@ -1485,7 +1537,7 @@ function App() {
   }, [openResume, persistLibrary, userProfile]);
 
   if (sessionState === 'checking') return <RemoteConnectionGate unavailable={false} onRetry={() => window.location.reload()} />;
-  if (sessionState === 'signed-out') return <RemoteLogin onSignedIn={(account) => { setCurrentAccount(account); setSessionState('signed-in'); setConnectionAttempt((attempt) => attempt + 1); }} />;
+  if (sessionState === 'signed-out') return <RemoteLogin onSignedIn={(account, token) => { rememberAccount(account, token); setCurrentAccount(account); setSessionState('signed-in'); setConnectionAttempt((attempt) => attempt + 1); }} />;
   if (connectionState !== 'ready') {
     return <RemoteConnectionGate
       unavailable={connectionState === 'unavailable'}
@@ -1528,11 +1580,27 @@ function App() {
       {appContent}
       {accountSwitcherOpen && (
         <AccountSwitcherDialog
+          accounts={savedAccounts}
           currentAccount={currentAccount}
           onCancel={() => setAccountSwitcherOpen(false)}
-          onSwitch={() => {
+          onSwitch={async (account) => {
+            const response = await fetch('/api/auth/activate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: account.token }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload?.account) return;
+            libraryRef.current = emptyResumeLibrary();
+            setLibrary(emptyResumeLibrary());
+            setUserProfile(normalizeUserProfile(null));
+            setRemoteSyncReady(false);
+            remoteRevisionRef.current = null;
+            lastRemoteSnapshotRef.current = { accountId: '', signature: '' };
+            rememberAccount(payload.account, account.token);
+            setCurrentAccount(payload.account);
+            returnHome();
             setAccountSwitcherOpen(false);
-            setLoginDialogOpen(true);
           }}
           onSignIn={() => {
             setAccountSwitcherOpen(false);
@@ -1554,13 +1622,14 @@ function App() {
               body: JSON.stringify(credentials),
             });
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok || !payload?.account) return { ok: false, error: textValue(payload?.error, 'Unable to sign in.') };
+            if (!response.ok || !payload?.account || !payload?.token) return { ok: false, error: textValue(payload?.error, 'Unable to sign in.') };
             libraryRef.current = emptyResumeLibrary();
             setLibrary(emptyResumeLibrary());
             setUserProfile(normalizeUserProfile(null));
             setRemoteSyncReady(false);
             remoteRevisionRef.current = null;
             lastRemoteSnapshotRef.current = { accountId: '', signature: '' };
+            rememberAccount(payload.account, payload.token);
             setCurrentAccount(payload.account);
             returnHome();
             setLoginDialogOpen(false);
@@ -1581,13 +1650,14 @@ function App() {
               body: JSON.stringify(credentials),
             });
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok || !payload?.account) return { ok: false, error: textValue(payload?.error, 'Unable to sign up.') };
+            if (!response.ok || !payload?.account || !payload?.token) return { ok: false, error: textValue(payload?.error, 'Unable to sign up.') };
             libraryRef.current = emptyResumeLibrary();
             setLibrary(emptyResumeLibrary());
             setUserProfile(normalizeUserProfile(null));
             setRemoteSyncReady(false);
             remoteRevisionRef.current = null;
             lastRemoteSnapshotRef.current = { accountId: '', signature: '' };
+            rememberAccount(payload.account, payload.token);
             setCurrentAccount(payload.account);
             returnHome();
             setRegisterDialogOpen(false);
@@ -1620,17 +1690,7 @@ function App() {
   );
 }
 
-function AccountSwitcherDialog({ currentAccount, onCancel, onSwitch, onSignIn, onSignUp }) {
-  const [accounts, setAccounts] = useState([currentAccount]);
-
-  useEffect(() => {
-    void fetch('/api/auth/accounts')
-      .then(async (response) => response.ok ? response.json() : {})
-      .then((payload) => {
-        if (Array.isArray(payload.accounts)) setAccounts(payload.accounts);
-      });
-  }, []);
-
+function AccountSwitcherDialog({ accounts, currentAccount, onCancel, onSwitch, onSignIn, onSignUp }) {
   const orderedAccounts = [
     currentAccount,
     ...accounts.filter((account) => account.id !== currentAccount.id),
@@ -1771,9 +1831,9 @@ function ChangePasswordDialog({ onCancel, onChangePassword }) {
   );
 }
 
-function RemoteLogin({ onSignedIn }: { onSignedIn: (account: { id: string; username: string }) => void }) {
+function RemoteLogin({ onSignedIn }: { onSignedIn: (account: { id: string; username: string }, token: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login'); const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
-  const submit = async (event) => { event.preventDefault(); setError(''); const response = await fetch(`/api/auth/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const payload = await response.json().catch(() => ({})); if (!response.ok || !payload.account) { setError(payload.error || '操作失败'); return; } onSignedIn(payload.account); };
+  const submit = async (event) => { event.preventDefault(); setError(''); const response = await fetch(`/api/auth/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const payload = await response.json().catch(() => ({})); if (!response.ok || !payload.account || !payload.token) { setError(payload.error || '操作失败'); return; } onSignedIn(payload.account, payload.token); };
   return <main className="remote-connection-gate"><form className="remote-login" onSubmit={submit}><h1>{mode === 'login' ? 'Sign in' : 'Sign up'}</h1><input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Username" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" />{error && <p>{error}</p>}<button className="primary-button" type="submit">{mode === 'login' ? <LogIn size={16} /> : <UserPlus size={16} />}{mode === 'login' ? 'Sign in' : 'Sign up'}</button><button className="dialog-link-button" type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? <><UserPlus size={15} /> Sign up</> : <><LogIn size={15} /> Sign in</>}</button></form></main>;
 }
 

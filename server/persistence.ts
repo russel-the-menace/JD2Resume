@@ -5,6 +5,7 @@ import type { Plugin } from 'vite';
 
 const MAX_STATE_BYTES = 16_000_000;
 const SESSION_COOKIE = 'jd2resume_session';
+const PERSISTENT_SESSION_MAX_AGE = 3_153_600_000;
 
 function sendJson(response: ServerResponse, status: number, body: Record<string, unknown>) {
   response.statusCode = status;
@@ -40,6 +41,10 @@ function sessionToken(request: IncomingMessage) {
 }
 
 function tokenHash(token: string) { return createHash('sha256').update(token).digest('hex'); }
+
+function setSessionCookie(response: ServerResponse, token: string) {
+  response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${PERSISTENT_SESSION_MAX_AGE}`);
+}
 
 async function authenticatedAccountId(client: Sql, request: IncomingMessage) {
   const token = sessionToken(request);
@@ -165,18 +170,12 @@ export function statePersistencePlugin(databaseUrl: string): Plugin {
         const token = sessionToken(request); const rows = token ? await client`SELECT a.id, a.username FROM account_sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = ${tokenHash(token)} AND s.expires_at > NOW()` : [];
         sendJson(response, 200, { account: rows.length ? { id: rows[0].id, username: rows[0].username } : null }); return;
       }
-      if (request.method === 'GET' && request.url === '/accounts') {
-        const token = sessionToken(request); const rows = token ? await client`SELECT a.id, a.username FROM account_sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = ${tokenHash(token)} AND s.expires_at > NOW()` : [];
-        if (!rows.length) { sendJson(response, 401, { error: 'Sign in required.' }); return; }
-        const accounts = await client`SELECT id, username FROM accounts ORDER BY username`;
-        sendJson(response, 200, { accounts }); return;
-      }
       if (request.method === 'POST' && request.url === '/login') {
         const input = await readJsonBody(request); const username = typeof input.username === 'string' ? input.username.trim() : ''; const password = typeof input.password === 'string' ? input.password : '';
         const rows = await client`SELECT id, username FROM accounts WHERE username = ${username} AND password_hash = crypt(${password}, password_hash)`;
         if (!rows.length) { sendJson(response, 401, { error: 'Invalid username or password.' }); return; }
-        const token = randomBytes(32).toString('base64url'); await client`INSERT INTO account_sessions (token_hash, account_id, expires_at) VALUES (${tokenHash(token)}, ${rows[0].id}, NOW() + INTERVAL '30 days')`;
-        response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`); sendJson(response, 200, { account: { id: rows[0].id, username: rows[0].username } }); return;
+        const token = randomBytes(32).toString('base64url'); await client`INSERT INTO account_sessions (token_hash, account_id, expires_at) VALUES (${tokenHash(token)}, ${rows[0].id}, 'infinity')`;
+        setSessionCookie(response, token); sendJson(response, 200, { account: { id: rows[0].id, username: rows[0].username }, token }); return;
       }
       if (request.method === 'POST' && request.url === '/register') {
         const input = await readJsonBody(request); const username = typeof input.username === 'string' ? input.username.trim() : ''; const password = typeof input.password === 'string' ? input.password : '';
@@ -184,8 +183,14 @@ export function statePersistencePlugin(databaseUrl: string): Plugin {
         const id = username.toLowerCase();
         const rows = await client`INSERT INTO accounts (id, username, password_hash) VALUES (${id}, ${username}, crypt(${password}, gen_salt('bf'))) ON CONFLICT DO NOTHING RETURNING id, username`;
         if (!rows.length) { sendJson(response, 409, { error: 'Username is already in use.' }); return; }
-        const token = randomBytes(32).toString('base64url'); await client`INSERT INTO account_sessions (token_hash, account_id, expires_at) VALUES (${tokenHash(token)}, ${id}, NOW() + INTERVAL '30 days')`;
-        response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`); sendJson(response, 201, { account: { id, username } }); return;
+        const token = randomBytes(32).toString('base64url'); await client`INSERT INTO account_sessions (token_hash, account_id, expires_at) VALUES (${tokenHash(token)}, ${id}, 'infinity')`;
+        setSessionCookie(response, token); sendJson(response, 201, { account: { id, username }, token }); return;
+      }
+      if (request.method === 'POST' && request.url === '/activate') {
+        const input = await readJsonBody(request); const token = typeof input.token === 'string' ? input.token : '';
+        const rows = token ? await client`SELECT a.id, a.username FROM account_sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = ${tokenHash(token)} AND s.expires_at > NOW()` : [];
+        if (!rows.length) { sendJson(response, 401, { error: 'Saved sign-in is no longer valid.' }); return; }
+        setSessionCookie(response, token); sendJson(response, 200, { account: { id: rows[0].id, username: rows[0].username } }); return;
       }
       if (request.method === 'POST' && request.url === '/change-password') {
         const input = await readJsonBody(request); const token = sessionToken(request); const currentPassword = typeof input.currentPassword === 'string' ? input.currentPassword : ''; const newPassword = typeof input.newPassword === 'string' ? input.newPassword : '';
