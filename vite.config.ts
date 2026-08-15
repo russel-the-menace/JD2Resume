@@ -3,10 +3,9 @@ import { resolve } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { PuppetResumePipeline } from './server/puppet-resume/pipeline';
+import { PuppetResumePipeline, type GenerationOptions } from './server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
 import { extractTextJob } from './server/puppet-resume/jobExtraction';
-import { bulletProjection, hasCompleteResponsibilities, promoteStructurePromptToSinglePass, structureProjection } from './server/puppet-resume/singlePass';
 import { renderPdfFromPagePlan } from './server/puppet-resume/exportPdf';
 import { ExportSessionStore } from './server/puppet-resume/exportSession';
 import { canonicalize } from './src/resume-renderer/canonicalJson';
@@ -443,49 +442,32 @@ ${source.text || 'Read the attached JD directly.'}`;
 }
 
 function createPuppetTextGenerator(providers: Provider[], traceId: string) {
-  let singlePassResult: Record<string, any> | null = null;
-  return async (prompt: string, validator: (text: string) => boolean | Promise<boolean>) => {
-    const stage = /Phase 2/i.test(prompt) ? 'job-bullets' : 'resume-structure';
-    if (stage === 'job-bullets' && singlePassResult) {
-      const cached = JSON.stringify(bulletProjection(singlePassResult));
+  return async (
+    prompt: string,
+    validator: (text: string) => boolean | Promise<boolean>,
+    options: GenerationOptions,
+  ) => {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
-        if (await validator(cached)) return cached;
-      } catch (error) {
-        console.warn('[Resume Generation] Single-pass responsibilities require fallback', {
-          traceId,
-          error: error instanceof Error ? error.message : 'VALIDATION_FAILED',
-        });
-      }
-      singlePassResult = null;
-    }
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        const singlePass = stage === 'resume-structure';
         const generated = await requestFromProviders(
           providers,
           'Return valid JSON only. Do not use markdown or add commentary.',
-          singlePass ? promoteStructurePromptToSinglePass(prompt) : prompt,
-          async (value) => {
-            if (!singlePass) return validator(JSON.stringify(value));
-            if (!isRecord(value) || !hasCompleteResponsibilities(value)) return false;
-            const valid = await validator(JSON.stringify(structureProjection(value)));
-            if (valid) singlePassResult = value;
-            return valid;
-          },
+          prompt,
+          (value) => validator(JSON.stringify(value)),
           null,
-          16_000,
-          PROVIDER_TIMEOUT_MS,
-          { traceId, stage, attempt },
+          options.maxTokens,
+          options.timeoutMs,
+          { traceId, stage: options.stage, attempt },
         );
         return JSON.stringify(generated);
       } catch (error) {
         console.warn('[Resume Generation] Stage attempt failed', {
           traceId,
-          stage,
+          stage: options.stage,
           attempt,
           error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
         });
-        if (attempt === 3) throw error;
+        if (attempt === 2) throw error;
         await new Promise((resolve) => setTimeout(resolve, attempt * 1_500));
       }
     }

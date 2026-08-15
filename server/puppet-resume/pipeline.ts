@@ -7,9 +7,18 @@ import { findMissingLockedExperiences } from './utils/lockedExperience';
 import { validateSupplementTimeline } from './utils/supplementTimeline';
 import { validateSupplementCompanyNames } from './utils/supplementCompany';
 
+export type GenerationStage = 'structure' | 'role-bullets' | 'layout-refinement';
+
+export type GenerationOptions = {
+  stage: GenerationStage;
+  maxTokens: number;
+  timeoutMs: number;
+};
+
 export type PuppetTextGenerator = (
   prompt: string,
   validator: (text: string) => boolean | Promise<boolean>,
+  options: GenerationOptions,
 ) => Promise<string>;
 
 function parseAIJson(text: string): any {
@@ -214,6 +223,10 @@ export class PuppetResumePipeline {
       } catch (error: any) {
         throw new Error(`非职责阶段校验未通过: ${error.message}`);
       }
+    }, {
+      stage: 'structure',
+      maxTokens: isEnglish ? 4_000 : 3_000,
+      timeoutMs: 22_000,
     });
 
     const nonJobData = parseAIJson(nonJobResponse);
@@ -258,6 +271,10 @@ export class PuppetResumePipeline {
       } catch (error: any) {
         throw new Error(`职责阶段校验未通过: ${error.message}`);
       }
+    }, {
+      stage: 'role-bullets',
+      maxTokens: isEnglish ? 7_000 : 5_000,
+      timeoutMs: 32_000,
     });
 
     const bulletData = parseAIJson(bulletResponse);
