@@ -30,12 +30,10 @@ import {
   GraduationCap,
   GripVertical,
   LayoutGrid,
-  KeyRound,
   Link,
   Linkedin,
   ListChecks,
   LoaderCircle,
-  LogIn,
   Mail,
   MapPin,
   MessageCircle,
@@ -57,9 +55,7 @@ import {
   Trash2,
   Undo2,
   Upload,
-  UserPlus,
   UserRound,
-  UsersRound,
   WandSparkles,
   X,
   ZoomIn,
@@ -158,23 +154,10 @@ const ZOOM_STEP = 0.1;
 const DEFAULT_EDITOR_WIDTH = 540;
 const MIN_EDITOR_WIDTH = 340;
 const MAX_EDITOR_WIDTH = 720;
-const EDITOR_WIDTH_STORAGE_KEY = 'draftline-editor-width';
-const RESUME_STORAGE_KEY = 'draftline-resume-state-v1';
-const WORKSPACE_STORAGE_KEY = 'draftline-workspace-preferences-v1';
-const LIBRARY_STORAGE_KEY = 'draftline-resume-library-v2';
-const USER_PROFILE_STORAGE_KEY = 'draftline-user-profile-v1';
-const USER_DATABASE_STORAGE_KEY = 'draftline-user-database-v1';
-const CURRENT_ACCOUNT_STORAGE_KEY = 'draftline-current-account-v1';
-const ACCOUNT_STORAGE_PREFIX = 'draftline-account-data-v1';
-const ACCOUNT_MIGRATION_STORAGE_KEY = 'draftline-account-migration-v1';
-const REMOTE_SYNC_DIRTY_KEY = 'draftline-remote-sync-dirty-v1';
-const DEFAULT_ACCOUNT = {
+const REMOTE_ACCOUNT = {
   id: 'yeatom',
   username: 'yeatom',
-  password: 'yeatom',
-  createdAt: 0,
 };
-const STORAGE_VERSION = 1;
 const LIBRARY_VERSION = 3;
 const DEFAULT_DOCUMENT_NAME = 'Jordan Lee - Product Designer';
 const MAX_JOB_SOURCE_BYTES = 10 * 1024 * 1024;
@@ -320,16 +303,6 @@ function resumeInitials(basics, language) {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function storedJson(key: string): unknown {
-  if (typeof window === 'undefined') return null;
-  try {
-    const value = window.localStorage.getItem(key);
-    return value ? JSON.parse(value) : null;
-  } catch {
-    return null;
-  }
 }
 
 function textValue(value: unknown, fallback = '') {
@@ -579,10 +552,6 @@ function profileDateRangeInvalid(startDate, endDate) {
   return Boolean(startDate && endDate && !['Present', '至今'].includes(endDate) && startDate > endDate);
 }
 
-function loadUserProfile(storageKey = USER_PROFILE_STORAGE_KEY) {
-  return normalizeUserProfile(storedJson(storageKey));
-}
-
 function readFileAsDataUrl(file): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -789,27 +758,6 @@ function normalizeCustomContent(sectionIds, value, language = 'english') {
   }, {});
 }
 
-function loadResumeSnapshot() {
-  const stored = storedJson(RESUME_STORAGE_KEY);
-  const source = isRecord(stored) ? stored : {};
-  const customSections = normalizeCustomSections(source.customSections);
-  const template = templateOptions.some((option) => option.id === source.template)
-    ? source.template
-    : 'modern';
-  const language = source.language === 'chinese' ? 'chinese' : 'english';
-  return {
-    documentName: textValue(source.documentName, DEFAULT_DOCUMENT_NAME),
-    language,
-    data: normalizeResumeData(source.data, language),
-    template,
-    accent: normalizeAccent(source.accent),
-    customSections,
-    customContent: normalizeCustomContent(customSections, source.customContent, language),
-    sectionOrder: normalizeSectionOrder(source.sectionOrder, customSections, template),
-    sectionOrderCustomized: source.sectionOrderCustomized === true,
-  };
-}
-
 function roleResumeSnapshot({ documentName, role, summary, experience, skills, template, accent }) {
   return {
     documentName,
@@ -954,87 +902,8 @@ function emptyResumeLibrary() {
   return { version: LIBRARY_VERSION, resumes: [] };
 }
 
-function defaultResumeLibrary() {
-  const migratedResume = loadResumeSnapshot();
-  const now = Date.now();
-  return {
-    version: LIBRARY_VERSION,
-    resumes: [
-      { id: 'product-designer', ...migratedResume, updatedAt: now },
-      { id: 'product-manager', ...productManagerSnapshot(), updatedAt: now - 1000 * 60 * 42 },
-      { id: 'android-developer', ...androidDeveloperSnapshot(), updatedAt: now - 1000 * 60 * 60 * 26 },
-    ],
-  };
-}
-
-function loadResumeLibrary(storageKey = LIBRARY_STORAGE_KEY, useLegacyDefaults = true) {
-  const stored = storedJson(storageKey);
-  if (isRecord(stored) && Array.isArray(stored.resumes)) {
-    return {
-      version: LIBRARY_VERSION,
-      resumes: stored.resumes.map(normalizeResumeDocument),
-    };
-  }
-  return useLegacyDefaults ? defaultResumeLibrary() : emptyResumeLibrary();
-}
-
 function normalizedUsername(value) {
   return textValue(value).trim();
-}
-
-function accountIdFor(username) {
-  return normalizedUsername(username).toLowerCase();
-}
-
-function accountStorageKey(accountId, key) {
-  return `${ACCOUNT_STORAGE_PREFIX}:${encodeURIComponent(accountId)}:${key}`;
-}
-
-function writeStoredJson(key, value) {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function storedValueExists(key) {
-  try {
-    return window.localStorage.getItem(key) !== null;
-  } catch {
-    return false;
-  }
-}
-
-function removeStoredValue(key) {
-  try {
-    window.localStorage.removeItem(key);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function normalizeAccountDatabase(value) {
-  const source = isRecord(value) && Array.isArray(value.accounts) ? value.accounts : [];
-  const accounts = source.reduce((result, entry) => {
-    const username = normalizedUsername(entry?.username);
-    const id = accountIdFor(username);
-    const password = textValue(entry?.password);
-    if (!username || !password || result.some((account) => account.id === id)) return result;
-    result.push({
-      id,
-      username,
-      password,
-      createdAt: Number.isFinite(Number(entry?.createdAt)) ? Number(entry.createdAt) : Date.now(),
-    });
-    return result;
-  }, []);
-  if (!accounts.some((account) => account.id === DEFAULT_ACCOUNT.id)) {
-    accounts.unshift({ ...DEFAULT_ACCOUNT });
-  }
-  return { version: 1, accounts };
 }
 
 function profileForUsername(username) {
@@ -1045,125 +914,6 @@ function profileForUsername(username) {
   return profile;
 }
 
-function hasProfileData(profile) {
-  return Object.values(normalizeUserProfile(profile)).some((fields) =>
-    Object.values(fields).some((value) => textValue(value).trim()),
-  );
-}
-
-function hasMeaningfulProfileData(profile, username) {
-  const normalized = normalizeUserProfile(profile);
-  const generatedName = normalizedUsername(username);
-  return Object.values(normalized).some((fields) =>
-    Object.entries(fields).some(([field, value]) => {
-      const text = textValue(value).trim();
-      return Boolean(text) && !(field === 'fullName' && text === generatedName);
-    }),
-  );
-}
-
-function hasWorkspaceData(workspace) {
-  if (!isRecord(workspace)) return false;
-  return Object.keys(isRecord(workspace.byResume) ? workspace.byResume : {}).length > 0 ||
-    Number(workspace.editorWidth) !== DEFAULT_EDITOR_WIDTH;
-}
-
-function initializeAccountData(account) {
-  const libraryKey = accountStorageKey(account.id, LIBRARY_STORAGE_KEY);
-  const profileKey = accountStorageKey(account.id, USER_PROFILE_STORAGE_KEY);
-  const workspaceKey = accountStorageKey(account.id, WORKSPACE_STORAGE_KEY);
-  if (!storedValueExists(libraryKey)) {
-    writeStoredJson(libraryKey, emptyResumeLibrary());
-  }
-  const scopedProfile = loadUserProfile(profileKey);
-  if (!storedValueExists(profileKey) || !hasProfileData(scopedProfile)) {
-    writeStoredJson(profileKey, profileForUsername(account.username));
-  }
-  if (!storedValueExists(workspaceKey)) {
-    writeStoredJson(workspaceKey, {
-      version: STORAGE_VERSION,
-      editorWidth: DEFAULT_EDITOR_WIDTH,
-      byResume: {},
-    });
-  }
-}
-
-function migrateLegacyAccountData(accounts) {
-  if (storedValueExists(ACCOUNT_MIGRATION_STORAGE_KEY)) return;
-  const defaultAccount = accounts.find((account) => account.id === DEFAULT_ACCOUNT.id);
-  if (!defaultAccount) return;
-  let migrationSucceeded = true;
-
-  const libraryKey = accountStorageKey(defaultAccount.id, LIBRARY_STORAGE_KEY);
-  const profileKey = accountStorageKey(defaultAccount.id, USER_PROFILE_STORAGE_KEY);
-  const workspaceKey = accountStorageKey(defaultAccount.id, WORKSPACE_STORAGE_KEY);
-  const scopedLibrary = storedJson(libraryKey);
-  const legacyStoredLibrary = storedJson(LIBRARY_STORAGE_KEY);
-  const legacyLibrary = loadResumeLibrary(LIBRARY_STORAGE_KEY);
-  const scopedHasResumes = isRecord(scopedLibrary) && Array.isArray(scopedLibrary.resumes) && scopedLibrary.resumes.length > 0;
-  const legacyStorageHasResumes = isRecord(legacyStoredLibrary) &&
-    Array.isArray(legacyStoredLibrary.resumes) &&
-    legacyStoredLibrary.resumes.length > 0;
-  if (!storedValueExists(libraryKey) || (!scopedHasResumes && legacyStorageHasResumes)) {
-    migrationSucceeded = writeStoredJson(
-      libraryKey,
-      legacyStorageHasResumes ? legacyLibrary : loadResumeLibrary(LIBRARY_STORAGE_KEY),
-    ) && migrationSucceeded;
-  }
-  const scopedProfile = loadUserProfile(profileKey);
-  const legacyProfile = loadUserProfile(USER_PROFILE_STORAGE_KEY);
-  if (!storedValueExists(profileKey) || !hasProfileData(scopedProfile) ||
-    (hasProfileData(legacyProfile) && !hasMeaningfulProfileData(scopedProfile, defaultAccount.username))) {
-    migrationSucceeded = writeStoredJson(
-      profileKey,
-      hasProfileData(legacyProfile) ? legacyProfile : profileForUsername(defaultAccount.username),
-    ) && migrationSucceeded;
-  }
-  const scopedWorkspace = storedJson(workspaceKey);
-  const legacyWorkspace = storedJson(WORKSPACE_STORAGE_KEY);
-  if (!storedValueExists(workspaceKey) || (!hasWorkspaceData(scopedWorkspace) && hasWorkspaceData(legacyWorkspace))) {
-    const legacyEditorWidth = Number(window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY));
-    migrationSucceeded = writeStoredJson(
-      workspaceKey,
-      hasWorkspaceData(legacyWorkspace)
-        ? legacyWorkspace
-        : {
-            version: STORAGE_VERSION,
-            editorWidth: Number.isFinite(legacyEditorWidth) ? legacyEditorWidth : DEFAULT_EDITOR_WIDTH,
-            byResume: {},
-          },
-    ) && migrationSucceeded;
-  }
-  if (!migrationSucceeded) return;
-  const legacyKeys = [
-    EDITOR_WIDTH_STORAGE_KEY,
-    RESUME_STORAGE_KEY,
-    WORKSPACE_STORAGE_KEY,
-    LIBRARY_STORAGE_KEY,
-    USER_PROFILE_STORAGE_KEY,
-  ];
-  if (!legacyKeys.every(removeStoredValue)) return;
-  writeStoredJson(ACCOUNT_MIGRATION_STORAGE_KEY, { version: 1, completedAt: Date.now() });
-}
-
-function initializeAccountDatabase() {
-  if (typeof window === 'undefined') {
-    return { accounts: [{ ...DEFAULT_ACCOUNT }], currentAccount: { ...DEFAULT_ACCOUNT } };
-  }
-  const savedDatabase = storedJson(USER_DATABASE_STORAGE_KEY);
-  const database = normalizeAccountDatabase(savedDatabase);
-  const hasDatabase = isRecord(savedDatabase) && Array.isArray(savedDatabase.accounts);
-  if (!hasDatabase || JSON.stringify(savedDatabase) !== JSON.stringify(database)) {
-    writeStoredJson(USER_DATABASE_STORAGE_KEY, database);
-  }
-  migrateLegacyAccountData(database.accounts);
-  database.accounts.forEach((account) => initializeAccountData(account));
-  const savedCurrentId = textValue(window.localStorage.getItem(CURRENT_ACCOUNT_STORAGE_KEY));
-  const currentAccount = database.accounts.find((account) => account.id === savedCurrentId)
-    || database.accounts[0];
-  window.localStorage.setItem(CURRENT_ACCOUNT_STORAGE_KEY, currentAccount.id);
-  return { accounts: database.accounts, currentAccount };
-}
 
 function blankResumeSnapshot(
   { documentName, language, generationEvidence, layoutManifest }: { documentName?: string; language?: string; generationEvidence?: unknown; layoutManifest?: unknown } = {},
@@ -1253,50 +1003,25 @@ function resumeSnapshotEqual(document, snapshot) {
   }) === JSON.stringify(snapshot);
 }
 
-function loadWorkspacePreferences(resumeSnapshot, resumeId, workspaceStorageKey = WORKSPACE_STORAGE_KEY) {
-  const stored = storedJson(workspaceStorageKey);
-  const root = isRecord(stored) ? stored : {};
-  const savedByResume = isRecord(root.byResume) ? root.byResume : {};
-  const source = isRecord(savedByResume[resumeId]) ? savedByResume[resumeId] : root;
-  const legacyWidth = workspaceStorageKey === WORKSPACE_STORAGE_KEY && typeof window !== 'undefined'
-    ? window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY)
-    : null;
-  const widthCandidate = root.editorWidth ?? source.editorWidth ?? Number(legacyWidth);
-  const zoomCandidate = Number(source.zoom);
-  const editorWidthCandidate = Number(widthCandidate);
+function defaultWorkspacePreferences(resumeSnapshot) {
   const availableSections = new Set([
     ...baseSections.map((section) => section.id),
     ...resumeSnapshot.customSections,
   ]);
   const experienceIds = new Set(resumeSnapshot.data.experience.map((entry) => entry.id));
-  const storedPosition = isRecord(source.previewPosition) ? source.previewPosition : {};
 
   return {
-    zoom: Number.isFinite(zoomCandidate)
-      ? Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoomCandidate))
-      : 1,
-    editorWidth: Number.isFinite(editorWidthCandidate) && editorWidthCandidate > 0
-      ? Math.min(MAX_EDITOR_WIDTH, Math.max(MIN_EDITOR_WIDTH, editorWidthCandidate))
-      : DEFAULT_EDITOR_WIDTH,
-    activeSection: availableSections.has(source.activeSection)
-      ? source.activeSection
-      : 'experience',
-    openExperience: source.openExperience === null
-      ? null
-      : experienceIds.has(source.openExperience)
-        ? source.openExperience
-        : resumeSnapshot.data.experience[0]?.id ?? null,
-    mobileMode: ['outline', 'edit', 'preview'].includes(source.mobileMode)
-      ? source.mobileMode
-      : 'edit',
-    editorCollapsed: source.editorCollapsed === true,
+    zoom: 1,
+    editorWidth: DEFAULT_EDITOR_WIDTH,
+    activeSection: availableSections.has('experience') ? 'experience' : 'basics',
+    openExperience: experienceIds.has(resumeSnapshot.data.experience[0]?.id)
+      ? resumeSnapshot.data.experience[0].id
+      : null,
+    mobileMode: 'edit',
+    editorCollapsed: false,
     previewPosition: {
-      left: Number.isFinite(Number(storedPosition.left))
-        ? Math.max(0, Number(storedPosition.left))
-        : 0,
-      top: Number.isFinite(Number(storedPosition.top))
-        ? Math.max(0, Number(storedPosition.top))
-        : 0,
+      left: 0,
+      top: 0,
     },
   };
 }
@@ -1306,44 +1031,28 @@ function cx(...classes) {
 }
 
 function App() {
-  const accountBootstrap = useMemo(initializeAccountDatabase, []);
-  const [accounts, setAccounts] = useState(accountBootstrap.accounts);
-  const [currentAccount, setCurrentAccount] = useState(accountBootstrap.currentAccount);
-  const initialLibrary = useMemo(
-    () => loadResumeLibrary(accountStorageKey(accountBootstrap.currentAccount.id, LIBRARY_STORAGE_KEY), false),
-    [accountBootstrap],
-  );
-  const initialProfile = useMemo(
-    () => loadUserProfile(accountStorageKey(accountBootstrap.currentAccount.id, USER_PROFILE_STORAGE_KEY)),
-    [accountBootstrap],
-  );
-  const accountLibraryKey = accountStorageKey(currentAccount.id, LIBRARY_STORAGE_KEY);
-  const accountProfileKey = accountStorageKey(currentAccount.id, USER_PROFILE_STORAGE_KEY);
-  const accountWorkspaceKey = accountStorageKey(currentAccount.id, WORKSPACE_STORAGE_KEY);
-  const accountSyncDirtyKey = accountStorageKey(currentAccount.id, REMOTE_SYNC_DIRTY_KEY);
-  const libraryRef = useRef(initialLibrary);
+  const currentAccount = REMOTE_ACCOUNT;
+  const libraryRef = useRef(emptyResumeLibrary());
   const remoteRevisionRef = useRef(null);
   const remoteSaveTimerRef = useRef(null);
   const lastRemoteSnapshotRef = useRef({ accountId: '', signature: '' });
-  const [library, setLibrary] = useState(initialLibrary);
-  const [userProfile, setUserProfile] = useState(initialProfile);
+  const [library, setLibrary] = useState(emptyResumeLibrary);
+  const [userProfile, setUserProfile] = useState(() => profileForUsername(currentAccount.username));
   const [remoteSyncReady, setRemoteSyncReady] = useState(false);
   const [profileImporting, setProfileImporting] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
     const resume = new URLSearchParams(window.location.search).get('resume');
-    return initialLibrary.resumes.some((document) => document.id === resume) ? resume : null;
+    return libraryRef.current.resumes.some((document) => document.id === resume) ? resume : null;
   });
 
   const persistLibrary = useCallback((nextLibrary) => {
-    if (!writeStoredJson(accountLibraryKey, nextLibrary)) return false;
-    writeStoredJson(accountSyncDirtyKey, { changedAt: Date.now() });
     libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
     return true;
-  }, [accountLibraryKey, accountSyncDirtyKey]);
+  }, []);
 
-  const saveRemoteSnapshot = useCallback(async ({ accountId, dirtyKey, payload, signature }) => {
+  const saveRemoteSnapshot = useCallback(async ({ accountId, payload, signature }) => {
     const save = async (baseRevision) => fetch('/api/account-state', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1364,7 +1073,6 @@ function App() {
     if (!Number.isInteger(saved.revision)) throw new Error('REMOTE_PROFILE_SAVE_INVALID');
     remoteRevisionRef.current = saved.revision;
     lastRemoteSnapshotRef.current = { accountId, signature };
-    removeStoredValue(dirtyKey);
     return true;
   }, []);
 
@@ -1387,26 +1095,21 @@ function App() {
         if (!isRecord(snapshot) || !isRecord(snapshot.payload) || !Number.isInteger(snapshot.revision)) return;
         remoteRevisionRef.current = snapshot.revision;
 
-        const locallyDirty = storedValueExists(accountSyncDirtyKey);
-        if (!locallyDirty) {
-          const remoteLibrary = isRecord(snapshot.payload.library) && Array.isArray(snapshot.payload.library.resumes)
-            ? {
-                version: LIBRARY_VERSION,
-                resumes: snapshot.payload.library.resumes.map(normalizeResumeDocument),
-              }
-            : null;
-          const remoteProfile = isRecord(snapshot.payload.profile)
-            ? normalizeUserProfile(snapshot.payload.profile)
-            : null;
-          if (remoteLibrary) {
-            writeStoredJson(accountLibraryKey, remoteLibrary);
-            libraryRef.current = remoteLibrary;
-            setLibrary(remoteLibrary);
-          }
-          if (remoteProfile) {
-            writeStoredJson(accountProfileKey, remoteProfile);
-            setUserProfile(remoteProfile);
-          }
+        const remoteLibrary = isRecord(snapshot.payload.library) && Array.isArray(snapshot.payload.library.resumes)
+          ? {
+              version: LIBRARY_VERSION,
+              resumes: snapshot.payload.library.resumes.map(normalizeResumeDocument),
+            }
+          : null;
+        const remoteProfile = isRecord(snapshot.payload.profile)
+          ? normalizeUserProfile(snapshot.payload.profile)
+          : null;
+        if (remoteLibrary) {
+          libraryRef.current = remoteLibrary;
+          setLibrary(remoteLibrary);
+        }
+        if (remoteProfile) {
+          setUserProfile(remoteProfile);
         }
         setRemoteSyncReady(true);
       } catch (error) {
@@ -1416,7 +1119,7 @@ function App() {
 
     void hydrate();
     return () => controller.abort();
-  }, [accountLibraryKey, accountProfileKey, accountSyncDirtyKey, currentAccount.id]);
+  }, [currentAccount.id]);
 
   useEffect(() => {
     if (!remoteSyncReady) return undefined;
@@ -1433,15 +1136,15 @@ function App() {
     };
     remoteSaveTimerRef.current = window.setTimeout(async () => {
       try {
-        await saveRemoteSnapshot({ accountId, dirtyKey: accountSyncDirtyKey, payload, signature });
+        await saveRemoteSnapshot({ accountId, payload, signature });
       } catch {
-        // Local storage remains the offline source until the next successful sync.
+        // The in-memory editor state remains available until the server recovers.
       }
     }, 600);
     return () => {
       if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
     };
-  }, [accountSyncDirtyKey, currentAccount.id, library, remoteSyncReady, saveRemoteSnapshot, userProfile]);
+  }, [currentAccount.id, library, remoteSyncReady, saveRemoteSnapshot, userProfile]);
 
   useEffect(() => {
     const syncFromLocation = () => {
@@ -1467,76 +1170,6 @@ function App() {
     window.history.replaceState({ jd2resume: 'home' }, '', url);
     setSelectedResumeId(null);
   }, []);
-
-  const activateAccount = useCallback((account) => {
-    initializeAccountData(account);
-    const nextLibrary = loadResumeLibrary(accountStorageKey(account.id, LIBRARY_STORAGE_KEY), false);
-    const nextProfile = loadUserProfile(accountStorageKey(account.id, USER_PROFILE_STORAGE_KEY));
-    try {
-      window.localStorage.setItem(CURRENT_ACCOUNT_STORAGE_KEY, account.id);
-    } catch {
-      return false;
-    }
-    libraryRef.current = nextLibrary;
-    setLibrary(nextLibrary);
-    setUserProfile(nextProfile);
-    setCurrentAccount(account);
-    returnHome();
-    return true;
-  }, [returnHome]);
-
-  const switchAccount = useCallback((accountId) => {
-    const account = accounts.find((candidate) => candidate.id === accountId);
-    return account ? activateAccount(account) : false;
-  }, [accounts, activateAccount]);
-
-  const loginAccount = useCallback(({ username, password }) => {
-    const account = accounts.find((candidate) => candidate.id === accountIdFor(username));
-    if (!account) return { ok: false, error: 'This account is not registered yet.' };
-    if (account.password !== password) return { ok: false, error: 'Password is incorrect.' };
-    return activateAccount(account)
-      ? { ok: true }
-      : { ok: false, error: 'This browser could not save the active account.' };
-  }, [accounts, activateAccount]);
-
-  const registerAccount = useCallback(({ username, password }) => {
-    const displayName = normalizedUsername(username);
-    const id = accountIdFor(displayName);
-    if (displayName.length < 2 || displayName.length > 64) {
-      return { ok: false, error: 'Username must be between 2 and 64 characters.' };
-    }
-    if (!password) return { ok: false, error: 'Enter a password.' };
-    if (accounts.some((account) => account.id === id)) {
-      return { ok: false, error: 'This username is already in use.' };
-    }
-    const account = { id, username: displayName, password, createdAt: Date.now() };
-    const nextAccounts = [...accounts, account];
-    if (!writeStoredJson(USER_DATABASE_STORAGE_KEY, { version: 1, accounts: nextAccounts })) {
-      return { ok: false, error: 'This browser could not save the new account.' };
-    }
-    initializeAccountData(account);
-    setAccounts(nextAccounts);
-    return activateAccount(account)
-      ? { ok: true }
-      : { ok: false, error: 'This browser could not activate the new account.' };
-  }, [accounts, activateAccount]);
-
-  const changePassword = useCallback(({ currentPassword, newPassword }) => {
-    if (currentAccount.password !== currentPassword) {
-      return { ok: false, error: 'Current password is incorrect.' };
-    }
-    if (!newPassword) return { ok: false, error: 'Enter a new password.' };
-    const updatedAccount = { ...currentAccount, password: newPassword };
-    const nextAccounts = accounts.map((account) =>
-      account.id === currentAccount.id ? updatedAccount : account,
-    );
-    if (!writeStoredJson(USER_DATABASE_STORAGE_KEY, { version: 1, accounts: nextAccounts })) {
-      return { ok: false, error: 'This browser could not save the new password.' };
-    }
-    setAccounts(nextAccounts);
-    setCurrentAccount(updatedAccount);
-    return { ok: true };
-  }, [accounts, currentAccount]);
 
   const saveResume = useCallback((id, snapshot) => {
     const current = libraryRef.current;
@@ -1596,8 +1229,6 @@ function App() {
 
   const saveUserProfile = useCallback((nextProfile, options = { flushRemote: false }) => {
     const normalized = normalizeUserProfile(nextProfile);
-    if (!writeStoredJson(accountProfileKey, normalized)) return false;
-    writeStoredJson(accountSyncDirtyKey, { changedAt: Date.now() });
     setUserProfile(normalized);
     if (!options.flushRemote) return true;
     const librarySnapshot = libraryRef.current;
@@ -1607,7 +1238,6 @@ function App() {
       if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
       const saved = await saveRemoteSnapshot({
         accountId: currentAccount.id,
-        dirtyKey: accountSyncDirtyKey,
         payload,
         signature,
       });
@@ -1615,7 +1245,7 @@ function App() {
       if (!saved) throw new Error('Database persistence is not configured on this server.');
       return true;
     })();
-  }, [accountProfileKey, accountSyncDirtyKey, currentAccount.id, saveRemoteSnapshot]);
+  }, [currentAccount.id, saveRemoteSnapshot]);
 
   const searchProfileDirectory = useCallback(async ({ type, keyword, level = '' }) => {
     const endpoint = type === 'major' ? '/api/searchMajors' : '/api/searchUniversities';
@@ -1820,7 +1450,6 @@ function App() {
       accountUsername={currentAccount.username}
       onResumeChange={saveResume}
       onBack={returnHome}
-      workspaceStorageKey={accountWorkspaceKey}
     />
   ) : (
     <ResumeLibrary
@@ -1829,12 +1458,7 @@ function App() {
         onCreate={createResume}
         onDuplicate={duplicateResume}
         onDelete={deleteResume}
-        accounts={accounts}
         currentAccount={currentAccount}
-        onSwitchAccount={switchAccount}
-        onLogin={loginAccount}
-        onRegister={registerAccount}
-        onChangePassword={changePassword}
         userProfile={userProfile}
         onProfileSave={saveUserProfile}
         onImportProfile={importProfileFromResume}
@@ -1852,10 +1476,10 @@ function App() {
   );
 }
 
-function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeChange, onBack, workspaceStorageKey }) {
+function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeChange, onBack }) {
   const initialWorkspaceState = useMemo(
-    () => loadWorkspacePreferences(initialResumeState, resumeId, workspaceStorageKey),
-    [initialResumeState, resumeId, workspaceStorageKey],
+    () => defaultWorkspacePreferences(initialResumeState),
+    [initialResumeState],
   );
   const [history, setHistory] = useState({
     past: [],
@@ -1973,44 +1597,6 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
     sectionOrder,
     sectionOrderCustomized,
     template,
-  ]);
-
-  useEffect(() => {
-    try {
-      const stored = storedJson(workspaceStorageKey);
-      const root = isRecord(stored) ? stored : {};
-      const byResume = isRecord(root.byResume) ? root.byResume : {};
-      window.localStorage.setItem(
-        workspaceStorageKey,
-        JSON.stringify({
-          version: STORAGE_VERSION,
-          editorWidth,
-          byResume: {
-            ...byResume,
-            [resumeId]: {
-              zoom,
-              activeSection,
-              openExperience,
-              mobileMode,
-              editorCollapsed,
-              previewPosition,
-            },
-          },
-        }),
-      );
-    } catch {
-      // Resume content saving remains independent if preferences exceed browser storage.
-    }
-  }, [
-    activeSection,
-    editorCollapsed,
-    editorWidth,
-    mobileMode,
-    openExperience,
-    previewPosition,
-    resumeId,
-    workspaceStorageKey,
-    zoom,
   ]);
 
   useEffect(() => {
@@ -2391,12 +1977,7 @@ function ResumeLibrary({
   onCreate,
   onDuplicate,
   onDelete,
-  accounts,
   currentAccount,
-  onSwitchAccount,
-  onLogin,
-  onRegister,
-  onChangePassword,
   userProfile,
   onProfileSave,
   onImportProfile,
@@ -2409,10 +1990,6 @@ function ResumeLibrary({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
-  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [generatorDialogOpen, setGeneratorDialogOpen] = useState(false);
   const visibleResumes = useMemo(() => {
@@ -2476,24 +2053,6 @@ function ResumeLibrary({
                 >
                   <UserRound size={16} />
                   Edit personal profile
-                </button>
-                <button
-                  onClick={() => {
-                    setAccountSwitcherOpen(true);
-                    setAccountMenuOpen(false);
-                  }}
-                >
-                  <UsersRound size={16} />
-                  Switch account
-                </button>
-                <button
-                  onClick={() => {
-                    setPasswordDialogOpen(true);
-                    setAccountMenuOpen(false);
-                  }}
-                >
-                  <KeyRound size={16} />
-                  Change password
                 </button>
               </div>
             )}
@@ -2590,63 +2149,6 @@ function ResumeLibrary({
           onGenerate={onGenerate}
         />
       )}
-      {accountSwitcherOpen && (
-        <AccountSwitcherDialog
-          accounts={accounts}
-          currentAccount={currentAccount}
-          onCancel={() => setAccountSwitcherOpen(false)}
-          onSwitch={(accountId) => {
-            if (onSwitchAccount(accountId)) setAccountSwitcherOpen(false);
-          }}
-          onSignIn={() => {
-            setAccountSwitcherOpen(false);
-            setLoginDialogOpen(true);
-          }}
-          onSignUp={() => {
-            setAccountSwitcherOpen(false);
-            setRegisterDialogOpen(true);
-          }}
-        />
-      )}
-      {loginDialogOpen && (
-        <LoginDialog
-          onCancel={() => setLoginDialogOpen(false)}
-          onLogin={(credentials) => {
-            const result = onLogin(credentials);
-            if (result.ok) setLoginDialogOpen(false);
-            return result;
-          }}
-          onSignUp={() => {
-            setLoginDialogOpen(false);
-            setRegisterDialogOpen(true);
-          }}
-        />
-      )}
-      {registerDialogOpen && (
-        <RegisterDialog
-          accounts={accounts}
-          onCancel={() => setRegisterDialogOpen(false)}
-          onRegister={(credentials) => {
-            const result = onRegister(credentials);
-            if (result.ok) setRegisterDialogOpen(false);
-            return result;
-          }}
-          onSignIn={() => {
-            setRegisterDialogOpen(false);
-            setLoginDialogOpen(true);
-          }}
-        />
-      )}
-      {passwordDialogOpen && (
-        <ChangePasswordDialog
-          onCancel={() => setPasswordDialogOpen(false)}
-          onChangePassword={(credentials) => {
-            const result = onChangePassword(credentials);
-            if (result.ok) setPasswordDialogOpen(false);
-            return result;
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -2692,216 +2194,6 @@ function ResumeLibraryCard({ resume, menuOpen, onToggleMenu, onOpen, onDuplicate
         </div>
       </div>
     </article>
-  );
-}
-
-function AccountSwitcherDialog({ accounts, currentAccount, onCancel, onSwitch, onSignIn, onSignUp }) {
-  const orderedAccounts = [
-    currentAccount,
-    ...accounts.filter((account) => account.id !== currentAccount.id),
-  ];
-
-  return (
-    <div className="modal-backdrop" onMouseDown={onCancel}>
-      <section
-        className="resume-dialog account-switcher-dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="account-switcher-title"
-      >
-        <header className="resume-dialog-header account-dialog-header">
-          <div>
-            <span className="dialog-kicker">Accounts</span>
-            <h2 id="account-switcher-title">Switch account</h2>
-          </div>
-          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close">
-            <X size={16} />
-          </button>
-        </header>
-        <div className="account-switcher-content">
-          <div className="account-list">
-            {orderedAccounts.map((account) => (
-              <button
-                key={account.id}
-                type="button"
-                className={cx('account-list-item', account.id === currentAccount.id && 'is-current')}
-                onClick={() => onSwitch(account.id)}
-                aria-current={account.id === currentAccount.id ? 'page' : undefined}
-              >
-                <span className="account-list-avatar">{accountInitials(account.username)}</span>
-                <span className="account-list-copy">
-                  <strong>{account.username}</strong>
-                  {account.id === currentAccount.id && <small>Current account</small>}
-                </span>
-                {account.id === currentAccount.id && <Check size={16} />}
-              </button>
-            ))}
-          </div>
-        </div>
-        <footer className="account-dialog-footer">
-          <button className="dialog-link-button" type="button" onClick={onSignIn}>
-            <LogIn size={15} /> Sign in
-          </button>
-          <button className="dialog-link-button" type="button" onClick={onSignUp}>
-            <UserPlus size={15} /> Sign up
-          </button>
-        </footer>
-      </section>
-    </div>
-  );
-}
-
-function LoginDialog({ onCancel, onLogin, onSignUp }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-
-  const submit = (event) => {
-    event.preventDefault();
-    if (!username.trim() || !password) return;
-    const result = onLogin({ username, password });
-    if (!result.ok) setError(result.error);
-  };
-
-  return (
-    <div className="modal-backdrop" onMouseDown={onCancel}>
-      <form
-        className="resume-dialog account-auth-dialog"
-        onSubmit={submit}
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="login-title"
-      >
-        <header className="resume-dialog-header account-dialog-header">
-          <div>
-            <span className="dialog-kicker">Local account</span>
-            <h2 id="login-title">Sign in</h2>
-          </div>
-          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close">
-            <X size={16} />
-          </button>
-        </header>
-        <div className="account-auth-content">
-          <Field label="Username" value={username} onChange={(value) => { setUsername(value); setError(''); }} />
-          <Field label="Password" type="password" value={password} onChange={(value) => { setPassword(value); setError(''); }} />
-          {error && <p className="account-auth-error" role="alert">{error}</p>}
-        </div>
-        <footer className="account-auth-footer">
-          <button className="dialog-link-button" type="button" onClick={onSignUp}>Sign up</button>
-          <button className="primary-button" type="submit" disabled={!username.trim() || !password}>
-            <LogIn size={16} /> Sign in
-          </button>
-        </footer>
-      </form>
-    </div>
-  );
-}
-
-function RegisterDialog({ accounts, onCancel, onRegister, onSignIn }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const usernameDuplicate = Boolean(username.trim()) && accounts.some(
-    (account) => account.id === accountIdFor(username),
-  );
-
-  const submit = (event) => {
-    event.preventDefault();
-    if (!username.trim() || !password || usernameDuplicate) return;
-    const result = onRegister({ username, password });
-    if (!result.ok) setError(result.error);
-  };
-
-  return (
-    <div className="modal-backdrop" onMouseDown={onCancel}>
-      <form
-        className="resume-dialog account-auth-dialog"
-        onSubmit={submit}
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="register-title"
-      >
-        <header className="resume-dialog-header account-dialog-header">
-          <div>
-            <span className="dialog-kicker">Local account</span>
-            <h2 id="register-title">Sign up</h2>
-          </div>
-          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close">
-            <X size={16} />
-          </button>
-        </header>
-        <div className="account-auth-content">
-          <Field label="Username" value={username} onChange={(value) => { setUsername(value); setError(''); }} />
-          <Field label="Password" type="password" value={password} onChange={(value) => { setPassword(value); setError(''); }} />
-          {(usernameDuplicate || error) && (
-            <p className="account-auth-error" role="alert">
-              {usernameDuplicate ? 'This username is already in use.' : error}
-            </p>
-          )}
-        </div>
-        <footer className="account-auth-footer">
-          <button className="dialog-link-button" type="button" onClick={onSignIn}>Sign in</button>
-          <button className="primary-button" type="submit" disabled={!username.trim() || !password || usernameDuplicate}>
-            <UserPlus size={16} /> Sign up
-          </button>
-        </footer>
-      </form>
-    </div>
-  );
-}
-
-function ChangePasswordDialog({ onCancel, onChangePassword }) {
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmation, setConfirmation] = useState('');
-  const [error, setError] = useState('');
-
-  const submit = (event) => {
-    event.preventDefault();
-    if (!currentPassword || !newPassword || !confirmation) return;
-    if (newPassword !== confirmation) {
-      setError('New passwords do not match.');
-      return;
-    }
-    const result = onChangePassword({ currentPassword, newPassword });
-    if (!result.ok) setError(result.error);
-  };
-
-  return (
-    <div className="modal-backdrop" onMouseDown={onCancel}>
-      <form
-        className="resume-dialog account-auth-dialog"
-        onSubmit={submit}
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="change-password-title"
-      >
-        <header className="resume-dialog-header account-dialog-header">
-          <div>
-            <span className="dialog-kicker">Local account</span>
-            <h2 id="change-password-title">Change password</h2>
-          </div>
-          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close">
-            <X size={16} />
-          </button>
-        </header>
-        <div className="account-auth-content">
-          <Field label="Current password" type="password" value={currentPassword} onChange={(value) => { setCurrentPassword(value); setError(''); }} />
-          <Field label="New password" type="password" value={newPassword} onChange={(value) => { setNewPassword(value); setError(''); }} />
-          <Field label="Confirm new password" type="password" value={confirmation} onChange={(value) => { setConfirmation(value); setError(''); }} />
-          {error && <p className="account-auth-error" role="alert">{error}</p>}
-        </div>
-        <footer className="account-auth-footer">
-          <button className="primary-button" type="submit" disabled={!currentPassword || !newPassword || !confirmation}>
-            <KeyRound size={16} /> Change password
-          </button>
-        </footer>
-      </form>
-    </div>
   );
 }
 

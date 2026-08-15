@@ -6,4 +6,4 @@ Create `.server.env` from `.server.env.example` and place the matching private k
 
 The server installation lives at `/opt/jd2resume/database`. `initialize.sh` creates the database, applies migrations, installs the daily systemd backup timer, and runs the first backup. `verify-backup.sh` restores the newest compressed dump into a temporary database and removes it after validation.
 
-The browser keeps localStorage as an offline cache. When `/api/account-state` is configured, account snapshots are saved to PostgreSQL and restored when local browser data is missing.
+Account snapshots are stored in PostgreSQL and restored through `/api/account-state`. The browser does not retain an offline cache.

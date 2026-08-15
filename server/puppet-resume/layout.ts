@@ -67,6 +67,7 @@ async function openBrowser(): Promise<Browser> {
 }
 
 async function seedResume(page: Page, document: Record<string, any>) {
+  const accountId = 'yeatom';
   await page.setRequestInterception(true);
   page.on('request', (request) => {
     let pathname = '';
@@ -76,24 +77,26 @@ async function seedResume(page: Page, document: Record<string, any>) {
       // Non-HTTP browser requests continue normally.
     }
     if (pathname === '/api/account-state') {
+      const isLoad = request.method() === 'GET';
       void request.respond({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ configured: false }),
+        body: JSON.stringify(isLoad
+          ? {
+              accountId,
+              revision: 1,
+              payload: {
+                version: 1,
+                library: { version: 3, resumes: [document] },
+                profile: {},
+              },
+            }
+          : { accountId, revision: 2 }),
       });
       return;
     }
     void request.continue();
   });
-  await page.evaluateOnNewDocument((resumeDocument) => {
-    const account = { id: 'yeatom', username: 'yeatom', password: 'yeatom', createdAt: 0 };
-    localStorage.setItem('draftline-user-database-v1', JSON.stringify({ version: 1, accounts: [account] }));
-    localStorage.setItem('draftline-current-account-v1', account.id);
-    localStorage.setItem(
-      'draftline-account-data-v1:yeatom:draftline-resume-library-v2',
-      JSON.stringify({ version: 2, resumes: [resumeDocument] }),
-    );
-  }, document);
 }
 
 async function applyTuning(page: Page, tuning: LayoutTuning) {
