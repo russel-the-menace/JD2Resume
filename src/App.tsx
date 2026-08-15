@@ -1049,6 +1049,7 @@ function App() {
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [profileImporting, setProfileImporting] = useState(false);
   const [editorProfileOpen, setEditorProfileOpen] = useState(false);
+  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
     const resume = new URLSearchParams(window.location.search).get('resume');
@@ -1517,7 +1518,7 @@ function App() {
         onDuplicate={duplicateResume}
         onDelete={deleteResume}
         currentAccount={currentAccount}
-        onSwitchAccount={async () => { await fetch('/api/auth/logout', { method: 'POST' }); setSessionState('signed-out'); }}
+        onSwitchAccount={() => setAccountSwitcherOpen(true)}
         onChangePassword={async () => { const currentPassword = window.prompt('Current password'); const newPassword = window.prompt('New password'); if (!currentPassword || !newPassword) return; await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword, newPassword }) }); }}
         userProfile={userProfile}
         onProfileSave={saveUserProfile}
@@ -1531,10 +1532,17 @@ function App() {
   return (
     <>
       {appContent}
+      {accountSwitcherOpen && <RemoteAccountSwitcher currentAccount={currentAccount} onCancel={() => setAccountSwitcherOpen(false)} onSignIn={async () => { await fetch('/api/auth/logout', { method: 'POST' }); setAccountSwitcherOpen(false); setSessionState('signed-out'); }} onSignUp={async () => { await fetch('/api/auth/logout', { method: 'POST' }); setAccountSwitcherOpen(false); setSessionState('signed-out'); }} />}
       {editorProfileOpen && <PersonalProfileDialog profile={userProfile} onCancel={() => setEditorProfileOpen(false)} onComplete={() => setEditorProfileOpen(false)} onSave={saveUserProfile} onImport={importProfileFromResume} onTranslate={translateImportedProfile} onSearchDirectory={searchProfileDirectory} />}
       {profileImporting && <ProfileImportLoadingOverlay />}
     </>
   );
+}
+
+function RemoteAccountSwitcher({ currentAccount, onCancel, onSignIn, onSignUp }) {
+  const [accounts, setAccounts] = useState([currentAccount]);
+  useEffect(() => { void fetch('/api/auth/accounts').then((response) => response.json()).then((payload) => { if (Array.isArray(payload.accounts)) setAccounts(payload.accounts); }); }, []);
+  return <div className="modal-backdrop" onMouseDown={onCancel}><section className="resume-dialog account-switcher-dialog" onMouseDown={(event) => event.stopPropagation()}><header className="resume-dialog-header"><div><span className="dialog-kicker">Accounts</span><h2>Switch account</h2></div><button className="icon-button small" onClick={onCancel} aria-label="Close"><X size={16} /></button></header><div className="account-switcher-content">{accounts.map((account) => <button className={cx('account-list-item', account.id === currentAccount.id && 'is-current')} key={account.id} disabled={account.id === currentAccount.id}><span className="account-list-avatar">{accountInitials(account.username)}</span><strong>{account.username}</strong>{account.id === currentAccount.id && <Check size={16} />}</button>)}</div><footer className="account-dialog-footer"><button className="dialog-link-button" onClick={onSignIn}><LogIn size={15} /> Sign in</button><button className="dialog-link-button" onClick={onSignUp}><UserPlus size={15} /> Sign up</button></footer></section></div>;
 }
 
 function RemoteLogin({ onSignedIn }: { onSignedIn: (account: { id: string; username: string }) => void }) {

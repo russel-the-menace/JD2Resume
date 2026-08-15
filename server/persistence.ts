@@ -141,6 +141,12 @@ export function statePersistencePlugin(databaseUrl: string): Plugin {
         const token = sessionToken(request); const rows = token ? await client`SELECT a.id, a.username FROM account_sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = ${tokenHash(token)} AND s.expires_at > NOW()` : [];
         sendJson(response, 200, { account: rows.length ? { id: rows[0].id, username: rows[0].username } : null }); return;
       }
+      if (request.method === 'GET' && request.url === '/accounts') {
+        const token = sessionToken(request); const rows = token ? await client`SELECT a.id, a.username FROM account_sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = ${tokenHash(token)} AND s.expires_at > NOW()` : [];
+        if (!rows.length) { sendJson(response, 401, { error: 'Sign in required.' }); return; }
+        const accounts = await client`SELECT id, username FROM accounts ORDER BY username`;
+        sendJson(response, 200, { accounts }); return;
+      }
       if (request.method === 'POST' && request.url === '/login') {
         const input = await readJsonBody(request); const username = typeof input.username === 'string' ? input.username.trim() : ''; const password = typeof input.password === 'string' ? input.password : '';
         const rows = await client`SELECT id, username FROM accounts WHERE username = ${username} AND password_hash = crypt(${password}, password_hash)`;
