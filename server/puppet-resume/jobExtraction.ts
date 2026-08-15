@@ -1,5 +1,20 @@
 export interface ExtractedTextJob { title: string; experience: string; description: string; }
 
+const GENERIC_JOB_HEADINGS = new Set([
+  '岗位职责', '工作职责', '职位职责', '职位描述', '岗位描述', '工作内容',
+  '任职要求', '职位要求', '岗位要求', '招聘要求', '职位信息', '招聘信息',
+  'job description', 'responsibilities', 'requirements', 'qualifications',
+  'about the role', 'role overview',
+]);
+
+export function isGenericJobTitle(title: string): boolean {
+  const normalized = String(title || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[：:\s]+$/g, '');
+  return !normalized || GENERIC_JOB_HEADINGS.has(normalized);
+}
+
 export function extractTextJob(description: string, language: 'chinese' | 'english'): ExtractedTextJob {
   const normalized = description.trim();
   const lines = normalized.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);

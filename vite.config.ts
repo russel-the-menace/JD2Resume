@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { PuppetResumePipeline, type GenerationOptions } from './server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
-import { extractTextJob } from './server/puppet-resume/jobExtraction';
+import { extractTextJob, isGenericJobTitle } from './server/puppet-resume/jobExtraction';
 import { renderPdfFromPagePlan } from './server/puppet-resume/exportPdf';
 import { ExportSessionStore } from './server/puppet-resume/exportSession';
 import { canonicalize } from './src/resume-renderer/canonicalJson';
@@ -493,6 +493,55 @@ ${source.text || 'Read the attached JD directly.'}`;
   ) as Promise<{ title: string; experience: string; description: string }>;
 }
 
+async function analyzeAmbiguousTextJob(
+  providers: Provider[],
+  sourceText: string,
+  language: 'chinese' | 'english',
+  localJob: { title: string; experience: string; description: string },
+  traceId: string,
+) {
+  const prompt = `Identify the single position being advertised in this JD.
+
+Important distinction: titles listed as people this role recruits, manages, supports, sells to, or collaborates with are NOT the advertised position. For example, a recruiter who hires backend engineers is a recruiter, not a backend engineer.
+
+Return JSON only:
+{
+  "title": "concise ${language === 'chinese' ? 'Chinese' : 'English'} job title",
+  "experience": "the JD's original experience requirement, or 经验不限 when absent"
+}
+
+Infer the title from the dominant responsibilities and qualifications when no explicit title is present. Do not copy section headings such as 岗位职责、任职要求、Job Description, or Requirements.
+
+JD:
+${sourceText}`;
+  const startedAt = Date.now();
+  const analyzed = await requestFromProviders(
+    providers,
+    'Classify the advertised job accurately and return valid JSON only.',
+    prompt,
+    (value) => isRecord(value)
+      && typeof value.title === 'string'
+      && !isGenericJobTitle(value.title)
+      && typeof value.experience === 'string',
+    null,
+    800,
+    15_000,
+    { traceId, stage: 'jd-classification' },
+  ) as { title: string; experience: string };
+  console.info('[Resume Generation] Ambiguous text JD classified', {
+    traceId,
+    localTitle: localJob.title,
+    classifiedTitle: analyzed.title,
+    experience: analyzed.experience,
+    durationMs: Date.now() - startedAt,
+  });
+  return {
+    title: analyzed.title.trim(),
+    experience: analyzed.experience.trim() || localJob.experience,
+    description: sourceText,
+  };
+}
+
 function underlineFirstNumber(value: string): string {
   if (/<\/?u>/i.test(value)) return value;
   // Keep the numeric fact and its immediate unit together when possible.
@@ -651,9 +700,19 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
     try {
       console.info('[Resume Generation] Request started', { traceId, language: input.language, sourceType: source.attachment?.sourceType || 'text' });
       const generationProviders = generationProvidersForLanguage(providers, input.language, source.attachment);
+      const localTextJob = source.attachment ? null : extractTextJob(source.text, input.language);
+      if (localTextJob) {
+        console.info('[Resume Generation] Text JD title resolution', {
+          traceId,
+          localTitle: localTextJob.title,
+          strategy: isGenericJobTitle(localTextJob.title) ? 'gateway-classification' : 'local',
+        });
+      }
       const job = source.attachment
         ? await extractPuppetJob(generationProviders, input, source, traceId)
-        : extractTextJob(source.text, input.language);
+        : localTextJob && isGenericJobTitle(localTextJob.title)
+          ? await analyzeAmbiguousTextJob(generationProviders, source.text, input.language, localTextJob, traceId)
+          : localTextJob!;
       const pipeline = new PuppetResumePipeline(createPuppetTextGenerator(generationProviders, traceId));
       const puppetData = await pipeline.enhance(toPuppetRequest(input, job));
       const applicationId = stringValue(input.applicationId) || randomUUID();

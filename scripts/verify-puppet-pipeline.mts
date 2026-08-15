@@ -3,13 +3,22 @@ import { PuppetResumePipeline } from '../server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from '../server/puppet-resume/adapter';
 import { ExperienceCalculator } from '../server/puppet-resume/utils/experienceCalculator';
 import { validateSupplementCompanyNames } from '../server/puppet-resume/utils/supplementCompany';
-import { extractTextJob } from '../server/puppet-resume/jobExtraction';
+import { extractTextJob, isGenericJobTitle } from '../server/puppet-resume/jobExtraction';
 import { bulletProjection, hasCompleteResponsibilities, structureProjection } from '../server/puppet-resume/singlePass';
 import { generateChineseNonJobPrompt } from '../server/puppet-resume/prompts/ChinesePrompt';
 
 assert.deepEqual(extractTextJob('岗位名称：高级招聘专员\n要求 3-5 年招聘经验。', 'chinese'), {
   title: '高级招聘专员', experience: '3-5 年', description: '岗位名称：高级招聘专员\n要求 3-5 年招聘经验。',
 });
+const unlabeledRecruitingJob = extractTextJob(
+  '岗位职责\n1. 负责技术岗、市场运营岗和销售岗的全流程招聘。\n任职要求\n1-2 年专职招聘经验。',
+  'chinese',
+);
+assert.equal(unlabeledRecruitingJob.title, '岗位职责');
+assert.equal(unlabeledRecruitingJob.experience, '1-2 年');
+assert.equal(isGenericJobTitle(unlabeledRecruitingJob.title), true);
+assert.equal(isGenericJobTitle('招聘专员'), false);
+assert.equal(isGenericJobTitle('Job Description'), true);
 assert.equal(hasCompleteResponsibilities({ workExperience: [{ responsibilities: Array(8).fill('result') }] }), true);
 assert.deepEqual(structureProjection({ workExperience: [{ company: 'Locked', responsibilities: ['result'] }] }).workExperience[0].responsibilities, []);
 assert.deepEqual(bulletProjection({ workExperience: [{ responsibilities: ['result'] }] }), { workExperience: [{ responsibilities: ['result'] }] });
