@@ -11,6 +11,7 @@ export type GenerationStage = 'structure' | 'role-bullets' | 'layout-refinement'
 
 export type GenerationOptions = {
   stage: GenerationStage;
+  experienceIndex?: number;
   maxTokens: number;
   timeoutMs: number;
 };
@@ -304,6 +305,7 @@ export class PuppetResumePipeline {
         (text) => validateRoleBulletResponse(text, experience, isEnglish, maxCharPerLine, index),
         {
           stage: 'role-bullets',
+          experienceIndex: index,
           maxTokens: isEnglish ? 2_200 : 1_600,
           timeoutMs: 32_000,
         },

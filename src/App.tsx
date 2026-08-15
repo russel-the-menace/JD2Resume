@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { CSSProperties } from 'react';
 import { ResumePreviewFrame } from './components/resume-preview/ResumePreviewFrame';
+import { LoadingOverlay } from './components/LoadingOverlay';
 import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from './resume-renderer/types';
 import { A4_HEIGHT_PX, A4_WIDTH_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
 import {
@@ -1691,8 +1692,8 @@ function App() {
         />
       )}
       {editorProfileOpen && <PersonalProfileDialog profile={userProfile} onCancel={() => setEditorProfileOpen(false)} onComplete={() => setEditorProfileOpen(false)} onSave={saveUserProfile} onImport={importProfileFromResume} onTranslate={translateImportedProfile} onSearchDirectory={searchProfileDirectory} />}
-      {profileImporting && <ProfileImportLoadingOverlay />}
-      {generationLoading && <GenerationLoadingOverlay />}
+      {profileImporting && <LoadingOverlay message="Importing personal details" />}
+      {generationLoading && <LoadingOverlay message="Generating resume" />}
     </>
   );
 }
@@ -3308,28 +3309,6 @@ function ProfileSyncDialog({ sourceLanguage, onCancel, onSkip, onSync }) {
           </button>
         </footer>
       </section>
-    </div>
-  );
-}
-
-function ProfileImportLoadingOverlay() {
-  return (
-    <div className="profile-import-loading" role="status" aria-live="assertive">
-      <div className="profile-import-loading-content">
-        <LoaderCircle size={24} />
-        <strong>Importing personal details</strong>
-      </div>
-    </div>
-  );
-}
-
-function GenerationLoadingOverlay() {
-  return (
-    <div className="profile-import-loading" role="status" aria-live="assertive">
-      <div className="profile-import-loading-content">
-        <LoaderCircle size={24} />
-        <strong>Generating resume</strong>
-      </div>
     </div>
   );
 }

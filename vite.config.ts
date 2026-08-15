@@ -493,6 +493,34 @@ ${source.text || 'Read the attached JD directly.'}`;
   ) as Promise<{ title: string; experience: string; description: string }>;
 }
 
+function underlineFirstNumber(value: string): string {
+  if (/<\/?u>/i.test(value)) return value;
+  // Keep the numeric fact and its immediate unit together when possible.
+  return value.replace(/\d+(?:\.\d+)?(?:\s*[%％万亿千百十年个月天人次个]+)?/, (match) => `<u>${match}</u>`);
+}
+
+function repairRoleBulletHighlights(value: any): { value: any; repaired: number } {
+  if (!value || !Array.isArray(value.workExperience)) return { value, repaired: 0 };
+  let repaired = 0;
+  value.workExperience = value.workExperience.map((experience: any) => {
+    if (!Array.isArray(experience?.responsibilities)) return experience;
+    const highlighted = experience.responsibilities.filter((item: any) => /<\/?u>/i.test(String(item))).length;
+    if (highlighted > 0) return experience;
+    let added = 0;
+    const responsibilities = experience.responsibilities.map((item: any) => {
+      if (added >= 2 || typeof item !== 'string' || !/\d/.test(item)) return item;
+      const repairedItem = underlineFirstNumber(item);
+      if (repairedItem !== item) {
+        added += 1;
+        repaired += 1;
+      }
+      return repairedItem;
+    });
+    return added ? { ...experience, responsibilities } : experience;
+  });
+  return { value, repaired };
+}
+
 function createPuppetTextGenerator(providers: Provider[], traceId: string) {
   const deadlineAt = Date.now() + GENERATION_DEADLINE_MS;
   return async (
@@ -501,14 +529,37 @@ function createPuppetTextGenerator(providers: Provider[], traceId: string) {
     options: GenerationOptions,
   ) => {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const attemptStartedAt = Date.now();
       try {
         const remainingMs = deadlineAt - Date.now();
+        console.info('[Resume Generation] Stage attempt started', {
+          traceId,
+          stage: options.stage,
+          experienceIndex: options.experienceIndex,
+          attempt,
+          maxTokens: options.maxTokens,
+          timeoutMs: Math.min(options.timeoutMs, Math.max(0, remainingMs)),
+        });
         if (remainingMs <= 0) throw new Error('GENERATION_DEADLINE_EXCEEDED');
         const generated = await requestFromProviders(
           providers,
           'Return valid JSON only. Do not use markdown or add commentary.',
           prompt,
-          (value) => validator(JSON.stringify(value)),
+          (value) => {
+            const repaired = options.stage === 'role-bullets'
+              ? repairRoleBulletHighlights(value)
+              : { value, repaired: 0 };
+            if (repaired.repaired > 0) {
+              console.info('[Resume Generation] Local role highlight repair', {
+                traceId,
+                stage: options.stage,
+                experienceIndex: options.experienceIndex,
+                attempt,
+                repaired: repaired.repaired,
+              });
+            }
+            return validator(JSON.stringify(repaired.value));
+          },
           null,
           options.maxTokens,
           Math.min(options.timeoutMs, remainingMs),
@@ -519,8 +570,11 @@ function createPuppetTextGenerator(providers: Provider[], traceId: string) {
         console.warn('[Resume Generation] Stage attempt failed', {
           traceId,
           stage: options.stage,
+          experienceIndex: options.experienceIndex,
           attempt,
+          durationMs: Date.now() - attemptStartedAt,
           error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+          errorName: error instanceof Error ? error.name : typeof error,
         });
         if (attempt === 2) throw error;
         await new Promise((resolve) => setTimeout(resolve, attempt * 1_500));
