@@ -921,6 +921,12 @@ export default defineConfig(({ mode }) => {
     escalation: env.GEMINI_PROFILE_PRO_MODEL || 'gemini-3.1-pro-preview',
   };
   return {
+    server: {
+      port: 5432,
+    },
+    preview: {
+      port: 5432,
+    },
     build: {
       rollupOptions: {
         input: {
