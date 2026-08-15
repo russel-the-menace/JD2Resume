@@ -20,6 +20,7 @@
     "check:persistence": "tsx scripts/verify-persistence.mts",
     "check:profile-import": "tsx scripts/verify-profile-import.mts",
     "check:ui": "tsx scripts/verify-ui.mts"
+    ,"check:commit-message": "node scripts/validate-commit-message.mjs"
   },
   "dependencies": {
     "@fontsource/noto-sans-sc": "^5.2.8",
