@@ -4,11 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "node scripts/run-with-remote-db.mjs dev",
     "prepare": "node scripts/setup-git-hooks.mjs",
     "dev:remote-db": "node scripts/run-with-remote-db.mjs dev",
     "build": "vite build",
-    "preview": "vite preview",
+    "preview": "node scripts/run-with-remote-db.mjs preview",
     "preview:remote-db": "node scripts/run-with-remote-db.mjs preview",
     "check:types": "tsc --noEmit",
     "check:puppet": "tsx scripts/verify-puppet-pipeline.mts",
