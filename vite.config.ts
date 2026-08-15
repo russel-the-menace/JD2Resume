@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { PuppetResumePipeline, type GenerationOptions } from './server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
 import { extractTextJob } from './server/puppet-resume/jobExtraction';
@@ -36,6 +37,7 @@ type Provider = {
   supportsDirectFileInput: boolean;
   gatewayAudience?: 'chinese' | 'english' | 'all';
   gatewayOptions?: Record<string, unknown>;
+  gatewayProvider?: 'openai' | 'gemini' | 'deepseek';
   gatewayResponseShape?: 'chat' | 'gemini';
   gatewaySupportsAttachments?: boolean;
   timeoutMs?: number;
@@ -179,6 +181,17 @@ function modelMessageContent(userPrompt: string, attachment: SourceAttachment | 
   return content;
 }
 
+function gatewayMessageContent(userPrompt: string, fileId: string | null) {
+  if (!fileId) return userPrompt;
+  return [
+    { type: 'text', text: userPrompt },
+    {
+      type: 'file',
+      file: { file_id: fileId },
+    },
+  ];
+}
+
 function geminiRequestContent(userPrompt: string, attachment: SourceAttachment | null) {
   const parts: Record<string, any>[] = [{ text: userPrompt }];
   if (attachment) {
@@ -199,9 +212,14 @@ function generationProvidersForLanguage(
 ) {
   if (attachment) {
     return providers
-      .filter((provider) => provider.supportsDirectFileInput)
+      .filter((provider) => provider.supportsDirectFileInput && (
+        (provider.kind === 'gateway' && provider.gatewayProvider === 'openai') ||
+        provider.kind === 'gemini' ||
+        provider.kind === 'chat' ||
+        (provider.kind === 'gateway' && provider.gatewayProvider === 'gemini')
+      ))
       .sort((first, second) => {
-        const rank = (provider: Provider) => provider.kind === 'gateway' && provider.gatewaySupportsAttachments ? 0 : 1;
+        const rank = (provider: Provider) => provider.kind === 'gateway' && provider.gatewayProvider === 'openai' ? 0 : 1;
         return rank(first) - rank(second);
       });
   }
@@ -223,6 +241,7 @@ function generationProvidersForLanguage(
 function localGatewayRoutes(value: string): Array<{
   audience: 'chinese' | 'english' | 'all';
   options: Record<string, unknown>;
+  provider: 'openai' | 'gemini' | 'deepseek' | undefined;
   responseShape: 'chat' | 'gemini';
   supportsAttachments: boolean;
 }> {
@@ -234,6 +253,9 @@ function localGatewayRoutes(value: string): Array<{
       return [{
         audience: route.audience as 'chinese' | 'english' | 'all',
         options: route.options,
+        provider: ['openai', 'gemini', 'deepseek'].includes(stringValue(route.options.provider))
+          ? stringValue(route.options.provider) as 'openai' | 'gemini' | 'deepseek'
+          : undefined,
         responseShape: route.responseShape === 'gemini' ? 'gemini' : 'chat',
         supportsAttachments: route.supportsAttachments === true,
       }];
@@ -241,6 +263,30 @@ function localGatewayRoutes(value: string): Array<{
   } catch {
     return [];
   }
+}
+
+function gatewayFilesEndpoint(baseUrl: string) {
+  const normalized = baseUrl.trim().replace(/\/+$/, '');
+  return `${normalized.endsWith('/v1') ? normalized.slice(0, -3) : normalized}/v1/files`;
+}
+
+async function uploadGatewayFile(provider: Provider, attachment: SourceAttachment, signal: AbortSignal) {
+  const form = new FormData();
+  form.append('purpose', 'user_data');
+  form.append('file', new Blob([Buffer.from(attachment.data, 'base64')], { type: attachment.mimeType }), attachment.name);
+  const response = await fetch(gatewayFilesEndpoint(provider.endpoint), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${provider.apiKey}` },
+    body: form,
+    signal,
+  });
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) throw new Error('PROVIDER_AUTH_FAILED');
+    throw new Error(response.status >= 500 ? 'UPSTREAM_RETRYABLE' : 'UPSTREAM_ERROR');
+  }
+  const fileId = stringValue((await response.json())?.id);
+  if (!fileId.startsWith('file_')) throw new Error('INVALID_UPSTREAM_RESPONSE');
+  return fileId;
 }
 
 async function requestJsonCompletion(
@@ -269,6 +315,9 @@ async function requestJsonCompletion(
   let lastError: unknown = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
+      const gatewayFileId = isGateway && attachment && provider.gatewaySupportsAttachments
+        ? await uploadGatewayFile(provider, attachment, signal)
+        : null;
       const endpoint = isGemini
         ? `${provider.endpoint.replace(/\/+$/, '')}/models/${encodeURIComponent(provider.model)}:generateContent?key=${encodeURIComponent(provider.apiKey)}`
         : isGateway
@@ -288,7 +337,7 @@ async function requestJsonCompletion(
           ? JSON.stringify({
               messages: [
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: modelMessageContent(userPrompt, provider.gatewaySupportsAttachments ? attachment : null) },
+                { role: 'user', content: gatewayMessageContent(userPrompt, gatewayFileId) },
               ],
               response_format: { type: 'json_object' },
               temperature: 0.2,
@@ -350,10 +399,14 @@ async function requestProfileTask(
   request: ProfileTaskRequest,
 ) {
   const googleProviders = providers.filter((provider) => provider.kind === 'gemini');
-  const cloudFallback = providers.find((provider) => provider.kind === 'chat');
+  const openAiGatewayProviders = providers.filter((provider) =>
+    provider.kind === 'gateway' && provider.gatewayProvider === 'openai' && provider.gatewayAudience === 'all');
+  const geminiGatewayProviders = providers.filter((provider) =>
+    provider.kind === 'gateway' && provider.gatewayProvider === 'gemini');
+  const cloudGeminiProviders = providers.filter((provider) => provider.kind === 'chat' && /gemini/i.test(provider.model));
   const candidates = request.attachment
     ? generationProvidersForLanguage(providers, 'english', request.attachment)
-    : [...googleProviders, ...(cloudFallback ? [cloudFallback] : [])];
+    : [...openAiGatewayProviders, ...googleProviders, ...cloudGeminiProviders, ...geminiGatewayProviders];
   const configuredCandidates = candidates
     .map((provider) => ({ ...provider, model: request.model, pdfModel: undefined }));
   let lastError: unknown = null;
@@ -824,6 +877,7 @@ export default defineConfig(({ mode }) => {
       model: '',
       gatewayAudience: route.audience,
       gatewayOptions: route.options,
+      gatewayProvider: route.provider,
       gatewayResponseShape: route.responseShape,
       gatewaySupportsAttachments: route.supportsAttachments,
       timeoutMs: Number(env.GATEWAY_TIMEOUT_MS) || undefined,
