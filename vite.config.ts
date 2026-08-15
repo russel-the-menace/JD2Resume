@@ -34,9 +34,10 @@ type Provider = {
   model: string;
   pdfModel?: string;
   supportsDirectFileInput: boolean;
-  gatewayAudience?: 'chinese' | 'english';
+  gatewayAudience?: 'chinese' | 'english' | 'all';
   gatewayOptions?: Record<string, unknown>;
   gatewayResponseShape?: 'chat' | 'gemini';
+  gatewaySupportsAttachments?: boolean;
   timeoutMs?: number;
 };
 
@@ -191,8 +192,23 @@ function geminiRequestContent(userPrompt: string, attachment: SourceAttachment |
   return [{ role: 'user', parts }];
 }
 
-function generationProvidersForLanguage(providers: Provider[], language: 'chinese' | 'english') {
-  return [...providers].sort((first, second) => {
+function generationProvidersForLanguage(
+  providers: Provider[],
+  language: 'chinese' | 'english',
+  attachment: SourceAttachment | null = null,
+) {
+  if (attachment) {
+    return providers
+      .filter((provider) => provider.supportsDirectFileInput)
+      .sort((first, second) => {
+        const rank = (provider: Provider) => provider.kind === 'gateway' && provider.gatewaySupportsAttachments ? 0 : 1;
+        return rank(first) - rank(second);
+      });
+  }
+  const matchingGatewayProviders = providers.filter((provider) =>
+    provider.kind === 'gateway' && provider.gatewayAudience === language);
+  const candidates = matchingGatewayProviders.length ? matchingGatewayProviders : providers;
+  return [...candidates].sort((first, second) => {
     const rank = (provider: Provider) => provider.kind !== 'gateway'
       ? 1
       : provider.gatewayAudience === language
@@ -204,16 +220,22 @@ function generationProvidersForLanguage(providers: Provider[], language: 'chines
   });
 }
 
-function localGatewayRoutes(value: string): Array<{ audience: 'chinese' | 'english'; options: Record<string, unknown>; responseShape: 'chat' | 'gemini' }> {
+function localGatewayRoutes(value: string): Array<{
+  audience: 'chinese' | 'english' | 'all';
+  options: Record<string, unknown>;
+  responseShape: 'chat' | 'gemini';
+  supportsAttachments: boolean;
+}> {
   try {
     const parsed = JSON.parse(value || '[]');
     if (!Array.isArray(parsed)) return [];
     return parsed.flatMap((route) => {
-      if (!isRecord(route) || !['chinese', 'english'].includes(route.audience) || !isRecord(route.options)) return [];
+      if (!isRecord(route) || !['chinese', 'english', 'all'].includes(route.audience) || !isRecord(route.options)) return [];
       return [{
-        audience: route.audience as 'chinese' | 'english',
+        audience: route.audience as 'chinese' | 'english' | 'all',
         options: route.options,
         responseShape: route.responseShape === 'gemini' ? 'gemini' : 'chat',
+        supportsAttachments: route.supportsAttachments === true,
       }];
     });
   } catch {
@@ -266,7 +288,7 @@ async function requestJsonCompletion(
           ? JSON.stringify({
               messages: [
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: modelMessageContent(userPrompt, null) },
+                { role: 'user', content: modelMessageContent(userPrompt, provider.gatewaySupportsAttachments ? attachment : null) },
               ],
               response_format: { type: 'json_object' },
               temperature: 0.2,
@@ -329,10 +351,13 @@ async function requestProfileTask(
 ) {
   const googleProviders = providers.filter((provider) => provider.kind === 'gemini');
   const cloudFallback = providers.find((provider) => provider.kind === 'chat');
-  const candidates = [...googleProviders, ...(cloudFallback ? [cloudFallback] : [])]
+  const candidates = request.attachment
+    ? generationProvidersForLanguage(providers, 'english', request.attachment)
+    : [...googleProviders, ...(cloudFallback ? [cloudFallback] : [])];
+  const configuredCandidates = candidates
     .map((provider) => ({ ...provider, model: request.model, pdfModel: undefined }));
   let lastError: unknown = null;
-  for (const provider of candidates) {
+  for (const provider of configuredCandidates) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60_000);
     try {
@@ -559,7 +584,7 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
     }
     try {
       console.info('[Resume Generation] Request started', { traceId, language: input.language, sourceType: source.attachment?.sourceType || 'text' });
-      const generationProviders = generationProvidersForLanguage(providers, input.language);
+      const generationProviders = generationProvidersForLanguage(providers, input.language, source.attachment);
       const job = source.attachment
         ? await extractPuppetJob(generationProviders, input, source, traceId)
         : extractTextJob(source.text, input.language);
@@ -800,8 +825,9 @@ export default defineConfig(({ mode }) => {
       gatewayAudience: route.audience,
       gatewayOptions: route.options,
       gatewayResponseShape: route.responseShape,
+      gatewaySupportsAttachments: route.supportsAttachments,
       timeoutMs: Number(env.GATEWAY_TIMEOUT_MS) || undefined,
-      supportsDirectFileInput: false,
+      supportsDirectFileInput: route.supportsAttachments,
     })));
   }
   const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://www.yunqiaoai.top';
