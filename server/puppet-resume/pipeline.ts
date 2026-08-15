@@ -78,6 +78,22 @@ function validateResponsibilityLength(value: string, isEnglish: boolean, maxChar
   return { valid: length >= minimum && length <= maximum, length, minimum, maximum };
 }
 
+export function normalizeChineseResponsibilitySpacing(value: string): string {
+  return value
+    .replace(/\s+(?=\d)/g, '')
+    .replace(/(\d+(?:\.\d+)?(?:[%％+]|\/\d+(?:\.\d+)?)?)\s+(?=[\u3400-\u9fff])/g, '$1');
+}
+
+export function validateChineseResponsibilityMetrics(responsibilities: string[]): void {
+  if (responsibilities.every((item) => /\d/.test(plainText(item)))) {
+    throw new Error('不得为了量化而让每条职责都包含数字');
+  }
+  const subjectiveScore = /(?:满意度|主观评分|评价得分|评分)[^。；;]{0,16}\d+(?:\.\d+)?(?:\s*[%％]|\s*\/\s*(?:5|10|100))?/;
+  if (responsibilities.some((item) => subjectiveScore.test(plainText(item)))) {
+    throw new Error('职责包含无法由外部读者判断价值的主观评分指标');
+  }
+}
+
 function tagSegments(value: string, tag: 'b' | 'u'): string[] {
   const expression = new RegExp(`<${tag}>(.*?)<\\/${tag}>`, 'gi');
   return [...String(value).matchAll(expression)].map((match) => match[1]);
@@ -170,6 +186,7 @@ function validateRoleBulletResponse(
         );
       }
     });
+    if (!isEnglish) validateChineseResponsibilityMetrics(experience.responsibilities);
     validateResponsibilityHighlights(experience.responsibilities, isEnglish, maxCharPerLine, experienceIndex);
     return true;
   } catch (error: any) {
@@ -314,7 +331,8 @@ export class PuppetResumePipeline {
     });
     const workExperience = workSkeleton.map((experience, index) => ({
       ...experience,
-      responsibilities: generatedRoles[index].responsibilities,
+      responsibilities: generatedRoles[index].responsibilities.map((item: string) =>
+        isEnglish ? item : normalizeChineseResponsibilitySpacing(item)),
     }));
     return {
       ...baseData,

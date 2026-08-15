@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
-import { PuppetResumePipeline } from '../server/puppet-resume/pipeline';
+import {
+  normalizeChineseResponsibilitySpacing,
+  PuppetResumePipeline,
+  validateChineseResponsibilityMetrics,
+} from '../server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from '../server/puppet-resume/adapter';
 import { ExperienceCalculator } from '../server/puppet-resume/utils/experienceCalculator';
 import { validateSupplementCompanyNames } from '../server/puppet-resume/utils/supplementCompany';
 import { extractTextJob, isGenericJobTitle } from '../server/puppet-resume/jobExtraction';
 import { bulletProjection, hasCompleteResponsibilities, structureProjection } from '../server/puppet-resume/singlePass';
-import { generateChineseNonJobPrompt } from '../server/puppet-resume/prompts/ChinesePrompt';
+import { generateChineseJobBulletPrompt, generateChineseNonJobPrompt } from '../server/puppet-resume/prompts/ChinesePrompt';
 
 assert.deepEqual(extractTextJob('岗位名称：高级招聘专员\n要求 3-5 年招聘经验。', 'chinese'), {
   title: '高级招聘专员', experience: '3-5 年', description: '岗位名称：高级招聘专员\n要求 3-5 年招聘经验。',
@@ -19,6 +23,21 @@ assert.equal(unlabeledRecruitingJob.experience, '1-2 年');
 assert.equal(isGenericJobTitle(unlabeledRecruitingJob.title), true);
 assert.equal(isGenericJobTitle('招聘专员'), false);
 assert.equal(isGenericJobTitle('Job Description'), true);
+assert.equal(
+  normalizeChineseResponsibilitySpacing('参与执行 2 场宣讲，单场到场学生 90 余人，收获简历 75 份，入职 9 人'),
+  '参与执行2场宣讲，单场到场学生90余人，收获简历75份，入职9人',
+);
+assert.doesNotThrow(() => validateChineseResponsibilityMetrics([
+  '按岗位胜任力模型筛选简历，每周处理400+份，初筛通过率控制在18%以内，节省面试官时间约35%',
+  '维护招聘渠道并根据岗位特性优化职位文案与刷新策略',
+]));
+assert.throws(() => validateChineseResponsibilityMetrics([
+  '建立岗位常见问题FAQ，候选人满意度评分提升至4.6/5',
+  '维护招聘渠道并根据岗位特性优化职位文案与刷新策略',
+]), /主观评分指标/);
+assert.throws(() => validateChineseResponsibilityMetrics(
+  Array.from({ length: 8 }, (_, index) => `完成第${index + 1}项量化工作`),
+), /每条职责都包含数字/);
 assert.equal(hasCompleteResponsibilities({ workExperience: [{ responsibilities: Array(8).fill('result') }] }), true);
 assert.deepEqual(structureProjection({ workExperience: [{ company: 'Locked', responsibilities: ['result'] }] }).workExperience[0].responsibilities, []);
 assert.deepEqual(bulletProjection({ workExperience: [{ responsibilities: ['result'] }] }), { workExperience: [{ responsibilities: ['result'] }] });
@@ -173,6 +192,26 @@ for (const requiredDetail of [
 ]) {
   assert.match(chineseStructurePrompt, requiredDetail);
 }
+const chineseRolePrompt = generateChineseJobBulletPrompt({
+  targetTitle: request.job_data.title_chinese,
+  job: request.job_data,
+  requiredExp: chineseCalculation.requiredExp,
+  profile: request.resume_profile,
+  earliestWorkDate: chineseCalculation.earliestWorkDate,
+  actualExperienceText: chineseCalculation.actualExperienceText,
+  totalMonths: chineseCalculation.totalMonths,
+  needsSupplement: chineseCalculation.needsSupplement,
+  actualYears: chineseCalculation.actualYears,
+  supplementYears: chineseCalculation.supplementYears,
+  finalTotalYears: chineseCalculation.finalTotalYears,
+  supplementSegments: chineseCalculation.supplementSegments,
+  allWorkExperiences: chineseCalculation.allWorkExperiences,
+  seniorityThresholdDate: chineseCalculation.seniorityThresholdDate,
+  maxCharPerLine: 42,
+}, [{ company: 'Real Company', position: '招聘专员', startDate: '2020-01', endDate: '至今' }]);
+assert.match(chineseRolePrompt, /不要求每条都包含数字.*禁止 8 条全部堆叠数字/);
+assert.match(chineseRolePrompt, /每周筛选400\+份.*初筛通过率18%.*节省面试官时间35%/);
+assert.match(chineseRolePrompt, /候选人满意度4\.6\/5/);
 const puppetResume = await pipeline.enhance(request);
 const mainResume = fromPuppetResume(puppetResume);
 
