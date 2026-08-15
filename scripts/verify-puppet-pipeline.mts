@@ -5,6 +5,7 @@ import { ExperienceCalculator } from '../server/puppet-resume/utils/experienceCa
 import { validateSupplementCompanyNames } from '../server/puppet-resume/utils/supplementCompany';
 import { extractTextJob } from '../server/puppet-resume/jobExtraction';
 import { bulletProjection, hasCompleteResponsibilities, structureProjection } from '../server/puppet-resume/singlePass';
+import { generateChineseNonJobPrompt } from '../server/puppet-resume/prompts/ChinesePrompt';
 
 assert.deepEqual(extractTextJob('岗位名称：高级招聘专员\n要求 3-5 年招聘经验。', 'chinese'), {
   title: '高级招聘专员', experience: '3-5 年', description: '岗位名称：高级招聘专员\n要求 3-5 年招聘经验。',
@@ -126,6 +127,43 @@ const request = toPuppetRequest(input, {
   experience: '经验不限',
   description: 'Build reliable remote cloud services.',
 });
+const chineseCalculation = ExperienceCalculator.calculate(request.resume_profile, request.job_data);
+const chineseStructurePrompt = generateChineseNonJobPrompt({
+  targetTitle: request.job_data.title_chinese,
+  job: request.job_data,
+  requiredExp: chineseCalculation.requiredExp,
+  profile: request.resume_profile,
+  earliestWorkDate: chineseCalculation.earliestWorkDate,
+  actualExperienceText: chineseCalculation.actualExperienceText,
+  totalMonths: chineseCalculation.totalMonths,
+  needsSupplement: chineseCalculation.needsSupplement,
+  actualYears: chineseCalculation.actualYears,
+  supplementYears: chineseCalculation.supplementYears,
+  finalTotalYears: chineseCalculation.finalTotalYears,
+  supplementSegments: chineseCalculation.supplementSegments,
+  allWorkExperiences: chineseCalculation.allWorkExperiences,
+  seniorityThresholdDate: chineseCalculation.seniorityThresholdDate,
+  maxCharPerLine: 42,
+});
+for (const requiredDetail of [
+  /responsibilities 必须为 \[\]/,
+  /position 控制在 9 字以内/,
+  /9 字限制仅适用于补充经历或跨职能改写后的经历/,
+  /Tech Lead\/技术负责人\/研发负责人/,
+  /LOCK=必须原样保留/,
+  /\.NET开发工程师.*Java Developer\/Java工程师/,
+  /后端开发.*Golang工程师\/Python后端开发/,
+  /后端开发.*产品经理.*跨赛道/,
+  /第一段 \d+-\d+，第二段 \d+-\d+/,
+  /仅选择 1-2 个最重要的短语.*<b>\.\.\.<\/b>/,
+  /恰好 4 组，每组恰好 4 项/,
+  /18-42 个视觉点/,
+  /BOSS直聘.*结构化面试.*人才测评.*招聘数据分析.*PowerPoint/,
+  /候选人经历和目标 JD.*不得凭空捏造具体业绩数字/,
+  /所有其他字段禁止出现 <b>、<u> 或 Markdown 强调标记/,
+]) {
+  assert.match(chineseStructurePrompt, requiredDetail);
+}
 const puppetResume = await pipeline.enhance(request);
 const mainResume = fromPuppetResume(puppetResume);
 
