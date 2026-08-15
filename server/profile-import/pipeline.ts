@@ -37,7 +37,7 @@ type ImportSource = {
   attachment: null | { name: string; mimeType: string; data: string };
 };
 
-type ModuleResult = { value: Record<string, any>; model: string; attempts: number };
+type ModuleResult = { value: Record<string, any>; model: string; attempts: number; durationMs: number };
 
 const basicFields = [
   'fullName', 'gender', 'birthday', 'phone', 'phoneEn', 'email', 'location',
@@ -69,6 +69,7 @@ async function runModule(
   validate: (value: Record<string, any>) => boolean,
   attachment?: ProfileTaskRequest['attachment'],
 ): Promise<ModuleResult> {
+  const startedAt = Date.now();
   let lastError: unknown = null;
   const candidates = uniqueModels(models);
   for (let index = 0; index < candidates.length; index += 1) {
@@ -76,7 +77,9 @@ async function runModule(
     try {
       const value = await caller({ task, model, prompt, maxTokens, attachment });
       if (!validate(value)) throw new Error('MODULE_SCHEMA_INVALID');
-      return { value, model, attempts: index + 1 };
+      const durationMs = Date.now() - startedAt;
+      console.info('[Profile Import] Module completed', { task, model, attempts: index + 1, durationMs });
+      return { value, model, attempts: index + 1, durationMs };
     } catch (error) {
       lastError = error;
       console.warn('[Profile Import] Module attempt failed', {
@@ -355,7 +358,9 @@ export async function importProfileFacts(
 ) {
   const traceId = randomUUID();
   const startedAt = Date.now();
+  const documentStartedAt = Date.now();
   const { document, ocrPages } = await canonicalDocumentFromSource(source, models, caller);
+  const documentPreparationMs = Date.now() - documentStartedAt;
   if (!document.lines.length) throw new Error('PROFILE_TEXT_EMPTY');
   console.info('[Profile Import] Document prepared', {
     traceId,
@@ -363,6 +368,7 @@ export async function importProfileFacts(
     pages: document.pages.length,
     lines: document.lines.length,
     ocrPages,
+    documentPreparationMs,
   });
   const language = detectLanguage(document);
   const indexedText = indexedDocumentText(document);
@@ -424,10 +430,10 @@ export async function importProfileFacts(
       lines: document.lines.length,
       ocrPages,
       modules: {
-        basic: { model: basic.model, attempts: basic.attempts, status: 'completed' },
+        basic: { model: basic.model, attempts: basic.attempts, durationMs: basic.durationMs, status: 'completed' },
         ...Object.fromEntries(Object.entries(modules).map(([name, result]) => [name,
           'value' in result
-            ? { model: result.model, attempts: result.attempts, status: 'completed' }
+            ? { model: result.model, attempts: result.attempts, durationMs: result.durationMs, status: 'completed' }
             : { status: 'failed', error: result.error },
         ])),
       },

@@ -392,7 +392,7 @@ const profileValidationMessages = {
   },
   english: {
     name: 'Enter your full name.',
-    contact: 'Add at least one personal website, LinkedIn, WhatsApp, or Telegram contact.',
+    contact: 'Add an email address, personal website, LinkedIn, WhatsApp, or Telegram contact.',
     education: 'Add at least one education entry.',
   },
 };
@@ -625,7 +625,7 @@ function validatePersonalProfile(profile, language) {
   const fields = profile?.[language] || {};
   const contactFields = language === 'chinese'
     ? ['phone', 'email', 'wechat']
-    : ['website', 'linkedin', 'whatsapp', 'telegram'];
+    : ['email', 'website', 'linkedin', 'whatsapp', 'telegram'];
   const issues = [
     ...(!textValue(fields.fullName).trim() ? ['name'] : []),
     ...(!contactFields.some((field) => textValue(fields[field]).trim()) ? ['contact'] : []),
@@ -2940,17 +2940,44 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
 
   const submit = (event) => {
     event.preventDefault();
-    if (educationEditor || workEditor) {
-      setEntryError(chinese ? '请先保存或取消当前编辑项。' : 'Save or cancel the current entry first.');
-      return;
+    let nextDraft = draft;
+    if (educationEditor) {
+      if (!educationEditor.school.trim()) return setEntryError(chinese ? '请填写学校。' : 'Enter a school.');
+      if (!educationEditor.degree.trim()) return setEntryError(chinese ? '请选择学历。' : 'Choose a degree.');
+      if (!educationEditor.major.trim()) return setEntryError(chinese ? '请填写专业。' : 'Enter a major.');
+      if (!educationEditor.startDate) return setEntryError(chinese ? '请选择入学时间。' : 'Choose a start date.');
+      if (!educationEditor.endDate) return setEntryError(chinese ? '请选择毕业时间。' : 'Choose an end date.');
+      if (profileDateRangeInvalid(educationEditor.startDate, educationEditor.endDate)) return setEntryError(chinese ? '入学时间不能晚于毕业时间。' : 'The start date cannot be after the end date.');
+      const educations = [...draft[language].educations];
+      const { index, ...entry } = educationEditor;
+      const nextEntry = { ...entry, degree: entry.degree.trim(), studyType: entry.studyType.trim() };
+      if (index < 0) educations.push(nextEntry);
+      else educations[index] = nextEntry;
+      nextDraft = { ...draft, [language]: { ...draft[language], educations } };
     }
-    const validation = validatePersonalProfile(draft, language);
+    if (workEditor) {
+      if (!workEditor.company.trim()) return setEntryError(chinese ? '请填写公司名称。' : 'Enter a company.');
+      if (!workEditor.jobTitle.trim()) return setEntryError(chinese ? '请填写职位名称。' : 'Enter a job title.');
+      if (!workEditor.startDate) return setEntryError(chinese ? '请选择开始时间。' : 'Choose a start date.');
+      if (!workEditor.endDate) return setEntryError(chinese ? '请选择结束时间。' : 'Choose an end date.');
+      if (profileDateRangeInvalid(workEditor.startDate, workEditor.endDate)) return setEntryError(chinese ? '开始时间不能晚于结束时间。' : 'The start date cannot be after the end date.');
+      const workExperiences = [...draft[language].workExperiences];
+      const { index, ...entry } = workEditor;
+      if (index < 0) workExperiences.push(entry);
+      else workExperiences[index] = entry;
+      nextDraft = { ...draft, [language]: { ...draft[language], workExperiences } };
+    }
+    const validation = validatePersonalProfile(nextDraft, language);
     if (!validation.valid) {
       setProfileError(validation.message);
       return;
     }
     setProfileError('');
-    if (onSave(draft)) onComplete();
+    setEntryError('');
+    setEducationEditor(null);
+    setWorkEditor(null);
+    setDraft(nextDraft);
+    if (onSave(nextDraft)) onComplete();
   };
 
   const applyImportedProfile = async (source) => {
