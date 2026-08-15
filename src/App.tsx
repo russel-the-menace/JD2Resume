@@ -1157,6 +1157,11 @@ function App() {
     return () => window.removeEventListener('popstate', syncFromLocation);
   }, []);
 
+  useEffect(() => {
+    const resume = new URLSearchParams(window.location.search).get('resume');
+    if (library.resumes.some((document) => document.id === resume)) setSelectedResumeId(resume);
+  }, [library]);
+
   const openResume = useCallback((id) => {
     const url = new URL(window.location.href);
     url.searchParams.set('resume', id);

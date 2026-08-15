@@ -50,7 +50,7 @@ export function statePersistencePlugin(databaseUrl: string): Plugin {
   const stateHandler = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     const client = database();
     if (!client) {
-      sendJson(response, 200, { configured: false });
+      sendJson(response, 503, { error: 'Remote database persistence is not configured.' });
       return;
     }
     try {

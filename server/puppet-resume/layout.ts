@@ -232,7 +232,11 @@ async function loadResume(page: Page, origin: string, documentId: unknown) {
   const renderUrl = `${origin}/?resume=${encodeURIComponent(String(documentId))}&render=1`;
   await page.goto(renderUrl, { waitUntil: 'domcontentloaded', timeout: 10_000 });
   try {
-    await page.waitForSelector('.resume-page', { timeout: 10_000 });
+    const rendererFrame = await page.waitForFrame(
+      (frame) => new URL(frame.url()).pathname === '/renderer.html',
+      { timeout: 10_000 },
+    );
+    await rendererFrame.waitForSelector('.resume-page', { timeout: 10_000 });
   } catch {
     const state = await page.evaluate(() => ({
       url: window.location.href,
