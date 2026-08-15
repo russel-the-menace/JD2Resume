@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
   documentFromText,
-  canonicalLines,
   extractSinglePdfPage,
   extractPdfDocument,
   indexedDocumentText,
@@ -37,10 +36,6 @@ type ImportSource = {
   text: string;
   attachment: null | { name: string; mimeType: string; data: string };
 };
-
-export type ProfileOcrCaller = (source: { name: string; data: string }) => Promise<{
-  pages: Array<{ page: number; lines: string[] }>;
-}>;
 
 type ModuleResult = { value: Record<string, any>; model: string; attempts: number; durationMs: number };
 
@@ -282,7 +277,6 @@ async function canonicalDocumentFromSource(
   source: ImportSource,
   models: ProfileImportModels,
   caller: ProfileTaskCaller,
-  ocrCaller?: ProfileOcrCaller,
 ) {
   if (source.sourceType === 'text') return { document: documentFromText(source.text), ocrPages: [] as Array<{ page: number; reasons: string[] }> };
   if (source.sourceType === 'image' && source.attachment) {
@@ -294,16 +288,6 @@ async function canonicalDocumentFromSource(
     return { document: documentFromText(stringArray(ocr.value.lines).join('\n')), ocrPages: [{ page: 1, reasons: ['image-source'] }] };
   }
   if (source.sourceType !== 'pdf' || !source.attachment) throw new Error('PROFILE_SOURCE_INVALID');
-  if (ocrCaller) {
-    const ocrDocument = await ocrCaller(source.attachment);
-    const pages = ocrDocument.pages.map((page) => ({
-      page: page.page,
-      lines: canonicalLines(page.page, page.lines.map((line) => text(line))),
-      needsOcr: false,
-      ocrReasons: ['smartresume-ocr'],
-    }));
-    return { document: { pages, lines: pages.flatMap((page) => page.lines) }, ocrPages: pages.map((page) => ({ page: page.page, reasons: page.ocrReasons })) };
-  }
   let document = await extractPdfDocument(source.attachment.data);
   const ocrPages = document.pages
     .filter((candidate) => candidate.needsOcr)
@@ -371,12 +355,11 @@ export async function importProfileFacts(
   source: ImportSource,
   models: ProfileImportModels,
   caller: ProfileTaskCaller,
-  ocrCaller?: ProfileOcrCaller,
 ) {
   const traceId = randomUUID();
   const startedAt = Date.now();
   const documentStartedAt = Date.now();
-  const { document, ocrPages } = await canonicalDocumentFromSource(source, models, caller, ocrCaller);
+  const { document, ocrPages } = await canonicalDocumentFromSource(source, models, caller);
   const documentPreparationMs = Date.now() - documentStartedAt;
   if (!document.lines.length) throw new Error('PROFILE_TEXT_EMPTY');
   console.info('[Profile Import] Document prepared', {

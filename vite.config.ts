@@ -19,7 +19,6 @@ import {
   type ProfileImportModels,
   type ProfileTaskRequest,
 } from './server/profile-import/pipeline';
-import { runSmartResumeOcr } from './server/profile-import/smartResumeOcr';
 
 const MAX_REQUEST_BYTES = 16_000_000;
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
@@ -556,7 +555,7 @@ function preservesLayoutLocks(original: Record<string, any>, candidate: Record<s
   });
 }
 
-function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImportModels, profileImportEngine: 'gateway' | 'smartresume'): Plugin {
+function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImportModels): Plugin {
   const renderSessions = new ExportSessionStore();
   const parseInput = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (request.method !== 'POST') {
@@ -668,7 +667,7 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
         attachment: source.attachment
           ? { name: source.attachment.name, mimeType: source.attachment.mimeType, data: source.attachment.data }
           : null,
-      }, profileModels, (task) => requestProfileTask(providers, task), profileImportEngine === 'smartresume' ? runSmartResumeOcr : undefined);
+      }, profileModels, (task) => requestProfileTask(providers, task));
       sendJson(response, 200, imported);
     } catch (error) {
       console.error('[Profile Import] Request failed', {
@@ -889,7 +888,6 @@ export default defineConfig(({ mode }) => {
     vision: env.GEMINI_PROFILE_VISION_MODEL || 'gemini-3.6-flash',
     escalation: env.GEMINI_PROFILE_PRO_MODEL || 'gemini-3.1-pro-preview',
   };
-  const profileImportEngine = env.PROFILE_IMPORT_ENGINE === 'smartresume' ? 'smartresume' as const : 'gateway' as const;
   return {
     server: {
       port: 5432,
@@ -907,7 +905,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       statePersistencePlugin(env.DATABASE_URL || ''),
-      resumeGenerationPlugin(providers, profileModels, profileImportEngine),
+      resumeGenerationPlugin(providers, profileModels),
       profileDirectoryPlugin(env.DIRECTORY_API_BASE_URL || 'https://feiwan.online/api'),
     ],
     esbuild: { jsx: 'automatic' },
