@@ -1,8 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createHash, randomBytes } from 'node:crypto';
 import postgres, { type Sql } from 'postgres';
 import type { Plugin } from 'vite';
 
 const MAX_STATE_BYTES = 16_000_000;
+const SESSION_COOKIE = 'jd2resume_session';
 
 function sendJson(response: ServerResponse, status: number, body: Record<string, unknown>) {
   response.statusCode = status;
@@ -31,6 +33,13 @@ function snapshotResponse(row: Record<string, any>) {
     updatedAt: new Date(row.updated_at).getTime(),
   };
 }
+
+function sessionToken(request: IncomingMessage) {
+  const cookie = request.headers.cookie || '';
+  return cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${SESSION_COOKIE}=`))?.slice(SESSION_COOKIE.length + 1) || '';
+}
+
+function tokenHash(token: string) { return createHash('sha256').update(token).digest('hex'); }
 
 export function statePersistencePlugin(databaseUrl: string): Plugin {
   let sql: Sql | null = null;
@@ -124,10 +133,31 @@ export function statePersistencePlugin(databaseUrl: string): Plugin {
     }
   };
 
+  const authHandler = async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+    const client = database();
+    if (!client) { sendJson(response, 503, { error: 'Remote database persistence is not configured.' }); return; }
+    try {
+      if (request.method === 'GET' && request.url === '/session') {
+        const token = sessionToken(request); const rows = token ? await client`SELECT a.id, a.username FROM account_sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = ${tokenHash(token)} AND s.expires_at > NOW()` : [];
+        sendJson(response, 200, { account: rows.length ? { id: rows[0].id, username: rows[0].username } : null }); return;
+      }
+      if (request.method === 'POST' && request.url === '/login') {
+        const input = await readJsonBody(request); const username = typeof input.username === 'string' ? input.username.trim() : ''; const password = typeof input.password === 'string' ? input.password : '';
+        const rows = await client`SELECT id, username FROM accounts WHERE username = ${username} AND password_hash = crypt(${password}, password_hash)`;
+        if (!rows.length) { sendJson(response, 401, { error: 'Invalid username or password.' }); return; }
+        const token = randomBytes(32).toString('base64url'); await client`INSERT INTO account_sessions (token_hash, account_id, expires_at) VALUES (${tokenHash(token)}, ${rows[0].id}, NOW() + INTERVAL '30 days')`;
+        response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`); sendJson(response, 200, { account: { id: rows[0].id, username: rows[0].username } }); return;
+      }
+      if (request.method === 'POST' && request.url === '/logout') { const token = sessionToken(request); if (token) await client`DELETE FROM account_sessions WHERE token_hash = ${tokenHash(token)}`; response.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`); sendJson(response, 200, {}); return; }
+      next();
+    } catch { sendJson(response, 503, { error: 'Authentication is temporarily unavailable.' }); }
+  };
+
   const configureRoutes = (server: { middlewares: { use: Function } }) => {
     server.middlewares.use('/api/account-state', (request: IncomingMessage, response: ServerResponse, next: () => void) => {
       void stateHandler(request, response, next);
     });
+    server.middlewares.use('/api/auth', (request: IncomingMessage, response: ServerResponse, next: () => void) => { void authHandler(request, response, next); });
   };
 
   return {
