@@ -37,6 +37,7 @@ type Provider = {
   supportsDirectFileInput: boolean;
   gatewayAudience?: 'chinese' | 'english';
   gatewayOptions?: Record<string, unknown>;
+  gatewayResponseShape?: 'chat' | 'gemini';
   timeoutMs?: number;
 };
 
@@ -196,13 +197,17 @@ function generationProvidersForLanguage(providers: Provider[], language: 'chines
   });
 }
 
-function localGatewayRoutes(value: string): Array<{ audience: 'chinese' | 'english'; options: Record<string, unknown> }> {
+function localGatewayRoutes(value: string): Array<{ audience: 'chinese' | 'english'; options: Record<string, unknown>; responseShape: 'chat' | 'gemini' }> {
   try {
     const parsed = JSON.parse(value || '[]');
     if (!Array.isArray(parsed)) return [];
     return parsed.flatMap((route) => {
       if (!isRecord(route) || !['chinese', 'english'].includes(route.audience) || !isRecord(route.options)) return [];
-      return [{ audience: route.audience as 'chinese' | 'english', options: route.options }];
+      return [{
+        audience: route.audience as 'chinese' | 'english',
+        options: route.options,
+        responseShape: route.responseShape === 'gemini' ? 'gemini' : 'chat',
+      }];
     });
   } catch {
     return [];
@@ -284,12 +289,13 @@ async function requestJsonCompletion(
           : 'UPSTREAM_ERROR');
       }
       const providerData = await upstream.json();
-      const finishReason = stringValue(isGemini
+      const usesGeminiResponse = isGemini || (isGateway && provider.gatewayResponseShape === 'gemini');
+      const finishReason = stringValue(usesGeminiResponse
         ? providerData?.candidates?.[0]?.finishReason
         : providerData?.choices?.[0]?.finish_reason).toLowerCase();
       if (['length', 'max_tokens'].includes(finishReason)) throw new Error('OUTPUT_TRUNCATED');
-      if (isGemini && finishReason === 'max_tokens') throw new Error('OUTPUT_TRUNCATED');
-      const content = isGemini
+      if (usesGeminiResponse && finishReason === 'max_tokens') throw new Error('OUTPUT_TRUNCATED');
+      const content = usesGeminiResponse
         ? providerData?.candidates?.[0]?.content?.parts?.map((part: any) => stringValue(part.text)).filter(Boolean).join('')
         : providerData?.choices?.[0]?.message?.content;
       if (typeof content !== 'string') throw new Error('INVALID_UPSTREAM_RESPONSE');
@@ -793,6 +799,7 @@ export default defineConfig(({ mode }) => {
       model: '',
       gatewayAudience: route.audience,
       gatewayOptions: route.options,
+      gatewayResponseShape: route.responseShape,
       timeoutMs: Number(env.GATEWAY_TIMEOUT_MS) || undefined,
       supportsDirectFileInput: false,
     })));
