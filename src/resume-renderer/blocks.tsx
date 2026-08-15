@@ -21,7 +21,8 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
     ['whatsapp', MessageCircle, basics.whatsapp], ['telegram', Send, basics.telegram],
   ].filter((entry) => text(entry[2]));
   add(block(blockId.header(), 'header', 'data.basics', order, <header className="resume-header"><div className="resume-name-block"><h1>{name}</h1><p>{text(basics.role)}</p></div>{contacts.length ? <div className="resume-contact">{contacts.map(([id, Icon, value], index) => <span className="resume-contact-item" data-contact={String(id)} key={String(id)}><Icon size={11} aria-hidden="true" />{text(value)}{index < contacts.length - 1 ? <i className="contact-separator" aria-hidden="true" /> : null}</span>)}</div> : null}{text(basics.photoUrl) ? <div className="profile-avatar-slot"><img className="resume-profile-avatar" src={text(basics.photoUrl)} alt="" /></div> : null}</header>, { gapBeforeToken: '0', gapAfterToken: '30' }));
-  const sectionOrder = document.sectionOrder.length ? document.sectionOrder : ['summary', 'education', 'experience', 'skills', 'certifications'];
+  const requestedSectionOrder = document.sectionOrder.length ? document.sectionOrder : ['summary', 'education', 'experience', 'skills', 'certifications'];
+  const sectionOrder = [...new Set([...requestedSectionOrder, 'summary', 'education', 'experience', 'skills', 'certifications'])];
   for (const section of sectionOrder) {
     if (section === 'basics') continue;
     if (section === 'summary' && text(data.summary)) {

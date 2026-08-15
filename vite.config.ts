@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { Buffer } from 'node:buffer';
-import { PuppetResumePipeline, type GenerationOptions } from './server/puppet-resume/pipeline';
+import { isIsolatedChineseMetricPhrase, PuppetResumePipeline, type GenerationOptions } from './server/puppet-resume/pipeline';
 import { fromPuppetResume, toPuppetRequest } from './server/puppet-resume/adapter';
 import { extractTextJob, isGenericJobTitle } from './server/puppet-resume/jobExtraction';
 import { renderPdfFromPagePlan } from './server/puppet-resume/exportPdf';
@@ -544,8 +544,10 @@ ${sourceText}`;
 
 function underlineFirstNumber(value: string): string {
   if (/<\/?u>/i.test(value)) return value;
-  // Keep the numeric fact and its immediate unit together when possible.
-  return value.replace(/\d+(?:\.\d+)?(?:\s*[%％万亿千百十年个月天人次个]+)?/, (match) => `<u>${match}</u>`);
+  const metricPhrase = /[\u3400-\u9fffA-Za-z]{0,6}\d+(?:\.\d+)?(?:[%％+]|\/\d+(?:\.\d+)?)?(?:个?月|年|天|人|份|场|类|项|次|家|所|个)?(?:内|以上|以内|余人)?(?:[\u3400-\u9fffA-Za-z]{1,6}\d+(?:\.\d+)?(?:[%％+]|\/\d+(?:\.\d+)?)?(?:个?月|年|天|人|份|场|类|项|次|家|所|个)?)?/;
+  const match = metricPhrase.exec(value)?.[0] || '';
+  if (!match || isIsolatedChineseMetricPhrase(match)) return value;
+  return value.replace(match, `<u>${match}</u>`);
 }
 
 function repairRoleBulletHighlights(value: any): { value: any; repaired: number } {

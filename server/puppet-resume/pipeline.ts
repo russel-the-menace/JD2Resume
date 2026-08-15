@@ -94,6 +94,10 @@ export function validateChineseResponsibilityMetrics(responsibilities: string[])
   }
 }
 
+export function isIsolatedChineseMetricPhrase(value: string): boolean {
+  return /^(?:约|超过|近|累计)?\d+(?:\.\d+)?(?:\+|[%％]|\/\d+(?:\.\d+)?)?(?:个?月|年|天|人|份|场|类|项|次|家|所|个)?(?:内|以上|以内|余人)?$/.test(value.trim());
+}
+
 function tagSegments(value: string, tag: 'b' | 'u'): string[] {
   const expression = new RegExp(`<${tag}>(.*?)<\\/${tag}>`, 'gi');
   return [...String(value).matchAll(expression)].map((match) => match[1]);
@@ -126,6 +130,10 @@ function validateResponsibilityHighlights(
     assertValidTagPairs(item, 'u');
     const segments = tagSegments(item, 'u');
     if (segments.length !== 1) throw new Error(`单条职责只允许一处下划线 index=${experienceIndex}`);
+    const segmentText = plainText(segments[0]);
+    if (!isEnglish && isIsolatedChineseMetricPhrase(segmentText)) {
+      throw new Error(`下划线必须包含指标及其动作或结果，不能只标记数字或单位 index=${experienceIndex}`);
+    }
     const segmentLength = responsibilityLength(segments[0], isEnglish);
     const fullLength = responsibilityLength(item, isEnglish);
     if (segmentLength <= 0 || segmentLength >= fullLength || segmentLength > maxCharPerLine * 0.6) {
