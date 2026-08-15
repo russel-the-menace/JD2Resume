@@ -1514,6 +1514,7 @@ function App() {
         onDelete={deleteResume}
         currentAccount={currentAccount}
         onSwitchAccount={async () => { await fetch('/api/auth/logout', { method: 'POST' }); setSessionState('signed-out'); }}
+        onChangePassword={async () => { const currentPassword = window.prompt('Current password'); const newPassword = window.prompt('New password'); if (!currentPassword || !newPassword) return; await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword, newPassword }) }); }}
         userProfile={userProfile}
         onProfileSave={saveUserProfile}
         onImportProfile={importProfileFromResume}
@@ -1533,9 +1534,9 @@ function App() {
 }
 
 function RemoteLogin({ onSignedIn }: { onSignedIn: (account: { id: string; username: string }) => void }) {
-  const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
-  const submit = async (event) => { event.preventDefault(); setError(''); const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const payload = await response.json().catch(() => ({})); if (!response.ok || !payload.account) { setError(payload.error || '登录失败'); return; } onSignedIn(payload.account); };
-  return <main className="remote-connection-gate"><form className="remote-login" onSubmit={submit}><h1>登录</h1><input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="用户名" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="密码" />{error && <p>{error}</p>}<button className="primary-button" type="submit">登录</button></form></main>;
+  const [mode, setMode] = useState<'login' | 'register'>('login'); const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
+  const submit = async (event) => { event.preventDefault(); setError(''); const response = await fetch(`/api/auth/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const payload = await response.json().catch(() => ({})); if (!response.ok || !payload.account) { setError(payload.error || '操作失败'); return; } onSignedIn(payload.account); };
+  return <main className="remote-connection-gate"><form className="remote-login" onSubmit={submit}><h1>{mode === 'login' ? 'Sign in' : 'Sign up'}</h1><input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Username" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" />{error && <p>{error}</p>}<button className="primary-button" type="submit">{mode === 'login' ? 'Sign in' : 'Sign up'}</button><button className="dialog-link-button" type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Sign up' : 'Sign in'}</button></form></main>;
 }
 
 function RemoteConnectionGate({ unavailable, onRetry }: { unavailable: boolean; onRetry: () => void }) {
@@ -2054,6 +2055,7 @@ function ResumeLibrary({
   onDelete,
   currentAccount,
   onSwitchAccount,
+  onChangePassword,
   userProfile,
   onProfileSave,
   onImportProfile,
@@ -2133,6 +2135,7 @@ function ResumeLibrary({
                 <button onClick={() => { setAccountMenuOpen(false); void onSwitchAccount(); }}>
                   Switch account
                 </button>
+                <button onClick={() => { setAccountMenuOpen(false); void onChangePassword(); }}>Change password</button>
               </div>
             )}
           </div>

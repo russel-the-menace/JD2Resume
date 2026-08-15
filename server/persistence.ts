@@ -148,6 +148,21 @@ export function statePersistencePlugin(databaseUrl: string): Plugin {
         const token = randomBytes(32).toString('base64url'); await client`INSERT INTO account_sessions (token_hash, account_id, expires_at) VALUES (${tokenHash(token)}, ${rows[0].id}, NOW() + INTERVAL '30 days')`;
         response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`); sendJson(response, 200, { account: { id: rows[0].id, username: rows[0].username } }); return;
       }
+      if (request.method === 'POST' && request.url === '/register') {
+        const input = await readJsonBody(request); const username = typeof input.username === 'string' ? input.username.trim() : ''; const password = typeof input.password === 'string' ? input.password : '';
+        if (!/^[a-zA-Z0-9_.-]{2,64}$/.test(username) || password.length < 4) { sendJson(response, 400, { error: 'Invalid username or password.' }); return; }
+        const id = username.toLowerCase();
+        const rows = await client`INSERT INTO accounts (id, username, password_hash) VALUES (${id}, ${username}, crypt(${password}, gen_salt('bf'))) ON CONFLICT DO NOTHING RETURNING id, username`;
+        if (!rows.length) { sendJson(response, 409, { error: 'Username is already in use.' }); return; }
+        const token = randomBytes(32).toString('base64url'); await client`INSERT INTO account_sessions (token_hash, account_id, expires_at) VALUES (${tokenHash(token)}, ${id}, NOW() + INTERVAL '30 days')`;
+        response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`); sendJson(response, 201, { account: { id, username } }); return;
+      }
+      if (request.method === 'POST' && request.url === '/change-password') {
+        const input = await readJsonBody(request); const token = sessionToken(request); const currentPassword = typeof input.currentPassword === 'string' ? input.currentPassword : ''; const newPassword = typeof input.newPassword === 'string' ? input.newPassword : '';
+        if (newPassword.length < 4) { sendJson(response, 400, { error: 'Invalid password.' }); return; }
+        const rows = token ? await client`UPDATE accounts SET password_hash = crypt(${newPassword}, gen_salt('bf')) WHERE id = (SELECT account_id FROM account_sessions WHERE token_hash = ${tokenHash(token)} AND expires_at > NOW()) AND password_hash = crypt(${currentPassword}, password_hash) RETURNING id` : [];
+        if (!rows.length) { sendJson(response, 401, { error: 'Current password is incorrect.' }); return; } sendJson(response, 200, {}); return;
+      }
       if (request.method === 'POST' && request.url === '/logout') { const token = sessionToken(request); if (token) await client`DELETE FROM account_sessions WHERE token_hash = ${tokenHash(token)}`; response.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`); sendJson(response, 200, {}); return; }
       next();
     } catch { sendJson(response, 503, { error: 'Authentication is temporarily unavailable.' }); }
