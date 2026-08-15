@@ -88,8 +88,12 @@ const phaseTwo = {
 const roleResponses = phaseTwo.workExperience.map((experience) => ({ workExperience: [experience] }));
 
 const prompts: string[] = [];
-const pipeline = new PuppetResumePipeline(async (prompt, validator) => {
+const stageOptions: Array<{ stage: string; maxTokens: number; timeoutMs: number }> = [];
+let activeRoleCalls = 0;
+let maxActiveRoleCalls = 0;
+const pipeline = new PuppetResumePipeline(async (prompt, validator, options) => {
   prompts.push(prompt);
+  stageOptions.push(options);
   const responseIndex = prompts.length - 1;
   if (responseIndex === 0) {
     await assert.rejects(
@@ -97,6 +101,9 @@ const pipeline = new PuppetResumePipeline(async (prompt, validator) => {
       /个人介绍必须仅有 1-2 处加深内容/,
     );
   } else {
+    activeRoleCalls += 1;
+    maxActiveRoleCalls = Math.max(maxActiveRoleCalls, activeRoleCalls);
+    await new Promise((resolve) => setTimeout(resolve, 20));
     const roleResponse = roleResponses[responseIndex - 1];
     const invalidBulletPhase = {
       workExperience: roleResponse.workExperience.map((experience) => ({
@@ -108,6 +115,7 @@ const pipeline = new PuppetResumePipeline(async (prompt, validator) => {
       async () => validator(JSON.stringify(invalidBulletPhase)),
       /每段工作经历必须仅有 1-2 条职责包含下划线/,
     );
+    activeRoleCalls -= 1;
   }
   const response = JSON.stringify(responseIndex === 0 ? phaseOne : roleResponses[responseIndex - 1]);
   assert.equal(await validator(response), true);
@@ -122,6 +130,13 @@ const puppetResume = await pipeline.enhance(request);
 const mainResume = fromPuppetResume(puppetResume);
 
 assert.equal(prompts.length, 3);
+assert.equal(stageOptions[0].stage, 'structure');
+assert.equal(stageOptions[0].maxTokens, 4_000);
+assert.equal(stageOptions[0].timeoutMs, 22_000);
+assert.equal(stageOptions[1].stage, 'role-bullets');
+assert.equal(stageOptions[1].maxTokens, 2_200);
+assert.equal(stageOptions[1].timeoutMs, 32_000);
+assert.equal(maxActiveRoleCalls, 2);
 assert.match(prompts[0], /Phase 1 \(Non-Job Bullet\)/);
 assert.match(prompts[1], /Phase 2 \(Job Bullet\)/);
 assert.match(prompts[2], /Phase 2 \(Job Bullet\)/);
