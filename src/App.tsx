@@ -1050,6 +1050,9 @@ function App() {
   const [profileImporting, setProfileImporting] = useState(false);
   const [editorProfileOpen, setEditorProfileOpen] = useState(false);
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
     const resume = new URLSearchParams(window.location.search).get('resume');
@@ -1519,7 +1522,7 @@ function App() {
         onDelete={deleteResume}
         currentAccount={currentAccount}
         onSwitchAccount={() => setAccountSwitcherOpen(true)}
-        onChangePassword={async () => { const currentPassword = window.prompt('Current password'); const newPassword = window.prompt('New password'); if (!currentPassword || !newPassword) return; await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword, newPassword }) }); }}
+        onChangePassword={() => setPasswordDialogOpen(true)}
         userProfile={userProfile}
         onProfileSave={saveUserProfile}
         onImportProfile={importProfileFromResume}
@@ -1532,17 +1535,235 @@ function App() {
   return (
     <>
       {appContent}
-      {accountSwitcherOpen && <RemoteAccountSwitcher currentAccount={currentAccount} onCancel={() => setAccountSwitcherOpen(false)} onSignIn={async () => { await fetch('/api/auth/logout', { method: 'POST' }); setAccountSwitcherOpen(false); setSessionState('signed-out'); }} onSignUp={async () => { await fetch('/api/auth/logout', { method: 'POST' }); setAccountSwitcherOpen(false); setSessionState('signed-out'); }} />}
+      {accountSwitcherOpen && (
+        <AccountSwitcherDialog
+          currentAccount={currentAccount}
+          onCancel={() => setAccountSwitcherOpen(false)}
+          onSwitch={() => {
+            setAccountSwitcherOpen(false);
+            setLoginDialogOpen(true);
+          }}
+          onSignIn={() => {
+            setAccountSwitcherOpen(false);
+            setLoginDialogOpen(true);
+          }}
+          onSignUp={() => {
+            setAccountSwitcherOpen(false);
+            setRegisterDialogOpen(true);
+          }}
+        />
+      )}
+      {loginDialogOpen && (
+        <LoginDialog
+          onCancel={() => setLoginDialogOpen(false)}
+          onLogin={async (credentials) => {
+            const response = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(credentials),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload?.account) return { ok: false, error: textValue(payload?.error, 'Unable to sign in.') };
+            setCurrentAccount(payload.account);
+            setLoginDialogOpen(false);
+            setSessionState('signed-in');
+            setConnectionAttempt((attempt) => attempt + 1);
+            return { ok: true };
+          }}
+          onSignUp={() => { setLoginDialogOpen(false); setRegisterDialogOpen(true); }}
+        />
+      )}
+      {registerDialogOpen && (
+        <RegisterDialog
+          onCancel={() => setRegisterDialogOpen(false)}
+          onRegister={async (credentials) => {
+            const response = await fetch('/api/auth/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(credentials),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload?.account) return { ok: false, error: textValue(payload?.error, 'Unable to sign up.') };
+            setCurrentAccount(payload.account);
+            setRegisterDialogOpen(false);
+            setSessionState('signed-in');
+            setConnectionAttempt((attempt) => attempt + 1);
+            return { ok: true };
+          }}
+          onSignIn={() => { setRegisterDialogOpen(false); setLoginDialogOpen(true); }}
+        />
+      )}
+      {passwordDialogOpen && (
+        <ChangePasswordDialog
+          onCancel={() => setPasswordDialogOpen(false)}
+          onChangePassword={async (credentials) => {
+            const response = await fetch('/api/auth/change-password', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(credentials),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) return { ok: false, error: textValue(payload?.error, 'Unable to change password.') };
+            setPasswordDialogOpen(false);
+            return { ok: true };
+          }}
+        />
+      )}
       {editorProfileOpen && <PersonalProfileDialog profile={userProfile} onCancel={() => setEditorProfileOpen(false)} onComplete={() => setEditorProfileOpen(false)} onSave={saveUserProfile} onImport={importProfileFromResume} onTranslate={translateImportedProfile} onSearchDirectory={searchProfileDirectory} />}
       {profileImporting && <ProfileImportLoadingOverlay />}
     </>
   );
 }
 
-function RemoteAccountSwitcher({ currentAccount, onCancel, onSignIn, onSignUp }) {
+function AccountSwitcherDialog({ currentAccount, onCancel, onSwitch, onSignIn, onSignUp }) {
   const [accounts, setAccounts] = useState([currentAccount]);
-  useEffect(() => { void fetch('/api/auth/accounts').then((response) => response.json()).then((payload) => { if (Array.isArray(payload.accounts)) setAccounts(payload.accounts); }); }, []);
-  return <div className="modal-backdrop" onMouseDown={onCancel}><section className="resume-dialog account-switcher-dialog" onMouseDown={(event) => event.stopPropagation()}><header className="resume-dialog-header"><div><span className="dialog-kicker">Accounts</span><h2>Switch account</h2></div><button className="icon-button small" onClick={onCancel} aria-label="Close"><X size={16} /></button></header><div className="account-switcher-content">{accounts.map((account) => <button className={cx('account-list-item', account.id === currentAccount.id && 'is-current')} key={account.id} disabled={account.id === currentAccount.id}><span className="account-list-avatar">{accountInitials(account.username)}</span><strong>{account.username}</strong>{account.id === currentAccount.id && <Check size={16} />}</button>)}</div><footer className="account-dialog-footer"><button className="dialog-link-button" onClick={onSignIn}><LogIn size={15} /> Sign in</button><button className="dialog-link-button" onClick={onSignUp}><UserPlus size={15} /> Sign up</button></footer></section></div>;
+
+  useEffect(() => {
+    void fetch('/api/auth/accounts')
+      .then(async (response) => response.ok ? response.json() : {})
+      .then((payload) => {
+        if (Array.isArray(payload.accounts)) setAccounts(payload.accounts);
+      });
+  }, []);
+
+  const orderedAccounts = [
+    currentAccount,
+    ...accounts.filter((account) => account.id !== currentAccount.id),
+  ];
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <section className="resume-dialog account-switcher-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="account-switcher-title">
+        <header className="resume-dialog-header account-dialog-header">
+          <div><span className="dialog-kicker">Accounts</span><h2 id="account-switcher-title">Switch account</h2></div>
+          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
+        </header>
+        <div className="account-switcher-content">
+          <div className="account-list">
+            {orderedAccounts.map((account) => (
+              <button key={account.id} type="button" className={cx('account-list-item', account.id === currentAccount.id && 'is-current')} onClick={() => { if (account.id !== currentAccount.id) void onSwitch(account.id); }} aria-current={account.id === currentAccount.id ? 'page' : undefined}>
+                <span className="account-list-avatar">{account.username.slice(0, 1).toUpperCase()}</span>
+                <span className="account-list-copy"><strong>{account.username}</strong>{account.id === currentAccount.id && <small>Current account</small>}</span>
+                {account.id === currentAccount.id && <Check size={16} />}
+              </button>
+            ))}
+          </div>
+        </div>
+        <footer className="account-dialog-footer">
+          <button className="dialog-link-button" type="button" onClick={onSignIn}><LogIn size={15} /> Sign in</button>
+          <button className="dialog-link-button" type="button" onClick={onSignUp}><UserPlus size={15} /> Sign up</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function LoginDialog({ onCancel, onLogin, onSignUp }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!username.trim() || !password || submitting) return;
+    setSubmitting(true);
+    const result = await onLogin({ username, password });
+    setSubmitting(false);
+    if (!result.ok) setError(result.error);
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <form className="resume-dialog account-auth-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="login-title">
+        <header className="resume-dialog-header account-dialog-header">
+          <div><span className="dialog-kicker">Local account</span><h2 id="login-title">Sign in</h2></div>
+          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
+        </header>
+        <div className="account-auth-content">
+          <Field label="Username" value={username} onChange={(value) => { setUsername(value); setError(''); }} />
+          <Field label="Password" type="password" value={password} onChange={(value) => { setPassword(value); setError(''); }} />
+          {error && <p className="account-auth-error" role="alert">{error}</p>}
+        </div>
+        <footer className="account-auth-footer">
+          <button className="primary-button" type="submit" disabled={!username.trim() || !password || submitting}><LogIn size={16} /> Sign in</button>
+          <button className="dialog-link-button" type="button" onClick={onSignUp}>Sign up</button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function RegisterDialog({ onCancel, onRegister, onSignIn }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!username.trim() || !password || submitting) return;
+    setSubmitting(true);
+    const result = await onRegister({ username, password });
+    setSubmitting(false);
+    if (!result.ok) setError(result.error);
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <form className="resume-dialog account-auth-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="register-title">
+        <header className="resume-dialog-header account-dialog-header">
+          <div><span className="dialog-kicker">Local account</span><h2 id="register-title">Sign up</h2></div>
+          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
+        </header>
+        <div className="account-auth-content">
+          <Field label="Username" value={username} onChange={(value) => { setUsername(value); setError(''); }} />
+          <Field label="Password" type="password" value={password} onChange={(value) => { setPassword(value); setError(''); }} />
+          {error && <p className="account-auth-error" role="alert">{error}</p>}
+        </div>
+        <footer className="account-auth-footer">
+          <button className="primary-button" type="submit" disabled={!username.trim() || !password || submitting}><UserPlus size={16} /> Sign up</button>
+          <button className="dialog-link-button" type="button" onClick={onSignIn}>Sign in</button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function ChangePasswordDialog({ onCancel, onChangePassword }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!currentPassword || !newPassword || !confirmation || submitting) return;
+    if (newPassword !== confirmation) { setError('New passwords do not match.'); return; }
+    setSubmitting(true);
+    const result = await onChangePassword({ currentPassword, newPassword });
+    setSubmitting(false);
+    if (!result.ok) setError(result.error);
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <form className="resume-dialog account-auth-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="change-password-title">
+        <header className="resume-dialog-header account-dialog-header">
+          <div><span className="dialog-kicker">Local account</span><h2 id="change-password-title">Change password</h2></div>
+          <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
+        </header>
+        <div className="account-auth-content">
+          <Field label="Current password" type="password" value={currentPassword} onChange={(value) => { setCurrentPassword(value); setError(''); }} />
+          <Field label="New password" type="password" value={newPassword} onChange={(value) => { setNewPassword(value); setError(''); }} />
+          <Field label="Confirm new password" type="password" value={confirmation} onChange={(value) => { setConfirmation(value); setError(''); }} />
+          {error && <p className="account-auth-error" role="alert">{error}</p>}
+        </div>
+        <footer className="account-auth-footer"><button className="primary-button" type="submit" disabled={!currentPassword || !newPassword || !confirmation || submitting}><KeyRound size={16} /> Change password</button></footer>
+      </form>
+    </div>
+  );
 }
 
 function RemoteLogin({ onSignedIn }: { onSignedIn: (account: { id: string; username: string }) => void }) {
