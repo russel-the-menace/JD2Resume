@@ -26,7 +26,7 @@ export function useResumeRenderer({ document, revision, iframeRef, onValidPlan, 
       if (event.origin !== window.location.origin || event.source !== iframeRef.current?.contentWindow || event.data?.protocol !== RENDERER_PROTOCOL) return;
       if (event.data.kind === 'READY') { if (event.data.rendererVersion !== RENDERER_VERSION) { setStatus('failed'); setFailureCode('PROTOCOL_MISMATCH'); return; } readyRef.current = true; setStatus('idle'); void postRender(); return; }
       const latest = latestRef.current; if (!latest || !('requestId' in event.data) || event.data.requestId !== latest.requestId || event.data.revision !== latest.revision || event.data.snapshotHash !== latest.hash) return;
-      if (event.data.kind === 'RENDER_FAILED') { setStatus('failed'); setFailureCode(event.data.failureCode); onLayoutFailure?.(event.data.snapshotHash, event.data.report); return; }
+      if (event.data.kind === 'RENDER_FAILED') { console.warn('[Resume Preview] Layout failed', { failureCode: event.data.failureCode, report: event.data.report }); setStatus('failed'); setFailureCode(event.data.failureCode); onLayoutFailure?.(event.data.snapshotHash, event.data.report); return; }
       if (event.data.kind !== 'RENDER_SUCCEEDED') return;
       const remaining = Math.max(0, MIN_LOADING_VISIBILITY_MS - (performance.now() - loadingStartedAtRef.current)); if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
       if (latestRef.current?.requestId !== latest.requestId) return; onValidPlan(event.data.pagePlan, event.data.report); setStatus('ready');
