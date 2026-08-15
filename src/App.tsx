@@ -140,7 +140,7 @@ const chineseSectionLabels = {
   summary: '个人介绍',
   experience: '工作经历',
   education: '教育经历',
-  skills: '专业经历',
+  skills: '专业技能',
   certifications: '证书',
 };
 
@@ -4216,7 +4216,7 @@ function EditorPanel({
         summary: ['个人介绍', '自我简介'],
         experience: ['工作经历', `${data.experience.length} 段经历`],
         education: ['教育经历', `${data.education.length} 条记录`],
-        skills: ['专业经历', '核心能力'],
+          skills: ['专业技能', '分类与技能点'],
       }
     : {
         basics: ['Personal details', 'The essentials'],
@@ -4285,7 +4285,7 @@ function EditorPanel({
           <EducationEditor data={data} updateData={updateData} />
         )}
         {activeSection === 'skills' && (
-          <SkillsEditor skills={data.skills} updateData={updateData} />
+          <SkillsEditor skills={data.skills} updateData={updateData} language={language} />
         )}
         {!baseSections.some((section) => section.id === activeSection) && (
           <CustomSectionEditor
@@ -4545,23 +4545,73 @@ function EducationEditor({ data, updateData }) {
   );
 }
 
-function SkillsEditor({ skills, updateData }) {
-  const update = (field, value) => {
-    updateData((current) => ({
-      ...current,
-      skills: { ...current.skills, [field]: value, categories: [] },
-    }));
+function SkillsEditor({ skills, updateData, language }) {
+  const chinese = isChineseResume(language);
+  const categories = skills.categories?.length
+    ? skills.categories
+    : [
+        { title: chinese ? '专业领域' : 'Expertise', items: skills.expertise },
+        { title: chinese ? '工具平台' : 'Tools & Platforms', items: skills.tools },
+      ].map((category) => ({
+        title: category.title,
+        items: category.items.split(/[,，、]/).map((item) => item.trim()).filter(Boolean),
+      })).filter((category) => category.items.length);
+
+  const updateCategories = (nextCategories) => {
+    updateData((current) => ({ ...current, skills: { ...current.skills, categories: nextCategories } }));
   };
-  const expertise = skills.expertise.split(',').map((item) => item.trim()).filter(Boolean);
+
+  const updateCategory = (categoryIndex, field, value) => {
+    updateCategories(categories.map((category, index) => index === categoryIndex ? { ...category, [field]: value } : category));
+  };
+
+  const updateItem = (categoryIndex, itemIndex, value) => {
+    updateCategories(categories.map((category, index) => index === categoryIndex
+      ? { ...category, items: category.items.map((item, currentIndex) => currentIndex === itemIndex ? value : item) }
+      : category));
+  };
+
+  const addCategory = () => updateCategories([...categories, { title: chinese ? '新技能分类' : 'New skill category', items: [''] }]);
+  const removeCategory = (categoryIndex) => updateCategories(categories.filter((_, index) => index !== categoryIndex));
+  const addItem = (categoryIndex) => updateCategories(categories.map((category, index) => index === categoryIndex ? { ...category, items: [...category.items, ''] } : category));
+  const removeItem = (categoryIndex, itemIndex) => updateCategories(categories.map((category, index) => index === categoryIndex
+    ? { ...category, items: category.items.filter((_, currentIndex) => currentIndex !== itemIndex) }
+    : category));
+
   return (
     <div className="form-content">
-      <Field label="Areas of expertise" value={skills.expertise} onChange={(value) => update('expertise', value)} />
-      <div className="tag-preview">
-        {expertise.map((item) => <span key={item}>{item}<X size={12} /></span>)}
+      <div className="skills-editor-list">
+        {categories.map((category, categoryIndex) => (
+          <section className="skill-editor-category" key={`${category.title}-${categoryIndex}`}>
+            <div className="skill-editor-category-heading">
+              <Field
+                label={chinese ? '技能分类' : 'Skill category'}
+                value={category.title}
+                placeholder={chinese ? '例如：技术能力' : 'e.g. Technical skills'}
+                onChange={(value) => updateCategory(categoryIndex, 'title', value)}
+              />
+              <button className="icon-button small skill-remove-button" type="button" onClick={() => removeCategory(categoryIndex)} aria-label={chinese ? '删除技能分类' : 'Remove skill category'} title={chinese ? '删除技能分类' : 'Remove category'}>
+                <Trash2 size={15} />
+              </button>
+            </div>
+            <div className="skill-editor-items">
+              {category.items.map((item, itemIndex) => (
+                <div className="skill-editor-item" key={`${categoryIndex}-${itemIndex}`}>
+                  <span className="skill-item-marker" aria-hidden="true">•</span>
+                  <input value={item} placeholder={chinese ? '技能点' : 'Skill'} onChange={(event) => updateItem(categoryIndex, itemIndex, event.target.value)} />
+                  <button className="icon-button small" type="button" onClick={() => removeItem(categoryIndex, itemIndex)} aria-label={chinese ? '删除技能点' : 'Remove skill'} title={chinese ? '删除技能点' : 'Remove skill'}>
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button className="inline-add-button" type="button" onClick={() => addItem(categoryIndex)}><Plus size={14} /> {chinese ? '添加技能点' : 'Add skill'}</button>
+          </section>
+        ))}
       </div>
-      <Field label="Tools and platforms" value={skills.tools} onChange={(value) => update('tools', value)} />
+      <button className="add-entry-button" type="button" onClick={addCategory}><Plus size={17} /> {chinese ? '添加技能分类' : 'Add skill category'}</button>
       <div className="skill-level-row">
-        <div><strong>Show skill level</strong><span>Hide for ATS-friendly resumes</span></div>
+        <div><strong>{chinese ? '显示技能熟练度' : 'Show skill level'}</strong><span>{chinese ? '适合保持简洁的简历格式' : 'Hide for ATS-friendly resumes'}</span></div>
         <button className="toggle-button" role="switch" aria-checked="false"><span /></button>
       </div>
     </div>

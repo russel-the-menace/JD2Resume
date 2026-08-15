@@ -1941,6 +1941,72 @@ button:disabled {
   color: #909791;
 }
 
+.skills-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.skill-editor-category {
+  padding: 14px;
+  background: #fbfcfa;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.skill-editor-category-heading {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+}
+
+.skill-editor-category-heading .field {
+  flex: 1;
+}
+
+.skill-remove-button {
+  margin-bottom: 1px;
+  color: #9f554e;
+}
+
+.skill-editor-items {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 13px 0 10px;
+}
+
+.skill-editor-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.skill-editor-item input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  color: #2f3431;
+  background: #fff;
+  border: 1px solid #ccd1cc;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.skill-editor-item input:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(22, 124, 101, 0.12);
+}
+
+.skill-item-marker {
+  width: 9px;
+  color: var(--accent);
+  font-size: 17px;
+  line-height: 1;
+  text-align: center;
+}
+
 .skill-level-row {
   display: flex;
   align-items: center;
