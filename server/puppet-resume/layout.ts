@@ -100,9 +100,11 @@ async function seedResume(page: Page, document: Record<string, any>) {
 }
 
 async function applyTuning(page: Page, tuning: LayoutTuning) {
-  await page.evaluate(`(() => {
+  const rendererFrame = page.frames().find((frame) => new URL(frame.url()).pathname === '/renderer.html');
+  if (!rendererFrame) throw new Error('Resume renderer frame is unavailable.');
+  await rendererFrame.evaluate(`(() => {
     const tuning = ${JSON.stringify(tuning)};
-    const root = document.querySelector('.resume-page');
+    const root = document.querySelector('.puppet-page');
     if (!root) return;
     root.style.setProperty('--layout-section-gap-delta', tuning.sectionGapDelta + 'px');
     root.style.setProperty('--layout-line-height-delta', tuning.lineHeightDelta + 'px');
@@ -111,8 +113,10 @@ async function applyTuning(page: Page, tuning: LayoutTuning) {
 }
 
 async function assess(page: Page): Promise<LayoutQuality> {
-  return page.evaluate(({ pageHeight, orphanThreshold }) => {
-    const root = document.querySelector('.resume-page');
+  const rendererFrame = page.frames().find((frame) => new URL(frame.url()).pathname === '/renderer.html');
+  if (!rendererFrame) throw new Error('Resume renderer frame is unavailable.');
+  return rendererFrame.evaluate(({ pageHeight, orphanThreshold }) => {
+    const root = document.querySelector('.puppet-page');
     if (!root) {
       return {
         pageCount: 0,
@@ -236,7 +240,7 @@ async function loadResume(page: Page, origin: string, documentId: unknown) {
       (frame) => new URL(frame.url()).pathname === '/renderer.html',
       { timeout: 10_000 },
     );
-    await rendererFrame.waitForSelector('.resume-page', { timeout: 10_000 });
+    await rendererFrame.waitForSelector('.puppet-page', { timeout: 10_000 });
   } catch {
     const state = await page.evaluate(() => ({
       url: window.location.href,
