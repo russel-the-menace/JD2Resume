@@ -47,6 +47,7 @@ import {
   Phone,
   Plus,
   Redo2,
+  RefreshCw,
   RotateCcw,
   Search,
   Send,
@@ -1039,6 +1040,8 @@ function App() {
   const [library, setLibrary] = useState(emptyResumeLibrary);
   const [userProfile, setUserProfile] = useState(() => profileForUsername(currentAccount.username));
   const [remoteSyncReady, setRemoteSyncReady] = useState(false);
+  const [connectionState, setConnectionState] = useState<'connecting' | 'unavailable' | 'ready'>('connecting');
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [profileImporting, setProfileImporting] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
@@ -1079,7 +1082,14 @@ function App() {
   useEffect(() => {
     const controller = new AbortController();
     setRemoteSyncReady(false);
+    setConnectionState('connecting');
     remoteRevisionRef.current = null;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      setConnectionState('unavailable');
+    }, 10_000);
 
     const hydrate = async () => {
       try {
@@ -1088,11 +1098,18 @@ function App() {
         });
         if (response.status === 404) {
           setRemoteSyncReady(true);
+          setConnectionState('ready');
           return;
         }
-        if (!response.ok) return;
+        if (!response.ok) {
+          setConnectionState('unavailable');
+          return;
+        }
         const snapshot = await response.json();
-        if (!isRecord(snapshot) || !isRecord(snapshot.payload) || !Number.isInteger(snapshot.revision)) return;
+        if (!isRecord(snapshot) || !isRecord(snapshot.payload) || !Number.isInteger(snapshot.revision)) {
+          setConnectionState('unavailable');
+          return;
+        }
         remoteRevisionRef.current = snapshot.revision;
 
         const remoteLibrary = isRecord(snapshot.payload.library) && Array.isArray(snapshot.payload.library.resumes)
@@ -1112,14 +1129,22 @@ function App() {
           setUserProfile(remoteProfile);
         }
         setRemoteSyncReady(true);
+        setConnectionState('ready');
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') return;
+        if (!(error instanceof Error && error.name === 'AbortError' && !timedOut)) {
+          setConnectionState('unavailable');
+        }
+      } finally {
+        window.clearTimeout(timeout);
       }
     };
 
     void hydrate();
-    return () => controller.abort();
-  }, [currentAccount.id]);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [connectionAttempt, currentAccount.id]);
 
   useEffect(() => {
     if (!remoteSyncReady) return undefined;
@@ -1446,6 +1471,13 @@ function App() {
     openResume(generatedResumes[0].id);
   }, [openResume, persistLibrary, userProfile]);
 
+  if (connectionState !== 'ready') {
+    return <RemoteConnectionGate
+      unavailable={connectionState === 'unavailable'}
+      onRetry={() => setConnectionAttempt((attempt) => attempt + 1)}
+    />;
+  }
+
   const selectedResume = library.resumes.find((document) => document.id === selectedResumeId);
   const appContent = selectedResume ? (
     <ResumeEditor
@@ -1478,6 +1510,18 @@ function App() {
       {appContent}
       {profileImporting && <ProfileImportLoadingOverlay />}
     </>
+  );
+}
+
+function RemoteConnectionGate({ unavailable, onRetry }: { unavailable: boolean; onRetry: () => void }) {
+  return (
+    <main className="remote-connection-gate" aria-live="assertive">
+      <div className="remote-connection-gate-content">
+        {unavailable ? <RefreshCw size={26} /> : <LoaderCircle className="is-spinning" size={26} />}
+        <h1>{unavailable ? '网络不可用' : '正在连接服务器'}</h1>
+        {unavailable && <button className="primary-button" type="button" onClick={onRetry}><RefreshCw size={16} />重试</button>}
+      </div>
+    </main>
   );
 }
 

@@ -4304,3 +4304,32 @@ button:disabled {
     overflow: visible;
   }
 }
+.remote-connection-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--canvas, #f5f7f6);
+}
+
+.remote-connection-gate-content {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  color: var(--ink, #1d2924);
+  text-align: center;
+}
+
+.remote-connection-gate-content h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.remote-connection-gate-content .is-spinning {
+  animation: remote-connection-spin 900ms linear infinite;
+}
+
+@keyframes remote-connection-spin {
+  to { transform: rotate(360deg); }
+}
