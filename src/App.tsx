@@ -911,15 +911,6 @@ function normalizedUsername(value) {
   return textValue(value).trim();
 }
 
-function profileForUsername(username) {
-  const profile = normalizeUserProfile(null) as any;
-  const name = normalizedUsername(username);
-  profile.chinese.fullName = name;
-  profile.english.fullName = name;
-  return profile;
-}
-
-
 function blankResumeSnapshot(
   { documentName, language, generationEvidence, layoutManifest }: { documentName?: string; language?: string; generationEvidence?: unknown; layoutManifest?: unknown } = {},
 ) {
@@ -1043,7 +1034,7 @@ function App() {
   const remoteSaveTimerRef = useRef(null);
   const lastRemoteSnapshotRef = useRef({ accountId: '', signature: '' });
   const [library, setLibrary] = useState(emptyResumeLibrary);
-  const [userProfile, setUserProfile] = useState(() => profileForUsername(currentAccount.username));
+  const [userProfile, setUserProfile] = useState(() => normalizeUserProfile(null));
   const [remoteSyncReady, setRemoteSyncReady] = useState(false);
   const [connectionState, setConnectionState] = useState<'connecting' | 'unavailable' | 'ready'>('connecting');
   const [connectionAttempt, setConnectionAttempt] = useState(0);
@@ -1488,7 +1479,7 @@ function App() {
       resumes: [...generatedResumes, ...libraryRef.current.resumes],
     };
     if (!persistLibrary(nextLibrary)) {
-      throw new Error('The generated resume could not be saved locally.');
+      throw new Error('The generated resume could not be saved to the server.');
     }
     openResume(generatedResumes[0].id);
   }, [openResume, persistLibrary, userProfile]);
@@ -1564,7 +1555,14 @@ function App() {
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || !payload?.account) return { ok: false, error: textValue(payload?.error, 'Unable to sign in.') };
+            libraryRef.current = emptyResumeLibrary();
+            setLibrary(emptyResumeLibrary());
+            setUserProfile(normalizeUserProfile(null));
+            setRemoteSyncReady(false);
+            remoteRevisionRef.current = null;
+            lastRemoteSnapshotRef.current = { accountId: '', signature: '' };
             setCurrentAccount(payload.account);
+            returnHome();
             setLoginDialogOpen(false);
             setSessionState('signed-in');
             setConnectionAttempt((attempt) => attempt + 1);
@@ -1584,7 +1582,14 @@ function App() {
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || !payload?.account) return { ok: false, error: textValue(payload?.error, 'Unable to sign up.') };
+            libraryRef.current = emptyResumeLibrary();
+            setLibrary(emptyResumeLibrary());
+            setUserProfile(normalizeUserProfile(null));
+            setRemoteSyncReady(false);
+            remoteRevisionRef.current = null;
+            lastRemoteSnapshotRef.current = { accountId: '', signature: '' };
             setCurrentAccount(payload.account);
+            returnHome();
             setRegisterDialogOpen(false);
             setSessionState('signed-in');
             setConnectionAttempt((attempt) => attempt + 1);
@@ -1677,7 +1682,7 @@ function LoginDialog({ onCancel, onLogin, onSignUp }) {
     <div className="modal-backdrop" onMouseDown={onCancel}>
       <form className="resume-dialog account-auth-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="login-title">
         <header className="resume-dialog-header account-dialog-header">
-          <div><span className="dialog-kicker">Local account</span><h2 id="login-title">Sign in</h2></div>
+          <div><span className="dialog-kicker">Account</span><h2 id="login-title">Sign in</h2></div>
           <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
         </header>
         <div className="account-auth-content">
@@ -1713,7 +1718,7 @@ function RegisterDialog({ onCancel, onRegister, onSignIn }) {
     <div className="modal-backdrop" onMouseDown={onCancel}>
       <form className="resume-dialog account-auth-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="register-title">
         <header className="resume-dialog-header account-dialog-header">
-          <div><span className="dialog-kicker">Local account</span><h2 id="register-title">Sign up</h2></div>
+          <div><span className="dialog-kicker">Account</span><h2 id="register-title">Sign up</h2></div>
           <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
         </header>
         <div className="account-auth-content">
@@ -1751,7 +1756,7 @@ function ChangePasswordDialog({ onCancel, onChangePassword }) {
     <div className="modal-backdrop" onMouseDown={onCancel}>
       <form className="resume-dialog account-auth-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="change-password-title">
         <header className="resume-dialog-header account-dialog-header">
-          <div><span className="dialog-kicker">Local account</span><h2 id="change-password-title">Change password</h2></div>
+          <div><span className="dialog-kicker">Account</span><h2 id="change-password-title">Change password</h2></div>
           <button className="icon-button small" type="button" onClick={onCancel} aria-label="Close" title="Close"><X size={16} /></button>
         </header>
         <div className="account-auth-content">

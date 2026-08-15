@@ -41,6 +41,17 @@ function sessionToken(request: IncomingMessage) {
 
 function tokenHash(token: string) { return createHash('sha256').update(token).digest('hex'); }
 
+async function authenticatedAccountId(client: Sql, request: IncomingMessage) {
+  const token = sessionToken(request);
+  if (!token) return '';
+  const rows = await client`
+    SELECT account_id
+    FROM account_sessions
+    WHERE token_hash = ${tokenHash(token)} AND expires_at > NOW()
+  `;
+  return rows.length ? String(rows[0].account_id) : '';
+}
+
 export function statePersistencePlugin(databaseUrl: string): Plugin {
   let sql: Sql | null = null;
   const database = () => {
@@ -63,11 +74,20 @@ export function statePersistencePlugin(databaseUrl: string): Plugin {
       return;
     }
     try {
+      const sessionAccountId = await authenticatedAccountId(client, request);
+      if (!sessionAccountId) {
+        sendJson(response, 401, { error: 'Sign in required.' });
+        return;
+      }
       if (request.method === 'GET') {
         const url = new URL(request.url || '/', 'http://localhost');
         const accountId = url.searchParams.get('accountId');
         if (!validAccountId(accountId)) {
           sendJson(response, 400, { error: 'Provide a valid account id.' });
+          return;
+        }
+        if (accountId !== sessionAccountId) {
+          sendJson(response, 403, { error: 'You can only access your own account data.' });
           return;
         }
         const rows = await client`
@@ -90,6 +110,10 @@ export function statePersistencePlugin(databaseUrl: string): Plugin {
         const baseRevision = input?.baseRevision;
         if (!validAccountId(accountId) || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
           sendJson(response, 400, { error: 'Provide a valid account snapshot.' });
+          return;
+        }
+        if (accountId !== sessionAccountId) {
+          sendJson(response, 403, { error: 'You can only save your own account data.' });
           return;
         }
 
