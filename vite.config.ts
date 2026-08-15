@@ -39,7 +39,7 @@ type Provider = {
   gatewayOptions?: Record<string, unknown>;
   gatewayProvider?: 'openai' | 'gemini' | 'deepseek';
   gatewayResponseShape?: 'chat' | 'gemini';
-  gatewaySupportsAttachments?: boolean;
+  gatewayDirectFile?: boolean;
   timeoutMs?: number;
 };
 
@@ -181,15 +181,19 @@ function modelMessageContent(userPrompt: string, attachment: SourceAttachment | 
   return content;
 }
 
-function gatewayMessageContent(userPrompt: string, fileId: string | null) {
-  if (!fileId) return userPrompt;
-  return [
-    { type: 'text', text: userPrompt },
-    {
-      type: 'file',
-      file: { file_id: fileId },
-    },
-  ];
+function gatewayMessageContent(userPrompt: string, attachment: SourceAttachment | null) {
+  if (!attachment) return userPrompt;
+  if (attachment.sourceType === 'pdf') {
+    return [
+      { type: 'text', text: userPrompt },
+      {
+        type: 'input_file',
+        filename: attachment.name,
+        file_data: `data:application/pdf;base64,${attachment.data}`,
+      },
+    ];
+  }
+  return modelMessageContent(userPrompt, attachment);
 }
 
 function geminiRequestContent(userPrompt: string, attachment: SourceAttachment | null) {
@@ -211,17 +215,7 @@ function generationProvidersForLanguage(
   attachment: SourceAttachment | null = null,
 ) {
   if (attachment) {
-    return providers
-      .filter((provider) => provider.supportsDirectFileInput && (
-        (provider.kind === 'gateway' && provider.gatewayProvider === 'openai') ||
-        provider.kind === 'gemini' ||
-        provider.kind === 'chat' ||
-        (provider.kind === 'gateway' && provider.gatewayProvider === 'gemini')
-      ))
-      .sort((first, second) => {
-        const rank = (provider: Provider) => provider.kind === 'gateway' && provider.gatewayProvider === 'openai' ? 0 : 1;
-        return rank(first) - rank(second);
-      });
+    return providers.filter((provider) => provider.kind === 'gateway' && provider.gatewayDirectFile);
   }
   const matchingGatewayProviders = providers.filter((provider) =>
     provider.kind === 'gateway' && provider.gatewayAudience === language);
@@ -265,30 +259,6 @@ function localGatewayRoutes(value: string): Array<{
   }
 }
 
-function gatewayFilesEndpoint(baseUrl: string) {
-  const normalized = baseUrl.trim().replace(/\/+$/, '');
-  return `${normalized.endsWith('/v1') ? normalized.slice(0, -3) : normalized}/v1/files`;
-}
-
-async function uploadGatewayFile(provider: Provider, attachment: SourceAttachment, signal: AbortSignal) {
-  const form = new FormData();
-  form.append('purpose', 'user_data');
-  form.append('file', new Blob([Buffer.from(attachment.data, 'base64')], { type: attachment.mimeType }), attachment.name);
-  const response = await fetch(gatewayFilesEndpoint(provider.endpoint), {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${provider.apiKey}` },
-    body: form,
-    signal,
-  });
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) throw new Error('PROVIDER_AUTH_FAILED');
-    throw new Error(response.status >= 500 ? 'UPSTREAM_RETRYABLE' : 'UPSTREAM_ERROR');
-  }
-  const fileId = stringValue((await response.json())?.id);
-  if (!fileId.startsWith('file_')) throw new Error('INVALID_UPSTREAM_RESPONSE');
-  return fileId;
-}
-
 async function requestJsonCompletion(
   provider: Provider,
   systemPrompt: string,
@@ -315,9 +285,6 @@ async function requestJsonCompletion(
   let lastError: unknown = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const gatewayFileId = isGateway && attachment && provider.gatewaySupportsAttachments
-        ? await uploadGatewayFile(provider, attachment, signal)
-        : null;
       const endpoint = isGemini
         ? `${provider.endpoint.replace(/\/+$/, '')}/models/${encodeURIComponent(provider.model)}:generateContent?key=${encodeURIComponent(provider.apiKey)}`
         : isGateway
@@ -337,7 +304,7 @@ async function requestJsonCompletion(
           ? JSON.stringify({
               messages: [
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: gatewayMessageContent(userPrompt, gatewayFileId) },
+                { role: 'user', content: gatewayMessageContent(userPrompt, attachment) },
               ],
               response_format: { type: 'json_object' },
               temperature: 0.2,
@@ -398,15 +365,7 @@ async function requestProfileTask(
   providers: Provider[],
   request: ProfileTaskRequest,
 ) {
-  const googleProviders = providers.filter((provider) => provider.kind === 'gemini');
-  const openAiGatewayProviders = providers.filter((provider) =>
-    provider.kind === 'gateway' && provider.gatewayProvider === 'openai' && provider.gatewayAudience === 'all');
-  const geminiGatewayProviders = providers.filter((provider) =>
-    provider.kind === 'gateway' && provider.gatewayProvider === 'gemini');
-  const cloudGeminiProviders = providers.filter((provider) => provider.kind === 'chat' && /gemini/i.test(provider.model));
-  const candidates = request.attachment
-    ? generationProvidersForLanguage(providers, 'english', request.attachment)
-    : [...openAiGatewayProviders, ...googleProviders, ...cloudGeminiProviders, ...geminiGatewayProviders];
+  const candidates = providers.filter((provider) => provider.kind === 'gateway' && provider.gatewayDirectFile);
   const configuredCandidates = candidates
     .map((provider) => ({ ...provider, model: request.model, pdfModel: undefined }));
   let lastError: unknown = null;
@@ -870,6 +829,16 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const providers: Provider[] = [];
   if (env.GATEWAY_BASE_URL && env.GATEWAY_API_KEY) {
+    providers.push({
+      kind: 'gateway' as const,
+      apiKey: env.GATEWAY_API_KEY,
+      endpoint: env.GATEWAY_BASE_URL,
+      model: '',
+      gatewayOptions: { provider: 'overseas', quality: 'High' },
+      gatewayDirectFile: true,
+      supportsDirectFileInput: true,
+      timeoutMs: Number(env.GATEWAY_TIMEOUT_MS) || undefined,
+    });
     providers.push(...localGatewayRoutes(env.GATEWAY_ROUTES).map((route) => ({
       kind: 'gateway' as const,
       apiKey: env.GATEWAY_API_KEY,
@@ -879,7 +848,6 @@ export default defineConfig(({ mode }) => {
       gatewayOptions: route.options,
       gatewayProvider: route.provider,
       gatewayResponseShape: route.responseShape,
-      gatewaySupportsAttachments: route.supportsAttachments,
       timeoutMs: Number(env.GATEWAY_TIMEOUT_MS) || undefined,
       supportsDirectFileInput: route.supportsAttachments,
     })));
