@@ -1044,6 +1044,7 @@ function App() {
   const [connectionState, setConnectionState] = useState<'connecting' | 'unavailable' | 'ready'>('connecting');
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [profileImporting, setProfileImporting] = useState(false);
+  const [editorProfileOpen, setEditorProfileOpen] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
     const resume = new URLSearchParams(window.location.search).get('resume');
@@ -1502,6 +1503,7 @@ function App() {
       accountUsername={currentAccount.username}
       onResumeChange={saveResume}
       onBack={returnHome}
+      onEditProfile={() => setEditorProfileOpen(true)}
     />
   ) : (
     <ResumeLibrary
@@ -1511,6 +1513,7 @@ function App() {
         onDuplicate={duplicateResume}
         onDelete={deleteResume}
         currentAccount={currentAccount}
+        onSwitchAccount={async () => { await fetch('/api/auth/logout', { method: 'POST' }); setSessionState('signed-out'); }}
         userProfile={userProfile}
         onProfileSave={saveUserProfile}
         onImportProfile={importProfileFromResume}
@@ -1523,6 +1526,7 @@ function App() {
   return (
     <>
       {appContent}
+      {editorProfileOpen && <PersonalProfileDialog profile={userProfile} onCancel={() => setEditorProfileOpen(false)} onComplete={() => setEditorProfileOpen(false)} onSave={saveUserProfile} onImport={importProfileFromResume} onTranslate={translateImportedProfile} onSearchDirectory={searchProfileDirectory} />}
       {profileImporting && <ProfileImportLoadingOverlay />}
     </>
   );
@@ -1546,7 +1550,7 @@ function RemoteConnectionGate({ unavailable, onRetry }: { unavailable: boolean; 
   );
 }
 
-function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeChange, onBack }) {
+function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeChange, onBack, onEditProfile }) {
   const initialWorkspaceState = useMemo(
     () => defaultWorkspacePreferences(initialResumeState),
     [initialResumeState],
@@ -1912,6 +1916,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
         onReset={resetDemo}
         onBack={onBack}
         accountUsername={accountUsername}
+        onEditProfile={onEditProfile}
       />
 
       <MobileTabs value={mobileMode} onChange={setMobileMode} />
@@ -2048,6 +2053,7 @@ function ResumeLibrary({
   onDuplicate,
   onDelete,
   currentAccount,
+  onSwitchAccount,
   userProfile,
   onProfileSave,
   onImportProfile,
@@ -2123,6 +2129,9 @@ function ResumeLibrary({
                 >
                   <UserRound size={16} />
                   Edit personal profile
+                </button>
+                <button onClick={() => { setAccountMenuOpen(false); void onSwitchAccount(); }}>
+                  Switch account
                 </button>
               </div>
             )}
@@ -3327,6 +3336,7 @@ function TopBar({
   onReset,
   onBack,
   accountUsername,
+  onEditProfile,
 }) {
   return (
     <header className="topbar">
@@ -3378,7 +3388,7 @@ function TopBar({
           <Download size={16} />
           <span>Export PDF</span>
         </button>
-        <button className="avatar-button" aria-label="Account menu" title="Account menu">{accountInitials(accountUsername)}</button>
+        <button className="avatar-button" onClick={onEditProfile} aria-label="Edit personal profile" title="Edit personal profile">{accountInitials(accountUsername)}</button>
       </div>
     </header>
   );
