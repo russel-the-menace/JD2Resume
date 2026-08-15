@@ -29,12 +29,15 @@ const PROVIDER_RETRY_DELAY_MS = 700;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 type Provider = {
-  kind: 'gemini' | 'chat';
+  kind: 'gemini' | 'chat' | 'gateway';
   apiKey: string;
   endpoint: string;
   model: string;
   pdfModel?: string;
   supportsDirectFileInput: boolean;
+  gatewayAudience?: 'chinese' | 'english';
+  gatewayOptions?: Record<string, unknown>;
+  timeoutMs?: number;
 };
 
 type SourceAttachment = {
@@ -180,6 +183,32 @@ function geminiRequestContent(userPrompt: string, attachment: SourceAttachment |
   return [{ role: 'user', parts }];
 }
 
+function generationProvidersForLanguage(providers: Provider[], language: 'chinese' | 'english') {
+  return [...providers].sort((first, second) => {
+    const rank = (provider: Provider) => provider.kind !== 'gateway'
+      ? 1
+      : provider.gatewayAudience === language
+        ? 0
+        : 2;
+    const firstRank = rank(first);
+    const secondRank = rank(second);
+    return firstRank - secondRank;
+  });
+}
+
+function localGatewayRoutes(value: string): Array<{ audience: 'chinese' | 'english'; options: Record<string, unknown> }> {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((route) => {
+      if (!isRecord(route) || !['chinese', 'english'].includes(route.audience) || !isRecord(route.options)) return [];
+      return [{ audience: route.audience as 'chinese' | 'english', options: route.options }];
+    });
+  } catch {
+    return [];
+  }
+}
+
 async function requestJsonCompletion(
   provider: Provider,
   systemPrompt: string,
@@ -189,6 +218,8 @@ async function requestJsonCompletion(
   maxTokens = 4_000,
   maxAttempts = 2,
 ) {
+  const isGemini = provider.kind === 'gemini';
+  const isGateway = provider.kind === 'gateway';
   const requestBody = JSON.stringify({
     model: attachment?.sourceType === 'pdf' && provider.pdfModel
       ? provider.pdfModel
@@ -204,10 +235,11 @@ async function requestJsonCompletion(
   let lastError: unknown = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const isGemini = provider.kind === 'gemini';
       const endpoint = isGemini
         ? `${provider.endpoint.replace(/\/+$/, '')}/models/${encodeURIComponent(provider.model)}:generateContent?key=${encodeURIComponent(provider.apiKey)}`
-        : provider.endpoint;
+        : isGateway
+          ? chatCompletionsEndpoint(provider.endpoint)
+          : provider.endpoint;
       const body = isGemini
         ? JSON.stringify({
             systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -218,7 +250,18 @@ async function requestJsonCompletion(
               maxOutputTokens: maxTokens,
             },
           })
-        : requestBody;
+        : isGateway
+          ? JSON.stringify({
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: modelMessageContent(userPrompt, null) },
+              ],
+              response_format: { type: 'json_object' },
+              temperature: 0.2,
+              max_tokens: maxTokens,
+              ...provider.gatewayOptions,
+            })
+          : requestBody;
       const upstream = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -316,16 +359,16 @@ async function requestFromProviders(
   timeoutMs = PROVIDER_TIMEOUT_MS,
   diagnostics: { traceId: string; stage: string; attempt?: number } | null = null,
 ) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const eligibleProviders = attachment
-      ? providers.filter((provider) => provider.supportsDirectFileInput)
-      : providers;
-    if (!eligibleProviders.length) throw new Error('DIRECT_FILE_PROVIDER_UNAVAILABLE');
-    let lastError: unknown = null;
-    const unavailableEndpoints = new Set<string>();
-    for (const provider of eligibleProviders) {
+  const eligibleProviders = attachment
+    ? providers.filter((provider) => provider.supportsDirectFileInput)
+    : providers;
+  if (!eligibleProviders.length) throw new Error('DIRECT_FILE_PROVIDER_UNAVAILABLE');
+  let lastError: unknown = null;
+  const unavailableEndpoints = new Set<string>();
+  for (const provider of eligibleProviders) {
+    const controller = new AbortController();
+    const providerTimeout = setTimeout(() => controller.abort(), provider.timeoutMs || timeoutMs);
+    try {
       const endpointKey = `${provider.kind}:${provider.endpoint}`;
       if (unavailableEndpoints.has(endpointKey)) {
         if (diagnostics) console.warn('[Resume Generation] Provider skipped', {
@@ -337,35 +380,32 @@ async function requestFromProviders(
         continue;
       }
       const startedAt = Date.now();
-      try {
-        const result = await requestJsonCompletion(provider, systemPrompt, userPrompt, controller.signal, attachment, maxTokens);
-        if (await validate(result)) {
-          if (diagnostics) console.info('[Resume Generation] Provider completed', {
-            ...diagnostics,
-            provider: provider.kind,
-            model: provider.model,
-            durationMs: Date.now() - startedAt,
-          });
-          return result;
-        }
-      } catch (error) {
-        lastError = error;
-        if (error instanceof TypeError || (error instanceof Error && error.message === 'fetch failed')) {
-          unavailableEndpoints.add(endpointKey);
-        }
-        if (diagnostics) console.warn('[Resume Generation] Provider failed', {
+      const result = await requestJsonCompletion(provider, systemPrompt, userPrompt, controller.signal, attachment, maxTokens);
+      if (await validate(result)) {
+        if (diagnostics) console.info('[Resume Generation] Provider completed', {
           ...diagnostics,
           provider: provider.kind,
           model: provider.model,
           durationMs: Date.now() - startedAt,
-          error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
         });
+        return result;
       }
+    } catch (error) {
+      lastError = error;
+      if (error instanceof TypeError || (error instanceof Error && error.message === 'fetch failed')) {
+        unavailableEndpoints.add(`${provider.kind}:${provider.endpoint}`);
+      }
+      if (diagnostics) console.warn('[Resume Generation] Provider failed', {
+        ...diagnostics,
+        provider: provider.kind,
+        model: provider.model,
+        error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+      });
+    } finally {
+      clearTimeout(providerTimeout);
     }
-    throw lastError instanceof Error ? lastError : new Error('UPSTREAM_UNAVAILABLE');
-  } finally {
-    clearTimeout(timeout);
   }
+  throw lastError instanceof Error ? lastError : new Error('UPSTREAM_UNAVAILABLE');
 }
 
 async function extractPuppetJob(
@@ -513,10 +553,11 @@ function resumeGenerationPlugin(providers: Provider[], profileModels: ProfileImp
     }
     try {
       console.info('[Resume Generation] Request started', { traceId, language: input.language, sourceType: source.attachment?.sourceType || 'text' });
+      const generationProviders = generationProvidersForLanguage(providers, input.language);
       const job = source.attachment
-        ? await extractPuppetJob(providers, input, source, traceId)
+        ? await extractPuppetJob(generationProviders, input, source, traceId)
         : extractTextJob(source.text, input.language);
-      const pipeline = new PuppetResumePipeline(createPuppetTextGenerator(providers, traceId));
+      const pipeline = new PuppetResumePipeline(createPuppetTextGenerator(generationProviders, traceId));
       const puppetData = await pipeline.enhance(toPuppetRequest(input, job));
       const applicationId = stringValue(input.applicationId) || randomUUID();
       const resume = fromPuppetResume(puppetData);
@@ -744,6 +785,18 @@ function profileDirectoryPlugin(baseUrl: string): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const providers: Provider[] = [];
+  if (env.GATEWAY_BASE_URL && env.GATEWAY_API_KEY) {
+    providers.push(...localGatewayRoutes(env.GATEWAY_ROUTES).map((route) => ({
+      kind: 'gateway' as const,
+      apiKey: env.GATEWAY_API_KEY,
+      endpoint: env.GATEWAY_BASE_URL,
+      model: '',
+      gatewayAudience: route.audience,
+      gatewayOptions: route.options,
+      timeoutMs: Number(env.GATEWAY_TIMEOUT_MS) || undefined,
+      supportsDirectFileInput: false,
+    })));
+  }
   const cloudBridgeBaseUrl = env.CLOUD_BRIDGE_API_BASE_URL || 'https://www.yunqiaoai.top';
   if (env.CLOUD_BRIDGE_API_KEY) {
     const endpoint = chatCompletionsEndpoint(cloudBridgeBaseUrl);
