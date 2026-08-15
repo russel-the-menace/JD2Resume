@@ -77,6 +77,14 @@ function sendProviderFailure(response: ServerResponse, error: unknown, fallback:
     sendJson(response, 504, { error: 'The file recognition provider took too long to respond. Please try again.', ...trace });
     return;
   }
+  if (error instanceof Error && error.message === 'GENERATION_DEADLINE_EXCEEDED') {
+    sendJson(response, 504, {
+      error: 'Resume generation exceeded the service deadline. Please try again.',
+      code: 'GENERATION_DEADLINE_EXCEEDED',
+      ...trace,
+    });
+    return;
+  }
   sendJson(response, 502, { error: fallback, ...trace });
 }
 
