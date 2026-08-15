@@ -95,7 +95,7 @@ export function validateChineseResponsibilityMetrics(responsibilities: string[])
 }
 
 export function isIsolatedChineseMetricPhrase(value: string): boolean {
-  return /^(?:约|超过|近|累计)?\d+(?:\.\d+)?(?:\+|[%％]|\/\d+(?:\.\d+)?)?(?:个?月|年|天|人|份|场|类|项|次|家|所|个)?(?:内|以上|以内|余人)?$/.test(value.trim());
+  return /^(?:约|超过|近|累计)?\d+(?:\.\d+)?(?:\+|[%％]|\/\d+(?:\.\d+)?)?(?:个?月|年|天|余?人|份|场|大?类|项|次|家|所|个)?(?:内|以上|以内)?$/.test(value.trim());
 }
 
 function tagSegments(value: string, tag: 'b' | 'u'): string[] {

@@ -544,7 +544,7 @@ ${sourceText}`;
 
 function underlineFirstNumber(value: string): string {
   if (/<\/?u>/i.test(value)) return value;
-  const metricPhrase = /[\u3400-\u9fffA-Za-z]{0,6}\d+(?:\.\d+)?(?:[%％+]|\/\d+(?:\.\d+)?)?(?:个?月|年|天|人|份|场|类|项|次|家|所|个)?(?:内|以上|以内|余人)?(?:[\u3400-\u9fffA-Za-z]{1,6}\d+(?:\.\d+)?(?:[%％+]|\/\d+(?:\.\d+)?)?(?:个?月|年|天|人|份|场|类|项|次|家|所|个)?)?/;
+  const metricPhrase = /[\u3400-\u9fffA-Za-z]{0,6}\d+(?:\.\d+)?(?:[%％+]|\/\d+(?:\.\d+)?)?(?:个?月|年|天|余?人|份|场|大?类|项|次|家|所|个)?(?:内|以上|以内)?(?:[\u3400-\u9fffA-Za-z]{1,6}\d+(?:\.\d+)?(?:[%％+]|\/\d+(?:\.\d+)?)?(?:个?月|年|天|余?人|份|场|大?类|项|次|家|所|个)?)?/;
   const match = metricPhrase.exec(value)?.[0] || '';
   if (!match || isIsolatedChineseMetricPhrase(match)) return value;
   return value.replace(match, `<u>${match}</u>`);

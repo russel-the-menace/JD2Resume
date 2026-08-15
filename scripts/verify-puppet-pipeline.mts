@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  isIsolatedChineseMetricPhrase,
   normalizeChineseResponsibilitySpacing,
   PuppetResumePipeline,
   validateChineseResponsibilityMetrics,
@@ -23,6 +24,9 @@ assert.equal(unlabeledRecruitingJob.experience, '1-2 年');
 assert.equal(isGenericJobTitle(unlabeledRecruitingJob.title), true);
 assert.equal(isGenericJobTitle('招聘专员'), false);
 assert.equal(isGenericJobTitle('Job Description'), true);
+assert.equal(isIsolatedChineseMetricPhrase('3个月'), true);
+assert.equal(isIsolatedChineseMetricPhrase('3个月内完成6大类'), false);
+assert.equal(isIsolatedChineseMetricPhrase('提升35%'), false);
 assert.equal(
   normalizeChineseResponsibilitySpacing('参与执行 2 场宣讲，单场到场学生 90 余人，收获简历 75 份，入职 9 人'),
   '参与执行2场宣讲，单场到场学生90余人，收获简历75份，入职9人',
