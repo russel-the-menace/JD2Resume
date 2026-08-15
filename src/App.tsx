@@ -30,6 +30,8 @@ import {
   GraduationCap,
   GripVertical,
   LayoutGrid,
+  KeyRound,
+  LogIn,
   Link,
   Linkedin,
   ListChecks,
@@ -55,6 +57,8 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  UserPlus,
+  UsersRound,
   Upload,
   UserRound,
   WandSparkles,
@@ -1536,7 +1540,7 @@ function App() {
 function RemoteLogin({ onSignedIn }: { onSignedIn: (account: { id: string; username: string }) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login'); const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
   const submit = async (event) => { event.preventDefault(); setError(''); const response = await fetch(`/api/auth/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const payload = await response.json().catch(() => ({})); if (!response.ok || !payload.account) { setError(payload.error || '操作失败'); return; } onSignedIn(payload.account); };
-  return <main className="remote-connection-gate"><form className="remote-login" onSubmit={submit}><h1>{mode === 'login' ? 'Sign in' : 'Sign up'}</h1><input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Username" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" />{error && <p>{error}</p>}<button className="primary-button" type="submit">{mode === 'login' ? 'Sign in' : 'Sign up'}</button><button className="dialog-link-button" type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Sign up' : 'Sign in'}</button></form></main>;
+  return <main className="remote-connection-gate"><form className="remote-login" onSubmit={submit}><h1>{mode === 'login' ? 'Sign in' : 'Sign up'}</h1><input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Username" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" />{error && <p>{error}</p>}<button className="primary-button" type="submit">{mode === 'login' ? <LogIn size={16} /> : <UserPlus size={16} />}{mode === 'login' ? 'Sign in' : 'Sign up'}</button><button className="dialog-link-button" type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? <><UserPlus size={15} /> Sign up</> : <><LogIn size={15} /> Sign in</>}</button></form></main>;
 }
 
 function RemoteConnectionGate({ unavailable, onRetry }: { unavailable: boolean; onRetry: () => void }) {
@@ -2133,9 +2137,13 @@ function ResumeLibrary({
                   Edit personal profile
                 </button>
                 <button onClick={() => { setAccountMenuOpen(false); void onSwitchAccount(); }}>
+                  <UsersRound size={16} />
                   Switch account
                 </button>
-                <button onClick={() => { setAccountMenuOpen(false); void onChangePassword(); }}>Change password</button>
+                <button onClick={() => { setAccountMenuOpen(false); void onChangePassword(); }}>
+                  <KeyRound size={16} />
+                  Change password
+                </button>
               </div>
             )}
           </div>
