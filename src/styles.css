@@ -4333,3 +4333,8 @@ button:disabled {
 @keyframes remote-connection-spin {
   to { transform: rotate(360deg); }
 }
+
+.remote-login { display: grid; gap: 12px; width: min(320px, 100%); }
+.remote-login h1 { margin: 0 0 8px; font-size: 22px; }
+.remote-login input { min-height: 42px; padding: 0 12px; border: 1px solid #c9d0cc; border-radius: 4px; font: inherit; }
+.remote-login p { margin: 0; color: #b42318; }

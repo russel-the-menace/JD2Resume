@@ -1032,7 +1032,8 @@ function cx(...classes) {
 }
 
 function App() {
-  const currentAccount = REMOTE_ACCOUNT;
+  const [currentAccount, setCurrentAccount] = useState(REMOTE_ACCOUNT);
+  const [sessionState, setSessionState] = useState<'checking' | 'signed-out' | 'signed-in'>('checking');
   const libraryRef = useRef(emptyResumeLibrary());
   const remoteRevisionRef = useRef(null);
   const remoteSaveTimerRef = useRef(null);
@@ -1053,6 +1054,18 @@ function App() {
     libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
     return true;
+  }, []);
+
+  useEffect(() => {
+    void fetch('/api/auth/session').then(async (response) => {
+      if (!response.ok) throw new Error('AUTH_UNAVAILABLE');
+      return response.json();
+    }).then((payload) => {
+      if (payload?.account?.id && payload?.account?.username) {
+        setCurrentAccount(payload.account);
+        setSessionState('signed-in');
+      } else setSessionState('signed-out');
+    }).catch(() => setSessionState('signed-out'));
   }, []);
 
   const saveRemoteSnapshot = useCallback(async ({ accountId, payload, signature }) => {
@@ -1471,6 +1484,8 @@ function App() {
     openResume(generatedResumes[0].id);
   }, [openResume, persistLibrary, userProfile]);
 
+  if (sessionState === 'checking') return <RemoteConnectionGate unavailable={false} onRetry={() => window.location.reload()} />;
+  if (sessionState === 'signed-out') return <RemoteLogin onSignedIn={(account) => { setCurrentAccount(account); setSessionState('signed-in'); setConnectionAttempt((attempt) => attempt + 1); }} />;
   if (connectionState !== 'ready') {
     return <RemoteConnectionGate
       unavailable={connectionState === 'unavailable'}
@@ -1511,6 +1526,12 @@ function App() {
       {profileImporting && <ProfileImportLoadingOverlay />}
     </>
   );
+}
+
+function RemoteLogin({ onSignedIn }: { onSignedIn: (account: { id: string; username: string }) => void }) {
+  const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
+  const submit = async (event) => { event.preventDefault(); setError(''); const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const payload = await response.json().catch(() => ({})); if (!response.ok || !payload.account) { setError(payload.error || '登录失败'); return; } onSignedIn(payload.account); };
+  return <main className="remote-connection-gate"><form className="remote-login" onSubmit={submit}><h1>登录</h1><input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="用户名" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="密码" />{error && <p>{error}</p>}<button className="primary-button" type="submit">登录</button></form></main>;
 }
 
 function RemoteConnectionGate({ unavailable, onRetry }: { unavailable: boolean; onRetry: () => void }) {
