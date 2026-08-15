@@ -174,6 +174,12 @@ Experience ${i + 1}:
    - **Bolding Requirement**: Include only 1-2 short <b> emphasis segments in the Personal Introduction. Do not use <u> here.
    - **Crucial**: DO NOT use decimals for years of experience (e.g., "5.8 years"). Round to integers (e.g., "6 years") or use phrases like "Over 5 years".
 5. **Professional Skills**: 4 categories, 4 items each.
+   - **Core goal**: Skills must make the candidate's practical value immediately obvious. Do not produce a keyword dump; each item should show what the candidate can do, in which work situation, and what they deliver.
+   - **Writing rule**: Every item must combine a capability or method with a concrete work context or deliverable. A tool, platform, or methodology may appear only as part of a meaningful work scenario, never as a standalone item.
+   - **Reject low-information items**: Do not output isolated keywords such as “LinkedIn,” “Structured Interview,” “Talent Assessment,” “Recruitment Analytics,” or “PowerPoint.” Prefer compact phrases such as “Offer negotiation, hiring-bar alignment, executive hiring updates, and employee-complaint resolution,” “Attrition analysis and recruiting-funnel diagnosis,” “Blended sourcing across major job boards and technical communities,” and “STAR-based behavioral interviewing and candidate evaluation.”
+   - **Evidence and accuracy**: Ground skills in the candidate's experience and the target JD. Show actions such as aligning, diagnosing, evaluating, influencing, optimizing, or implementing. Do not invent precise performance numbers in the skills section.
+   - **Structure**: Use exactly 4 role-specific categories with exactly 4 items each. Category titles must be meaningful, such as “Communication & Influence,” “Data Analysis & Logic,” “Sourcing Channels & Growth,” or “Recruiting Practice & Assessment”; avoid “Other” or generic labels.
+   - **Length**: Keep each item compact but substantive, usually one phrase rather than a full responsibility sentence.
    - **Principle**: Base skills on ${targetTitle} requirements. You may IGNORE user's original skills if irrelevant.
 6. **Responsibility Description (Crucial)**:
   - **Quantity**: MUST generate **EXACTLY 8 bullets** per role.
@@ -324,7 +330,10 @@ ${lockDecisions || 'None'}
   - if original company name is Chinese or another language, preserve exactly; do not translate it.
   - do not invent unrelated company entities for existing roles.
 6. personalIntroduction must be exactly 2 paragraphs in implied first-person style (no “I/My”), use no decimal years, and contain only 1-2 short <b> emphasis segments. Do not use <u> in the introduction.
-7. professionalSkills must have exactly 4 categories with 4 items each, role-relevant.
+7. professionalSkills must have exactly 4 categories with 4 items each. This is not a keyword list: each item must combine a capability or method with a concrete work situation or deliverable, making the candidate's practical value immediately clear.
+   - Never return standalone tools, platforms, methodologies, or generic soft-skill labels. Do not output isolated items such as “LinkedIn,” “Structured Interview,” “Talent Assessment,” “Recruitment Analytics,” or “PowerPoint.”
+   - Use compact, substantive phrases rather than full responsibility sentences. Aim for the information density of “Offer negotiation, hiring-bar alignment, executive hiring updates, and employee-complaint resolution,” “Attrition analysis and recruiting-funnel diagnosis,” “Blended sourcing across job boards and technical communities,” or “STAR-based behavioral interviewing and candidate evaluation.”
+   - Categories must be role-specific and meaningful. Ground them in the candidate's experience and the target JD, and do not invent precise performance numbers in this section.
 8. Outside the 1-2 <b> segments in personalIntroduction, do not use <b>, <u>, or markdown emphasis in any phase-one field.
 9. Output JSON only.
 10. For experiences marked as "LOCK=must keep exactly", output workExperience.position must exactly match original title text (except trimming spaces); no translation, no semantic rename, no seniority downgrade.
