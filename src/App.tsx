@@ -4429,8 +4429,8 @@ function SkillsEditor({ skills, updateData, language }) {
                 onChange={(event) => {
                   const value = event.currentTarget.value.slice(0, titleMaxLength);
                   setTitleDrafts((current) => ({ ...current, [categoryIndex]: value }));
-                  updateCategoryTitle(categoryIndex, value);
                 }}
+                onBlur={(event) => updateCategoryTitle(categoryIndex, event.currentTarget.value)}
                 aria-label={chinese ? `技能分类标题 ${categoryIndex + 1}` : `Skill category title ${categoryIndex + 1}`}
               />
               <button className="icon-button small skill-remove-button" type="button" onClick={() => removeCategory(categoryIndex)} aria-label={chinese ? '删除技能分类' : 'Remove skill category'} title={chinese ? '删除技能分类' : 'Remove category'}>
