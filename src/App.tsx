@@ -4365,6 +4365,7 @@ function SkillsEditor({ skills, updateData, language }) {
   const titleMaxLength = chinese ? 12 : 24;
   const [shakingCategory, setShakingCategory] = useState(null);
   const [titleDrafts, setTitleDrafts] = useState({});
+  const [pendingDelete, setPendingDelete] = useState(null);
   const categories = skills.categories?.length
     ? skills.categories
     : [
@@ -4380,7 +4381,12 @@ function SkillsEditor({ skills, updateData, language }) {
   };
 
   const addCategory = () => updateCategories([...categories, { title: chinese ? '新技能分类' : 'New skill category', items: [''] }]);
-  const removeCategory = (categoryIndex) => updateCategories(categories.filter((_, index) => index !== categoryIndex));
+  const removeCategory = (categoryIndex) => setPendingDelete({ categoryIndex, title: categories[categoryIndex]?.title || (chinese ? '未命名分类' : 'Untitled category') });
+  const confirmRemoveCategory = () => {
+    if (pendingDelete === null) return;
+    updateCategories(categories.filter((_, index) => index !== pendingDelete.categoryIndex));
+    setPendingDelete(null);
+  };
   const updateCategoryItems = (categoryIndex, value) => {
     const itemLines = value.split(/\r?\n/);
     const items = itemLines.map((line) => line.replace(/^\s*[·•]\s?/, '').trim()).filter(Boolean);
@@ -4452,6 +4458,22 @@ function SkillsEditor({ skills, updateData, language }) {
         <div><strong>{chinese ? '显示技能熟练度' : 'Show skill level'}</strong><span>{chinese ? '适合保持简洁的简历格式' : 'Hide for ATS-friendly resumes'}</span></div>
         <button className="toggle-button" role="switch" aria-checked="false"><span /></button>
       </div>
+      {pendingDelete !== null && (
+        <div className="modal-backdrop" onMouseDown={() => setPendingDelete(null)}>
+          <section className="resume-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-skill-category-title">
+            <header className="resume-dialog-header">
+              <h2 id="delete-skill-category-title">{chinese ? '删除技能分类？' : 'Delete skill category?'}</h2>
+            </header>
+            <div className="resume-dialog-content delete-resume-content">
+              <p><strong>{pendingDelete.title}</strong>{chinese ? ' 将被删除。' : ' will be deleted.'}</p>
+            </div>
+            <footer className="resume-dialog-actions">
+              <button className="secondary-button" type="button" onClick={() => setPendingDelete(null)}>{chinese ? '取消' : 'Cancel'}</button>
+              <button className="primary-button danger-button" type="button" onClick={confirmRemoveCategory}>{chinese ? '删除' : 'Delete'}</button>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
