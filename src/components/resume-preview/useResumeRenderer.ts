@@ -14,7 +14,7 @@ export function useResumeRenderer({ document, revision, autoFit, tuning, iframeR
     const target = iframeRef.current?.contentWindow; if (!target || !readyRef.current) return;
     const immutableDocument = structuredClone(document); const hash = await snapshotHash(immutableDocument); const requestId = crypto.randomUUID();
     const previous = latestRef.current; if (previous) target.postMessage({ protocol: RENDERER_PROTOCOL, kind: 'CANCEL', requestId: previous.requestId, revision: previous.revision } satisfies EditorToRendererMessage, window.location.origin);
-    latestRef.current = { requestId, revision, hash }; loadingStartedAtRef.current = performance.now(); setStatus('rendering'); setFailureCode(null); setPagePlan(null);
+    latestRef.current = { requestId, revision, hash }; loadingStartedAtRef.current = performance.now(); setStatus('rendering'); setFailureCode(null);
     const options = structuredClone(renderOptionsRef.current);
     target.postMessage({ protocol: RENDERER_PROTOCOL, kind: 'RENDER', requestId, snapshot: { revision, snapshotHash: hash, rendererVersion: RENDERER_VERSION, document: immutableDocument }, ...options } satisfies EditorToRendererMessage, window.location.origin);
   }, [document, iframeRef, revision]);
@@ -29,7 +29,7 @@ export function useResumeRenderer({ document, revision, autoFit, tuning, iframeR
       if (event.origin !== window.location.origin || event.source !== iframeRef.current?.contentWindow || event.data?.protocol !== RENDERER_PROTOCOL) return;
       if (event.data.kind === 'READY') { if (event.data.rendererVersion !== RENDERER_VERSION) { setStatus('failed'); setFailureCode('PROTOCOL_MISMATCH'); return; } readyRef.current = true; setStatus('idle'); void postRender(); return; }
       const latest = latestRef.current; if (!latest || !('requestId' in event.data) || event.data.requestId !== latest.requestId || event.data.revision !== latest.revision || event.data.snapshotHash !== latest.hash) return;
-      if (event.data.kind === 'RENDER_FAILED') { console.warn('[Resume Preview] Layout failed', { failureCode: event.data.failureCode, report: event.data.report }); setStatus('failed'); setFailureCode(event.data.failureCode); setPagePlan(null); onLayoutFailure?.(event.data.snapshotHash, event.data.report); return; }
+      if (event.data.kind === 'RENDER_FAILED') { console.warn('[Resume Preview] Layout failed', { failureCode: event.data.failureCode, report: event.data.report }); setStatus('failed'); setFailureCode(event.data.failureCode); onLayoutFailure?.(event.data.snapshotHash, event.data.report); return; }
       if (event.data.kind !== 'RENDER_SUCCEEDED') return;
       const remaining = Math.max(0, MIN_LOADING_VISIBILITY_MS - (performance.now() - loadingStartedAtRef.current)); if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
       if (latestRef.current?.requestId !== latest.requestId) return; setPagePlan(event.data.pagePlan); onValidPlan(event.data.pagePlan, event.data.report); setStatus('ready');

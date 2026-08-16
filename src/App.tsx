@@ -10,7 +10,7 @@ import type { CSSProperties } from 'react';
 import { ResumePreviewFrame } from './components/resume-preview/ResumePreviewFrame';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from './resume-renderer/types';
-import { A4_HEIGHT_PX, A4_WIDTH_PX, DEFAULT_HEADER_HEIGHT_PX, MAX_HEADER_HEIGHT_PX, MIN_HEADER_HEIGHT_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
+import { A4_HEIGHT_PX, A4_WIDTH_PX, DEFAULT_HEADER_HEIGHT_PX, DEFAULT_SKILL_TITLE_GAP_PX, MAX_HEADER_HEIGHT_PX, MAX_SKILL_TITLE_GAP_PX, MIN_HEADER_HEIGHT_PX, MIN_SKILL_TITLE_GAP_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
 import { MAX_SKILL_FIT_REMOVALS, removeOneBulletForSkills, skillsStartOnNewPage } from './resume-renderer/fitSkills';
 import {
   AlignLeft,
@@ -756,6 +756,7 @@ function normalizeResumeData(value, language = 'english') {
       expertise: textValue(skills.expertise, initialResume.skills.expertise),
       tools: textValue(skills.tools, initialResume.skills.tools),
       categories: skillCategories,
+      titleItemGap: Math.min(MAX_SKILL_TITLE_GAP_PX, Math.max(MIN_SKILL_TITLE_GAP_PX, Number.isFinite(Number(skills.titleItemGap)) ? Number(skills.titleItemGap) : DEFAULT_SKILL_TITLE_GAP_PX)),
     },
     certificates: Array.isArray(source.certificates)
       ? source.certificates.filter(isRecord).map((certificate) => ({
@@ -4359,6 +4360,13 @@ function SkillsEditor({ skills, updateData, language }) {
 
   return (
     <div className="form-content">
+      <label className="field skill-title-gap-field">
+        <span>{chinese ? '小标题到技能点的距离' : 'Category title to skill spacing'}</span>
+        <span className="skill-title-gap-control">
+          <input type="range" min={MIN_SKILL_TITLE_GAP_PX} max={MAX_SKILL_TITLE_GAP_PX} step="1" value={skills.titleItemGap ?? DEFAULT_SKILL_TITLE_GAP_PX} onChange={(event) => updateData((current) => ({ ...current, skills: { ...current.skills, titleItemGap: Number(event.target.value) } }))} />
+          <output>{skills.titleItemGap ?? DEFAULT_SKILL_TITLE_GAP_PX}px</output>
+        </span>
+      </label>
       <div className="skills-editor-list">
         {categories.map((category, categoryIndex) => (
           <section className="skill-editor-category" key={`${category.title}-${categoryIndex}`}>
@@ -4510,7 +4518,6 @@ function PreviewPanel({
   useEffect(() => {
     setContentHeight(A4_HEIGHT_PX);
   }, [template]);
-  useEffect(() => setRenderedPageCount(0), [canonicalDocument]);
   const acceptCanonicalPlan = useCallback((pagePlan, report) => {
     setRenderedPageCount(pagePlan.pages.length);
     onValidPlan(pagePlan, report);
@@ -5075,7 +5082,7 @@ function ProfileSkills({ skills, language }) {
       {categories.map((category) => (
         <div className="profile-skill-category" key={category.title}>
           <strong>{category.title}</strong>
-          <ul>{category.items.map((item) => <li key={item}><FormattedPuppetText value={item} /></li>)}</ul>
+          <ul style={{ marginTop: skills.titleItemGap ?? DEFAULT_SKILL_TITLE_GAP_PX }}>{category.items.map((item) => <li key={item}><FormattedPuppetText value={item} /></li>)}</ul>
         </div>
       ))}
     </div>

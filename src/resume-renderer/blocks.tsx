@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, Linkedin, Mail, MapPin, MessageCircle, MessageSquareText, Phone, Send, UserRound } from 'lucide-react';
 import { blockId } from './blockIds';
-import { DEFAULT_HEADER_HEIGHT_PX } from './constants';
+import { DEFAULT_HEADER_HEIGHT_PX, DEFAULT_SKILL_TITLE_GAP_PX } from './constants';
 import { FormattedPuppetText } from './FormattedPuppetText';
 import type { RendererResumeDocument, ResumeBlockDescriptor, ResumeBlockKind } from './types';
 
@@ -52,7 +52,7 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
         { title: chinese ? '专业领域' : 'Expertise', items: text(data.skills?.expertise).split(',').map((item) => item.trim()).filter(Boolean) },
         { title: chinese ? '工具平台' : 'Tools & Platforms', items: text(data.skills?.tools).split(',').map((item) => item.trim()).filter(Boolean) },
       ].filter((category) => category.items.length);
-      add(block(blockId.skillItem('content', 0, 0), 'skill-item', 'data.skills', order, <div className="profile-skills-grid">{categories.map((category) => <div className="profile-skill-category" key={category.title}><strong>{category.title}</strong><ul>{category.items.map((item, itemIndex) => <li key={`${item}-${itemIndex}`}>{item}</li>)}</ul></div>)}</div>, { gapBeforeToken: '18' }));
+      add(block(blockId.skillItem('content', 0, 0), 'skill-item', 'data.skills', order, <div className="profile-skills-grid">{categories.map((category) => <div className="profile-skill-category" key={category.title}><strong>{category.title}</strong><ul style={{ marginTop: data.skills?.titleItemGap ?? DEFAULT_SKILL_TITLE_GAP_PX }}>{category.items.map((item, itemIndex) => <li key={`${item}-${itemIndex}`}>{item}</li>)}</ul></div>)}</div>, { gapBeforeToken: '18' }));
     }
     if (section === 'certifications' && (data.certificates || []).length) {
       add(sectionBlock(blockId.section('certificates'), 'data.certificates', order, label(chinese, '证书', 'Certificates')));

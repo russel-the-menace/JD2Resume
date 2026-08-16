@@ -208,19 +208,22 @@ button:disabled {
   animation: profile-import-spin 900ms linear infinite;
 }
 
-.header-height-control {
+.header-height-control,
+.skill-title-gap-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 54px;
   align-items: center;
   gap: 12px;
 }
 
-.header-height-control input {
+.header-height-control input,
+.skill-title-gap-control input {
   width: 100%;
   accent-color: var(--accent);
 }
 
-.header-height-control output {
+.header-height-control output,
+.skill-title-gap-control output {
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -3118,7 +3121,9 @@ button:disabled {
   flex-direction: column;
   gap: clamp(4px, calc(7px + var(--layout-section-gap-delta, 0px)), 11px);
   padding-left: 20px;
-  margin: clamp(7px, calc(15px + var(--layout-section-gap-delta, 0px)), 24px) 0 0;
+  margin-right: 0;
+  margin-bottom: 0;
+  margin-left: 0;
   color: #555;
   font-size: clamp(10.5px, calc(12.5px + var(--layout-font-size-delta, 0px)), 14px);
   line-height: max(19px, calc(20px + var(--layout-line-height-delta, 0px)));
