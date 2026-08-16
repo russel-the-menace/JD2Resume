@@ -10,7 +10,7 @@ import type { CSSProperties } from 'react';
 import { ResumePreviewFrame } from './components/resume-preview/ResumePreviewFrame';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from './resume-renderer/types';
-import { A4_HEIGHT_PX, A4_WIDTH_PX, DEFAULT_HEADER_HEIGHT_PX, DEFAULT_SKILL_TITLE_GAP_PX, DEFAULT_SKILL_TITLE_OFFSET_X_PX, MAX_HEADER_HEIGHT_PX, MAX_SKILL_TITLE_GAP_PX, MAX_SKILL_TITLE_OFFSET_X_PX, MIN_HEADER_HEIGHT_PX, MIN_SKILL_TITLE_GAP_PX, MIN_SKILL_TITLE_OFFSET_X_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
+import { A4_HEIGHT_PX, A4_WIDTH_PX, DEFAULT_HEADER_HEIGHT_PX, DEFAULT_LAYOUT_FONT_SIZE_PX, DEFAULT_LAYOUT_LINE_HEIGHT_PX, DEFAULT_LAYOUT_TITLE_MARGIN_BOTTOM_PX, DEFAULT_LAYOUT_TITLE_MARGIN_TOP_PX, DEFAULT_SKILL_TITLE_GAP_PX, DEFAULT_SKILL_TITLE_OFFSET_X_PX, MAX_HEADER_HEIGHT_PX, MAX_LAYOUT_FONT_SIZE_PX, MAX_LAYOUT_LINE_HEIGHT_PX, MAX_LAYOUT_TITLE_MARGIN_BOTTOM_PX, MAX_LAYOUT_TITLE_MARGIN_TOP_PX, MAX_SKILL_TITLE_GAP_PX, MAX_SKILL_TITLE_OFFSET_X_PX, MIN_HEADER_HEIGHT_PX, MIN_LAYOUT_FONT_SIZE_PX, MIN_LAYOUT_LINE_HEIGHT_PX, MIN_LAYOUT_TITLE_MARGIN_BOTTOM_PX, MIN_LAYOUT_TITLE_MARGIN_TOP_PX, MIN_SKILL_TITLE_GAP_PX, MIN_SKILL_TITLE_OFFSET_X_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
 import { MAX_SKILL_FIT_REMOVALS, removeOneBulletForSkills, skillsStartOnNewPage } from './resume-renderer/fitSkills';
 import {
   AlignLeft,
@@ -686,6 +686,7 @@ function normalizeResumeData(value, language = 'english') {
   const source = isRecord(value) ? value : {};
   const basics = isRecord(source.basics) ? source.basics : {};
   const skills = isRecord(source.skills) ? source.skills : {};
+  const layout = isRecord(source.layout) ? source.layout : {};
   const skillCategories = Array.isArray(skills.categories)
     ? skills.categories.filter(isRecord).map((category) => ({
         title: textValue(category.title),
@@ -745,6 +746,12 @@ function normalizeResumeData(value, language = 'english') {
       telegram: textValue(basics.telegram),
       photoUrl: textValue(basics.photoUrl, initialResume.basics.photoUrl),
       headerHeight: Math.min(MAX_HEADER_HEIGHT_PX, Math.max(MIN_HEADER_HEIGHT_PX, Number(basics.headerHeight) || DEFAULT_HEADER_HEIGHT_PX)),
+    },
+    layout: {
+      lineHeight: Math.min(MAX_LAYOUT_LINE_HEIGHT_PX, Math.max(MIN_LAYOUT_LINE_HEIGHT_PX, Number.isFinite(Number(layout.lineHeight)) ? Number(layout.lineHeight) : DEFAULT_LAYOUT_LINE_HEIGHT_PX)),
+      titleMarginTop: Math.min(MAX_LAYOUT_TITLE_MARGIN_TOP_PX, Math.max(MIN_LAYOUT_TITLE_MARGIN_TOP_PX, Number.isFinite(Number(layout.titleMarginTop)) ? Number(layout.titleMarginTop) : DEFAULT_LAYOUT_TITLE_MARGIN_TOP_PX)),
+      titleMarginBottom: Math.min(MAX_LAYOUT_TITLE_MARGIN_BOTTOM_PX, Math.max(MIN_LAYOUT_TITLE_MARGIN_BOTTOM_PX, Number.isFinite(Number(layout.titleMarginBottom)) ? Number(layout.titleMarginBottom) : DEFAULT_LAYOUT_TITLE_MARGIN_BOTTOM_PX)),
+      fontSize: Math.min(MAX_LAYOUT_FONT_SIZE_PX, Math.max(MIN_LAYOUT_FONT_SIZE_PX, Number.isFinite(Number(layout.fontSize)) ? Number(layout.fontSize) : DEFAULT_LAYOUT_FONT_SIZE_PX)),
     },
     summary: textValue(source.summary, initialResume.summary),
     yearsOfExperience: Number.isFinite(Number(source.yearsOfExperience)) ? Number(source.yearsOfExperience) : 0,
@@ -2148,6 +2155,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, autoFitSk
   const sections = sectionOrder
     .map((id) => sectionDefinitions.find((section) => section.id === id))
     .filter(Boolean);
+  sections.unshift({ id: 'layout', label: isChineseResume(language) ? '整体布局' : 'Overall layout', icon: Settings2 });
 
   const addCustomSection = (id) => {
     const defaults = customSectionDefaults(id, language);
@@ -2166,7 +2174,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, autoFitSk
   };
 
   const reorderSections = (sourceId, targetId) => {
-    if (sourceId === targetId || sourceId === 'basics' || targetId === 'basics') return;
+    if (sourceId === targetId || sourceId === 'basics' || targetId === 'basics' || sourceId === 'layout' || targetId === 'layout') return;
     setSectionOrder((current) => {
       const sourceIndex = current.indexOf(sourceId);
       const targetIndex = current.indexOf(targetId);
@@ -3852,16 +3860,9 @@ function OutlineSidebar({
         </div>
       </div>
 
-      <div className="sidebar-section-heading">
-        <span>Resume sections</span>
-        <button className="icon-button small" aria-label="Reorder sections" title="Reorder sections">
-          <MoreHorizontal size={17} />
-        </button>
-      </div>
-
       <nav className="section-nav" aria-label="Resume sections">
         {sections.map(({ id, label, icon: Icon }) => {
-          const isFixed = id === 'basics';
+          const isFixed = id === 'basics' || id === 'layout';
           return (
             <button
               key={id}
@@ -3978,6 +3979,7 @@ function EditorPanel({
   const labels = isChineseResume(language)
     ? {
         basics: ['个人信息', '基本资料'],
+        layout: ['整体布局', '页面排版'],
         summary: ['个人介绍', '自我简介'],
         experience: ['工作经历', `${data.experience.length} 段经历`],
         education: ['教育经历', `${data.education.length} 条记录`],
@@ -3985,6 +3987,7 @@ function EditorPanel({
       }
     : {
         basics: ['Personal details', 'The essentials'],
+        layout: ['Overall layout', 'Page typography'],
         summary: ['Professional summary', 'Your introduction'],
         experience: ['Experience', `${data.experience.length} positions`],
         education: ['Education', `${data.education.length} entry`],
@@ -4024,6 +4027,9 @@ function EditorPanel({
       </div>
 
       <div className="editor-scroll">
+        {activeSection === 'layout' && (
+          <OverallLayoutEditor layout={data.layout} updateData={updateData} language={language} />
+        )}
         {activeSection === 'basics' && (
           <BasicsEditor basics={data.basics} onChange={updateBasics} language={language} />
         )}
@@ -4066,6 +4072,42 @@ function EditorPanel({
         )}
       </div>
     </section>
+  );
+}
+
+function OverallLayoutEditor({ layout, updateData, language }) {
+  const chinese = isChineseResume(language);
+  return (
+    <div className="form-content layout-controls">
+      <label className="field">
+        <span>{chinese ? '行高' : 'Line height'}</span>
+        <span className="header-height-control">
+          <input type="range" min={MIN_LAYOUT_LINE_HEIGHT_PX} max={MAX_LAYOUT_LINE_HEIGHT_PX} step="1" value={layout?.lineHeight ?? DEFAULT_LAYOUT_LINE_HEIGHT_PX} onChange={(event) => updateData((current) => ({ ...current, layout: { ...current.layout, lineHeight: Number(event.target.value) } }))} />
+          <output>{layout?.lineHeight ?? DEFAULT_LAYOUT_LINE_HEIGHT_PX}px</output>
+        </span>
+      </label>
+      <label className="field">
+        <span>{chinese ? '大标题上边距' : 'Section title top margin'}</span>
+        <span className="header-height-control">
+          <input type="range" min={MIN_LAYOUT_TITLE_MARGIN_TOP_PX} max={MAX_LAYOUT_TITLE_MARGIN_TOP_PX} step="1" value={layout?.titleMarginTop ?? DEFAULT_LAYOUT_TITLE_MARGIN_TOP_PX} onChange={(event) => updateData((current) => ({ ...current, layout: { ...current.layout, titleMarginTop: Number(event.target.value) } }))} />
+          <output>{layout?.titleMarginTop ?? DEFAULT_LAYOUT_TITLE_MARGIN_TOP_PX}px</output>
+        </span>
+      </label>
+      <label className="field">
+        <span>{chinese ? '大标题下边距' : 'Section title bottom margin'}</span>
+        <span className="header-height-control">
+          <input type="range" min={MIN_LAYOUT_TITLE_MARGIN_BOTTOM_PX} max={MAX_LAYOUT_TITLE_MARGIN_BOTTOM_PX} step="1" value={layout?.titleMarginBottom ?? DEFAULT_LAYOUT_TITLE_MARGIN_BOTTOM_PX} onChange={(event) => updateData((current) => ({ ...current, layout: { ...current.layout, titleMarginBottom: Number(event.target.value) } }))} />
+          <output>{layout?.titleMarginBottom ?? DEFAULT_LAYOUT_TITLE_MARGIN_BOTTOM_PX}px</output>
+        </span>
+      </label>
+      <label className="field">
+        <span>{chinese ? '字体大小' : 'Font size'}</span>
+        <span className="header-height-control">
+          <input type="range" min={MIN_LAYOUT_FONT_SIZE_PX} max={MAX_LAYOUT_FONT_SIZE_PX} step="0.5" value={layout?.fontSize ?? DEFAULT_LAYOUT_FONT_SIZE_PX} onChange={(event) => updateData((current) => ({ ...current, layout: { ...current.layout, fontSize: Number(event.target.value) } }))} />
+          <output>{layout?.fontSize ?? DEFAULT_LAYOUT_FONT_SIZE_PX}px</output>
+        </span>
+      </label>
+    </div>
   );
 }
 
@@ -4889,6 +4931,10 @@ function ResumePage({
         '--layout-section-gap-delta': `${layoutManifest.sectionGapDelta}px`,
         '--layout-line-height-delta': `${layoutManifest.lineHeightDelta}px`,
         '--layout-font-size-delta': `${layoutManifest.fontSizeDelta}px`,
+        '--resume-line-height': `${data.layout?.lineHeight ?? DEFAULT_LAYOUT_LINE_HEIGHT_PX}px`,
+        '--resume-title-margin-top': `${data.layout?.titleMarginTop ?? DEFAULT_LAYOUT_TITLE_MARGIN_TOP_PX}px`,
+        '--resume-title-margin-bottom': `${data.layout?.titleMarginBottom ?? DEFAULT_LAYOUT_TITLE_MARGIN_BOTTOM_PX}px`,
+        '--resume-font-size': `${data.layout?.fontSize ?? DEFAULT_LAYOUT_FONT_SIZE_PX}px`,
       } as CssVariables}
       lang={isChineseResume(language) ? 'zh-CN' : 'en'}
     >

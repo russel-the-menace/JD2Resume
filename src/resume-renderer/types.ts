@@ -11,8 +11,9 @@ export interface ResumeExperience { id: string | number; role?: string; company?
 export interface ResumeEducation { id: string | number; school?: string; degree?: string; location?: string; start?: string; end?: string; }
 export interface ResumeCertificate { id?: string | number; name?: string; issuer?: string; date?: string; }
 export interface ResumeSkillCategory { title: string; items: string[]; }
+export interface ResumeLayout { lineHeight?: number; titleMarginTop?: number; titleMarginBottom?: number; fontSize?: number; }
 export interface ResumeSkills { expertise?: string; tools?: string; categories?: ResumeSkillCategory[]; titleItemGap?: number; titleOffsetX?: number; [key: string]: unknown; }
-export interface ResumeData { basics: ResumeBasics; summary?: string; experience: ResumeExperience[]; education: ResumeEducation[]; skills?: ResumeSkills; certificates?: ResumeCertificate[]; }
+export interface ResumeData { basics: ResumeBasics; layout?: ResumeLayout; summary?: string; experience: ResumeExperience[]; education: ResumeEducation[]; skills?: ResumeSkills; certificates?: ResumeCertificate[]; }
 
 export interface RendererResumeDocument {
   id: string;
