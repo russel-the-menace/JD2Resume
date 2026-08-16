@@ -1,4 +1,4 @@
-export const RENDERER_VERSION = 'puppet-renderer-v2';
+export const RENDERER_VERSION = 'puppet-renderer-v3';
 export const RENDERER_PROTOCOL = 'jd2resume-puppet-renderer-v2';
 export const A4_WIDTH_PX = 794 as const;
 export const A4_HEIGHT_PX = 1123 as const;

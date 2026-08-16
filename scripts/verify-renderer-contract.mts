@@ -6,6 +6,7 @@ import { assertReplayMatchesPlan, type ReplayResult } from '../server/puppet-res
 import type { PagePlanV2, RendererResumeDocument } from '../src/resume-renderer/types';
 import { RENDERER_VERSION } from '../src/resume-renderer/constants';
 import { buildRendererBlocks } from '../src/resume-renderer/blocks';
+import { removeOneBulletForSkills, skillsStartOnNewPage } from '../src/resume-renderer/fitSkills';
 
 const document: RendererResumeDocument = {
   id: 'contract', documentName: 'Contract', language: 'english', template: 'profile', accent: '#167c65',
@@ -24,6 +25,34 @@ const skillBlocks = buildRendererBlocks({
 });
 assert.equal(skillBlocks.some((block) => block.kind === 'section-heading' && block.sourcePath === 'data.skills'), true);
 assert.equal(skillBlocks.some((block) => block.kind === 'skill-item' && block.sourcePath === 'data.skills'), true);
+const skillFitData = {
+  ...document.data,
+  experience: [1, 2].map((id) => ({
+    id,
+    bullets: Array.from({ length: 8 }, (_, index) => id === 2 && index === 7 ? '<u>keep emphasized</u>' : `Experience ${id} bullet ${index}`),
+  })),
+};
+const skillFitPlan = {
+  schemaVersion: 2, revision: 1, snapshotHash: 'skill-fit', rendererVersion: RENDERER_VERSION,
+  pageWidth: 794, pageHeight: 1123, contentWidth: 694, contentHeight: 1043,
+  tuning: { policy: 'spacing-fit', sectionGapDelta: 0, lineHeightDelta: 0, fontSizeDelta: 0 },
+  pages: [
+    { pageNumber: 1, blockIds: ['header'], blocks: [], fillRatio: 1, contentFillRatio: 1, usedHeight: 1043, contentHeight: 1043 },
+    { pageNumber: 2, blockIds: ['experience.1.bullet.7', 'experience.2.heading', ...Array.from({ length: 8 }, (_, index) => `experience.2.bullet.${index}`)], blocks: [], fillRatio: 1, contentFillRatio: 1, usedHeight: 1043, contentHeight: 1043 },
+    { pageNumber: 3, blockIds: ['skills.heading', 'skills.content.item.0'], blocks: [], fillRatio: 0.6, contentFillRatio: 0.6, usedHeight: 600, contentHeight: 1043 },
+  ],
+  blockOrder: [], createdAt: 1,
+} satisfies PagePlanV2;
+assert.equal(skillsStartOnNewPage(skillFitPlan), true);
+const firstFit = removeOneBulletForSkills(skillFitData, skillFitPlan)!;
+assert.equal(firstFit.experience[0].bullets?.length, 8);
+assert.equal(firstFit.experience[1].bullets?.length, 7);
+assert.equal(firstFit.experience[1].bullets?.includes('<u>keep emphasized</u>'), true);
+const secondFit = removeOneBulletForSkills(firstFit, skillFitPlan)!;
+assert.equal(secondFit.experience[0].bullets?.length, 7);
+assert.equal(secondFit.experience[1].bullets?.length, 7);
+assert.equal(removeOneBulletForSkills({ ...skillFitData, experience: skillFitData.experience.map((entry) => ({ ...entry, bullets: entry.bullets.slice(0, 3) })) }, skillFitPlan), null);
+assert.equal(skillsStartOnNewPage({ ...skillFitPlan, pages: [skillFitPlan.pages[0], { ...skillFitPlan.pages[1], blockIds: [...skillFitPlan.pages[1].blockIds, 'skills.heading', 'skills.content.item.0'] }] }), false);
 const plan = {
   schemaVersion: 2, revision: 4, snapshotHash: hash, rendererVersion: RENDERER_VERSION,
   pageWidth: 794, pageHeight: 1123, contentWidth: 694, contentHeight: 1043,

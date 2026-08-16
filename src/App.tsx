@@ -11,6 +11,7 @@ import { ResumePreviewFrame } from './components/resume-preview/ResumePreviewFra
 import { LoadingOverlay } from './components/LoadingOverlay';
 import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from './resume-renderer/types';
 import { A4_HEIGHT_PX, A4_WIDTH_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
+import { MAX_SKILL_FIT_REMOVALS, removeOneBulletForSkills, skillsStartOnNewPage } from './resume-renderer/fitSkills';
 import {
   AlignLeft,
   ArrowLeft,
@@ -1892,6 +1893,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
   const [saveState, setSaveState] = useState('Saved');
   const [toast, setToast] = useState('');
   const editorTransitionTimerRef = useRef(null);
+  const skillFitRemovalCountRef = useRef(0);
 
   const data = history.present;
 
@@ -2303,8 +2305,18 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
           allowContentRefinement={false}
           onLayoutFailure={undefined}
           onValidPlan={(pagePlan, report) => {
+            const generatedResume = Boolean(initialResumeState.generationEvidence.applicationId);
+            const needsSkillFit = generatedResume && skillsStartOnNewPage(pagePlan);
+            if (!needsSkillFit) skillFitRemovalCountRef.current = 0;
+            if (needsSkillFit && skillFitRemovalCountRef.current < MAX_SKILL_FIT_REMOVALS) {
+              const fittedData = removeOneBulletForSkills(data, pagePlan);
+              if (fittedData) {
+                skillFitRemovalCountRef.current += 1;
+                updateData(fittedData);
+                return;
+              }
+            }
             setRenderState((current) => {
-              if (current.pagePlan?.snapshotHash === pagePlan.snapshotHash && current.pagePlan?.revision === pagePlan.revision) return current;
               return {
                 status: 'valid',
                 draftRevision: pagePlan.revision,
