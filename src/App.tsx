@@ -4364,7 +4364,6 @@ function SkillsEditor({ skills, updateData, language }) {
   const chinese = isChineseResume(language);
   const titleMaxLength = chinese ? 12 : 24;
   const [shakingCategory, setShakingCategory] = useState(null);
-  const [composingCategory, setComposingCategory] = useState(null);
   const categories = skills.categories?.length
     ? skills.categories
     : [
@@ -4419,11 +4418,6 @@ function SkillsEditor({ skills, updateData, language }) {
                 placeholder={chinese ? '分类标题' : 'Category title'}
                 maxLength={titleMaxLength}
                 className={cx('skill-category-title-input', shakingCategory === categoryIndex && 'is-shaking')}
-                onCompositionStart={() => setComposingCategory(categoryIndex)}
-                onCompositionEnd={(event) => {
-                  setComposingCategory(null);
-                  updateCategoryTitle(categoryIndex, event.currentTarget.value);
-                }}
                 onKeyDown={(event) => {
                   if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                   if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && event.currentTarget.value.length >= titleMaxLength) {
@@ -4431,10 +4425,7 @@ function SkillsEditor({ skills, updateData, language }) {
                     shakeCategoryTitle(categoryIndex);
                   }
                 }}
-                onChange={(event) => {
-                  if (composingCategory === categoryIndex || (event.nativeEvent as KeyboardEvent).isComposing) return;
-                  updateCategoryTitle(categoryIndex, event.currentTarget.value);
-                }}
+                onChange={(event) => updateCategoryTitle(categoryIndex, event.currentTarget.value)}
                 aria-label={chinese ? `技能分类标题 ${categoryIndex + 1}` : `Skill category title ${categoryIndex + 1}`}
               />
               <button className="icon-button small skill-remove-button" type="button" onClick={() => removeCategory(categoryIndex)} aria-label={chinese ? '删除技能分类' : 'Remove skill category'} title={chinese ? '删除技能分类' : 'Remove category'}>
