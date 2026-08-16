@@ -2513,36 +2513,6 @@ button:disabled {
   pointer-events: none;
 }
 
-.canonical-preview-cover {
-  position: absolute;
-  z-index: 2;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: #eef5f1;
-  background: rgba(28, 44, 36, .82);
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.canonical-preview-cover svg {
-  animation: profile-import-spin 900ms linear infinite;
-}
-
-.canonical-preview-retry {
-  display: inline-grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  color: inherit;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, .45);
-  border-radius: 5px;
-  cursor: pointer;
-}
-
 .canonical-preview-retry svg { animation: none; }
 
 .resume-sheet {
