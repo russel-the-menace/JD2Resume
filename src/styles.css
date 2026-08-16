@@ -1272,6 +1272,10 @@ button:disabled {
   user-select: none;
 }
 
+.section-nav-item.layout-nav-item {
+  margin-top: 5px;
+}
+
 .section-nav-item:hover {
   color: var(--ink);
   background: #f2f4f1;

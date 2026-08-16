@@ -3870,6 +3870,7 @@ function OutlineSidebar({
               aria-grabbed={isFixed ? undefined : draggedSectionId === id}
               className={cx(
                 'section-nav-item',
+                id === 'layout' && 'layout-nav-item',
                 activeSection === id && 'active',
                 draggedSectionId === id && 'dragging',
                 dropTargetId === id && draggedSectionId !== id && 'drop-target',
@@ -4058,7 +4059,7 @@ function EditorPanel({
         {activeSection === 'skills' && (
           <SkillsEditor skills={data.skills} updateData={updateData} language={language} />
         )}
-        {!baseSections.some((section) => section.id === activeSection) && (
+        {activeSection !== 'layout' && !baseSections.some((section) => section.id === activeSection) && (
           <CustomSectionEditor
             content={customContent[activeSection] || customSectionDefaults(activeSection, language)}
             language={language}
