@@ -4376,22 +4376,13 @@ function SkillsEditor({ skills, updateData, language }) {
     updateData((current) => ({ ...current, skills: { ...current.skills, categories: nextCategories } }));
   };
 
-  const updateCategory = (categoryIndex, field, value) => {
-    updateCategories(categories.map((category, index) => index === categoryIndex ? { ...category, [field]: value } : category));
-  };
-
-  const updateItem = (categoryIndex, itemIndex, value) => {
-    updateCategories(categories.map((category, index) => index === categoryIndex
-      ? { ...category, items: category.items.map((item, currentIndex) => currentIndex === itemIndex ? value : item) }
-      : category));
-  };
-
   const addCategory = () => updateCategories([...categories, { title: chinese ? '新技能分类' : 'New skill category', items: [''] }]);
   const removeCategory = (categoryIndex) => updateCategories(categories.filter((_, index) => index !== categoryIndex));
-  const addItem = (categoryIndex) => updateCategories(categories.map((category, index) => index === categoryIndex ? { ...category, items: [...category.items, ''] } : category));
-  const removeItem = (categoryIndex, itemIndex) => updateCategories(categories.map((category, index) => index === categoryIndex
-    ? { ...category, items: category.items.filter((_, currentIndex) => currentIndex !== itemIndex) }
-    : category));
+  const updateCategoryText = (categoryIndex, value) => {
+    const [title = '', ...itemLines] = value.split(/\r?\n/);
+    const items = itemLines.map((line) => line.replace(/^\s*[·•]\s?/, '').trim()).filter(Boolean);
+    updateCategories(categories.map((category, index) => index === categoryIndex ? { ...category, title: title.trim(), items } : category));
+  };
 
   return (
     <div className="form-content">
@@ -4413,28 +4404,18 @@ function SkillsEditor({ skills, updateData, language }) {
         {categories.map((category, categoryIndex) => (
           <section className="skill-editor-category" key={`${category.title}-${categoryIndex}`}>
             <div className="skill-editor-category-heading">
-              <Field
-                label={chinese ? '技能分类' : 'Skill category'}
-                value={category.title}
-                placeholder={chinese ? '例如：技术能力' : 'e.g. Technical skills'}
-                onChange={(value) => updateCategory(categoryIndex, 'title', value)}
-              />
+              <span className="skill-editor-category-label">{chinese ? '技能分类' : 'Skill category'}</span>
               <button className="icon-button small skill-remove-button" type="button" onClick={() => removeCategory(categoryIndex)} aria-label={chinese ? '删除技能分类' : 'Remove skill category'} title={chinese ? '删除技能分类' : 'Remove category'}>
                 <Trash2 size={15} />
               </button>
             </div>
-            <div className="skill-editor-items">
-              {category.items.map((item, itemIndex) => (
-                <div className="skill-editor-item" key={`${categoryIndex}-${itemIndex}`}>
-                  <span className="skill-item-marker" aria-hidden="true">•</span>
-                  <input value={item} placeholder={chinese ? '技能点' : 'Skill'} onChange={(event) => updateItem(categoryIndex, itemIndex, event.target.value)} />
-                  <button className="icon-button small" type="button" onClick={() => removeItem(categoryIndex, itemIndex)} aria-label={chinese ? '删除技能点' : 'Remove skill'} title={chinese ? '删除技能点' : 'Remove skill'}>
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button className="inline-add-button" type="button" onClick={() => addItem(categoryIndex)}><Plus size={14} /> {chinese ? '添加技能点' : 'Add skill'}</button>
+            <textarea
+              className="skill-category-textarea"
+              value={[category.title, ...category.items.map((item) => `· ${item}`)].join('\n')}
+              placeholder={chinese ? '分类标题\n· 技能点\n· 技能点' : 'Category title\n· Skill\n· Skill'}
+              onChange={(event) => updateCategoryText(categoryIndex, event.target.value)}
+              aria-label={chinese ? `技能分类 ${categoryIndex + 1}` : `Skill category ${categoryIndex + 1}`}
+            />
           </section>
         ))}
       </div>

@@ -1994,12 +1994,17 @@ button:disabled {
 
 .skill-editor-category-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 9px;
 }
 
-.skill-editor-category-heading .field {
+.skill-editor-category-label {
   flex: 1;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
 
 .skill-remove-button {
@@ -2007,42 +2012,25 @@ button:disabled {
   color: #9f554e;
 }
 
-.skill-editor-items {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin: 13px 0 10px;
-}
-
-.skill-editor-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.skill-editor-item input {
-  flex: 1;
-  min-width: 0;
-  padding: 9px 10px;
+.skill-category-textarea {
+  width: 100%;
+  min-height: 138px;
+  margin-top: 10px;
+  padding: 11px 12px;
+  resize: vertical;
+  white-space: pre-wrap;
   color: #2f3431;
   background: #fff;
   border: 1px solid #ccd1cc;
   border-radius: 6px;
   font-size: 13px;
+  line-height: 1.65;
 }
 
-.skill-editor-item input:focus {
+.skill-category-textarea:focus {
   border-color: var(--accent);
   outline: none;
   box-shadow: 0 0 0 3px rgba(22, 124, 101, 0.12);
-}
-
-.skill-item-marker {
-  width: 9px;
-  color: var(--accent);
-  font-size: 17px;
-  line-height: 1;
-  text-align: center;
 }
 
 .skill-level-row {
