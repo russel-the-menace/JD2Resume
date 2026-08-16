@@ -48,10 +48,10 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
     }
     if (section === 'skills' && (data.skills?.categories?.length || text(data.skills?.expertise) || text(data.skills?.tools))) {
       add(sectionBlock(blockId.section('skills'), 'data.skills', order, label(chinese, '专业技能', 'Professional Skills')));
-      const categories = data.skills?.categories?.length ? data.skills.categories : [
+      const categories = (data.skills?.categories?.length ? data.skills.categories : [
         { title: chinese ? '专业领域' : 'Expertise', items: text(data.skills?.expertise).split(',').map((item) => item.trim()).filter(Boolean) },
         { title: chinese ? '工具平台' : 'Tools & Platforms', items: text(data.skills?.tools).split(',').map((item) => item.trim()).filter(Boolean) },
-      ].filter((category) => category.items.length);
+      ]).filter((category) => category.items.length && !category.hidden);
       add(block(blockId.skillItem('content', 0, 0), 'skill-item', 'data.skills', order, <div className="profile-skills-grid">{categories.map((category) => <div className="profile-skill-category" key={category.title}><strong style={{ transform: `translateX(${data.skills?.titleOffsetX ?? DEFAULT_SKILL_TITLE_OFFSET_X_PX}px)` }}>{category.title}</strong><ul style={{ marginTop: data.skills?.titleItemGap ?? DEFAULT_SKILL_TITLE_GAP_PX }}>{category.items.map((item, itemIndex) => <li key={`${item}-${itemIndex}`}>{item}</li>)}</ul></div>)}</div>, { gapBeforeToken: '18' }));
     }
     if (section === 'certifications' && (data.certificates || []).length) {

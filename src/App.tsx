@@ -26,6 +26,7 @@ import {
   Copy,
   Download,
   Eye,
+  EyeOff,
   FileUp,
   FileText,
   FolderOpen,
@@ -691,6 +692,7 @@ function normalizeResumeData(value, language = 'english') {
     ? skills.categories.filter(isRecord).map((category) => ({
         title: textValue(category.title),
         items: Array.isArray(category.items) ? category.items.map((item) => textValue(item)).filter(Boolean) : [],
+        hidden: category.hidden === true,
       })).filter((category) => category.title && category.items.length)
     : [];
   const chinese = isChineseResume(language);
@@ -4375,7 +4377,6 @@ function SkillsEditor({ skills, updateData, language }) {
         title: category.title,
         items: category.items.split(/[,，、]/).map((item) => item.trim()).filter(Boolean),
       })).filter((category) => category.items.length);
-
   const updateCategories = (nextCategories) => {
     updateData((current) => ({ ...current, skills: { ...current.skills, categories: nextCategories } }));
   };
@@ -4439,6 +4440,9 @@ function SkillsEditor({ skills, updateData, language }) {
                 onBlur={(event) => updateCategoryTitle(categoryIndex, event.currentTarget.value)}
                 aria-label={chinese ? `技能分类标题 ${categoryIndex + 1}` : `Skill category title ${categoryIndex + 1}`}
               />
+              <button className="icon-button small skill-visibility-button" type="button" onClick={() => updateCategories(categories.map((item, index) => index === categoryIndex ? { ...item, hidden: !item.hidden } : item))} aria-label={category.hidden ? (chinese ? '显示技能分类' : 'Show skill category') : (chinese ? '隐藏技能分类' : 'Hide skill category')} title={category.hidden ? (chinese ? '显示技能分类' : 'Show category') : (chinese ? '隐藏技能分类' : 'Hide category')}>
+                {category.hidden ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
               <button className="icon-button small skill-remove-button" type="button" onClick={() => removeCategory(categoryIndex)} aria-label={chinese ? '删除技能分类' : 'Remove skill category'} title={chinese ? '删除技能分类' : 'Remove category'}>
                 <Trash2 size={15} />
               </button>
@@ -5153,10 +5157,11 @@ function ProfileSkills({ skills, language }) {
         ...category,
         items: category.items.split(',').map((item) => item.trim()).filter(Boolean),
       })).filter((category) => category.items.length);
+  const visibleCategories = categories.filter((category) => !category.hidden);
 
   return (
     <div className="profile-skills-grid">
-      {categories.map((category) => (
+      {visibleCategories.map((category) => (
         <div className="profile-skill-category" key={category.title}>
           <strong style={{ transform: `translateX(${skills.titleOffsetX ?? DEFAULT_SKILL_TITLE_OFFSET_X_PX}px)` }}>{category.title}</strong>
           <ul style={{ marginTop: skills.titleItemGap ?? DEFAULT_SKILL_TITLE_GAP_PX }}>{category.items.map((item) => <li key={item}><FormattedPuppetText value={item} /></li>)}</ul>

@@ -2038,6 +2038,15 @@ button:disabled {
   color: #9f554e;
 }
 
+.skill-visibility-button {
+  margin-bottom: 1px;
+  color: var(--muted);
+}
+
+.skill-visibility-button:hover {
+  color: var(--accent);
+}
+
 .skill-category-textarea {
   width: 100%;
   min-height: 138px;
