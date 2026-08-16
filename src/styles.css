@@ -1443,6 +1443,10 @@ button:disabled {
   box-shadow: 6px 0 16px rgba(32, 38, 34, 0.035);
 }
 
+.editor-panel:has(.modal-backdrop) {
+  z-index: 1000;
+}
+
 .editor-header {
   display: flex;
   flex: 0 0 auto;
