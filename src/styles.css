@@ -1999,7 +1999,9 @@ button:disabled {
 }
 
 .skill-category-title-input {
-  flex: 1;
+  flex: 0 1 12em;
+  width: min(100%, 12em);
+  max-width: 12em;
   min-width: 0;
   padding: 2px 0 5px;
   color: #30445a;
@@ -2015,6 +2017,16 @@ button:disabled {
   border-bottom-color: var(--accent);
   outline: none;
   box-shadow: 0 2px 0 rgba(22, 124, 101, 0.16);
+}
+
+.skill-category-title-input.is-shaking {
+  animation: skill-title-limit-shake 180ms ease-in-out;
+}
+
+@keyframes skill-title-limit-shake {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-1.5px); }
+  70% { transform: translateX(1.5px); }
 }
 
 .skill-remove-button {
