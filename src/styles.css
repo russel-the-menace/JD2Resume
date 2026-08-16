@@ -2007,6 +2007,7 @@ button:disabled {
   width: min(100%, 12em);
   max-width: 12em;
   min-width: 0;
+  margin-right: auto;
   padding: 2px 0 5px;
   color: #30445a;
   background: transparent;
