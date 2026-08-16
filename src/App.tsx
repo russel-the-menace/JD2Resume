@@ -11,7 +11,7 @@ import { ResumePreviewFrame } from './components/resume-preview/ResumePreviewFra
 import { LoadingOverlay } from './components/LoadingOverlay';
 import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from './resume-renderer/types';
 import { A4_HEIGHT_PX, A4_WIDTH_PX, DEFAULT_HEADER_HEIGHT_PX, DEFAULT_LAYOUT_FONT_SIZE_PX, DEFAULT_LAYOUT_LINE_HEIGHT_PX, DEFAULT_LAYOUT_TITLE_MARGIN_BOTTOM_PX, DEFAULT_LAYOUT_TITLE_MARGIN_TOP_PX, DEFAULT_SKILL_TITLE_GAP_PX, DEFAULT_SKILL_TITLE_OFFSET_X_PX, MAX_HEADER_HEIGHT_PX, MAX_LAYOUT_FONT_SIZE_PX, MAX_LAYOUT_LINE_HEIGHT_PX, MAX_LAYOUT_TITLE_MARGIN_BOTTOM_PX, MAX_LAYOUT_TITLE_MARGIN_TOP_PX, MAX_SKILL_TITLE_GAP_PX, MAX_SKILL_TITLE_OFFSET_X_PX, MIN_HEADER_HEIGHT_PX, MIN_LAYOUT_FONT_SIZE_PX, MIN_LAYOUT_LINE_HEIGHT_PX, MIN_LAYOUT_TITLE_MARGIN_BOTTOM_PX, MIN_LAYOUT_TITLE_MARGIN_TOP_PX, MIN_SKILL_TITLE_GAP_PX, MIN_SKILL_TITLE_OFFSET_X_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
-import { MAX_SKILL_FIT_REMOVALS, removeOneBulletForSkills, skillsStartOnNewPage } from './resume-renderer/fitSkills';
+import { hideOneBulletForSkills, MAX_SKILL_FIT_HIDES, skillsStartOnNewPage } from './resume-renderer/fitSkills';
 import {
   AlignLeft,
   ArrowLeft,
@@ -1955,7 +1955,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, autoFitSk
   const [saveState, setSaveState] = useState('Saved');
   const [toast, setToast] = useState('');
   const editorTransitionTimerRef = useRef(null);
-  const skillFitRemovalCountRef = useRef(0);
+  const skillFitHiddenCountRef = useRef(0);
   const skillFitCompletedRef = useRef(false);
 
   const data = history.present;
@@ -2375,10 +2375,10 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, autoFitSk
           }}
           onValidPlan={(pagePlan, report) => {
             const needsSkillFit = autoFitSkills && skillsStartOnNewPage(pagePlan);
-            if (needsSkillFit && skillFitRemovalCountRef.current < MAX_SKILL_FIT_REMOVALS) {
-              const fittedData = removeOneBulletForSkills(data, pagePlan);
+            if (needsSkillFit && skillFitHiddenCountRef.current < MAX_SKILL_FIT_HIDES) {
+              const fittedData = hideOneBulletForSkills(data, pagePlan);
               if (fittedData) {
-                skillFitRemovalCountRef.current += 1;
+                skillFitHiddenCountRef.current += 1;
                 updateData(fittedData);
                 return;
               }

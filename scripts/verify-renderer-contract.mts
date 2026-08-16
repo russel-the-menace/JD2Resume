@@ -6,7 +6,7 @@ import { assertReplayMatchesPlan, type ReplayResult } from '../server/puppet-res
 import type { PagePlanV2, RendererResumeDocument } from '../src/resume-renderer/types';
 import { RENDERER_VERSION } from '../src/resume-renderer/constants';
 import { buildRendererBlocks } from '../src/resume-renderer/blocks';
-import { removeOneBulletForSkills, skillsStartOnNewPage } from '../src/resume-renderer/fitSkills';
+import { hideOneBulletForSkills, skillsStartOnNewPage } from '../src/resume-renderer/fitSkills';
 
 const document: RendererResumeDocument = {
   id: 'contract', documentName: 'Contract', language: 'english', template: 'profile', accent: '#167c65',
@@ -53,14 +53,16 @@ const skillFitPlan = {
   blockOrder: [], createdAt: 1,
 } satisfies PagePlanV2;
 assert.equal(skillsStartOnNewPage(skillFitPlan), true);
-const firstFit = removeOneBulletForSkills(skillFitData, skillFitPlan)!;
+const firstFit = hideOneBulletForSkills(skillFitData, skillFitPlan)!;
 assert.equal(firstFit.experience[0].bullets?.length, 8);
-assert.equal(firstFit.experience[1].bullets?.length, 7);
+assert.equal(firstFit.experience[1].bullets?.length, 8);
+assert.equal(firstFit.experience[1].hiddenBullets?.filter(Boolean).length, 1);
 assert.equal(firstFit.experience[1].bullets?.includes('<u>keep emphasized</u>'), true);
-const secondFit = removeOneBulletForSkills(firstFit, skillFitPlan)!;
-assert.equal(secondFit.experience[0].bullets?.length, 7);
-assert.equal(secondFit.experience[1].bullets?.length, 7);
-assert.equal(removeOneBulletForSkills({ ...skillFitData, experience: skillFitData.experience.map((entry) => ({ ...entry, bullets: entry.bullets.slice(0, 3) })) }, skillFitPlan), null);
+const secondFit = hideOneBulletForSkills(firstFit, skillFitPlan)!;
+assert.equal(secondFit.experience[0].bullets?.length, 8);
+assert.equal(secondFit.experience[0].hiddenBullets?.filter(Boolean).length, 1);
+assert.equal(secondFit.experience[1].hiddenBullets?.filter(Boolean).length, 1);
+assert.equal(hideOneBulletForSkills({ ...skillFitData, experience: skillFitData.experience.map((entry) => ({ ...entry, bullets: entry.bullets.slice(0, 3) })) }, skillFitPlan), null);
 assert.equal(skillsStartOnNewPage({ ...skillFitPlan, pages: [skillFitPlan.pages[0], { ...skillFitPlan.pages[1], blockIds: [...skillFitPlan.pages[1].blockIds, 'skills.heading', 'skills.content.item.0'] }] }), false);
 const plan = {
   schemaVersion: 2, revision: 4, snapshotHash: hash, rendererVersion: RENDERER_VERSION,
