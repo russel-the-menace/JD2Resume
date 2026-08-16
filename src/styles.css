@@ -1923,9 +1923,32 @@ button:disabled {
 
 .bullet-editor {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 28px;
+  grid-template-columns: 18px minmax(0, 1fr) 28px 28px;
   align-items: center;
   gap: 6px;
+}
+
+.bullet-reorder-handle {
+  display: inline-flex;
+  align-items: center;
+  color: #b0b6b1;
+  cursor: grab;
+}
+
+.bullet-reorder-handle:active {
+  cursor: grabbing;
+}
+
+.bullet-editor.is-dragging {
+  opacity: .55;
+}
+
+.bullet-visibility-button {
+  color: var(--muted);
+}
+
+.bullet-visibility-button:hover {
+  color: var(--accent);
 }
 
 .bullet-editor > svg {

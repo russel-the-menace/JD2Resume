@@ -7,7 +7,7 @@ export interface ResumeBasics {
   wechat?: string; linkedin?: string; whatsapp?: string; telegram?: string;
   headerHeight?: number;
 }
-export interface ResumeExperience { id: string | number; role?: string; company?: string; location?: string; start?: string; end?: string; current?: boolean; bullets?: string[]; }
+export interface ResumeExperience { id: string | number; role?: string; company?: string; location?: string; start?: string; end?: string; current?: boolean; bullets?: string[]; hiddenBullets?: boolean[]; }
 export interface ResumeEducation { id: string | number; school?: string; degree?: string; location?: string; start?: string; end?: string; }
 export interface ResumeCertificate { id?: string | number; name?: string; issuer?: string; date?: string; }
 export interface ResumeSkillCategory { title: string; items: string[]; hidden?: boolean; }

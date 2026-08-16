@@ -713,6 +713,7 @@ function normalizeResumeData(value, language = 'english') {
           bullets: Array.isArray(entry.bullets)
             ? entry.bullets.map((bullet) => textValue(bullet)).filter(Boolean)
             : [...(fallback.bullets || [])],
+          hiddenBullets: Array.isArray(entry.hiddenBullets) ? entry.hiddenBullets.map((hidden) => hidden === true) : [],
         };
       })
     : initialResume.experience.map((entry) => ({ ...entry, bullets: [...entry.bullets] }));
@@ -4227,6 +4228,7 @@ function ExperienceEditor({
   addExperience,
   removeExperience,
 }) {
+  const [draggedBullet, setDraggedBullet] = useState(null);
   const toggleExperience = (id) => {
     setOpenExperience((current) => (current === id ? null : id));
   };
@@ -4250,6 +4252,35 @@ function ExperienceEditor({
           ? { ...item, bullets: item.bullets.filter((_, bulletIndex) => bulletIndex !== index) }
           : item,
       ),
+    }));
+  };
+
+  const toggleBullet = (id, index) => {
+    updateData((current) => ({
+      ...current,
+      experience: current.experience.map((item) => {
+        if (item.id !== id) return item;
+        const hiddenBullets = [...(item.hiddenBullets || [])];
+        hiddenBullets[index] = !hiddenBullets[index];
+        return { ...item, hiddenBullets };
+      }),
+    }));
+  };
+
+  const reorderBullets = (id, fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return;
+    updateData((current) => ({
+      ...current,
+      experience: current.experience.map((item) => {
+        if (item.id !== id) return item;
+        const bullets = [...(item.bullets || [])];
+        const hiddenBullets = [...(item.hiddenBullets || [])];
+        const [bullet] = bullets.splice(fromIndex, 1);
+        const [hidden] = hiddenBullets.splice(fromIndex, 1);
+        bullets.splice(toIndex, 0, bullet);
+        hiddenBullets.splice(toIndex, 0, hidden === true);
+        return { ...item, bullets, hiddenBullets };
+      }),
     }));
   };
 
@@ -4303,17 +4334,19 @@ function ExperienceEditor({
 
                 <div className="field-label-row">
                   <label>Highlights</label>
-                  <button className="mini-ai-button"><Sparkles size={13} /> Enhance</button>
                 </div>
                 <div className="bullet-editor-list">
                   {item.bullets.map((bullet, index) => (
-                    <div className="bullet-editor" key={`${item.id}-${index}`}>
-                      <GripVertical size={15} />
+                    <div className={cx('bullet-editor', draggedBullet?.id === item.id && draggedBullet.index === index && 'is-dragging')} key={`${item.id}-${index}`} onDragOver={(event) => { event.preventDefault(); }} onDrop={() => { if (draggedBullet?.id === item.id) reorderBullets(item.id, draggedBullet.index, index); setDraggedBullet(null); }}>
+                      <span className="bullet-reorder-handle" draggable onDragStart={() => setDraggedBullet({ id: item.id, index })} onDragEnd={() => setDraggedBullet(null)}><GripVertical size={15} /></span>
                       <textarea
                         value={bullet}
                         rows={2}
                         onChange={(event) => updateBullet(item.id, index, event.target.value)}
                       />
+                      <button className="icon-button small bullet-visibility-button" type="button" onClick={() => toggleBullet(item.id, index)} aria-label={item.hiddenBullets?.[index] ? 'Show highlight' : 'Hide highlight'} title={item.hiddenBullets?.[index] ? 'Show highlight' : 'Hide highlight'}>
+                        {item.hiddenBullets?.[index] ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
                       <button className="icon-button small" onClick={() => removeBullet(item.id, index)} aria-label="Delete highlight" title="Delete highlight">
                         <Trash2 size={15} />
                       </button>
@@ -5118,6 +5151,7 @@ function ExperienceEntries({ items, profile = false }) {
         </div>
         <ul>
           {item.bullets.map((bullet, index) => {
+            if (item.hiddenBullets?.[index]) return null;
             const allowUnderline = underlinedBullets < 2 && /<u>.*?<\/u>/i.test(textValue(bullet));
             if (allowUnderline) underlinedBullets += 1;
             return (

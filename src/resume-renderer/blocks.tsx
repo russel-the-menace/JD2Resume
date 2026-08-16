@@ -38,12 +38,12 @@ export function buildRendererBlocks(document: RendererResumeDocument): RendererB
     if (section === 'experience' && data.experience.length) {
       add(sectionBlock(blockId.section('experience'), 'data.experience', order, label(chinese, '工作经历', 'Work Experience')));
       data.experience.forEach((entry, entryIndex) => {
-        const bullets = (entry.bullets || []).map(text).filter(Boolean);
+        const bullets = (entry.bullets || []).map((bullet, bulletIndex) => ({ bullet: text(bullet), bulletIndex })).filter(({ bullet, bulletIndex }) => bullet && !entry.hiddenBullets?.[bulletIndex]);
         if (!bullets.length) return;
         add(block(blockId.experienceHeading(entry.id, entryIndex), 'experience-heading', `data.experience.${entryIndex}`, order,
           <div className="resume-entry-heading profile-work-entry"><div><strong>{text(entry.company)} - {text(entry.role)}</strong></div><time>{date(entry.start, entry.current ? (chinese ? '至今' : 'Present') : entry.end)}</time></div>, { keepWithNext: 1, gapBeforeToken: entryIndex ? '23' : '18' }));
         let underlinedBullets = 0;
-        bullets.forEach((bullet, bulletIndex) => { const allowUnderline = underlinedBullets < 2 && /<u>.*?<\/u>/i.test(bullet); if (allowUnderline) underlinedBullets += 1; add(block(blockId.experienceBullet(entry.id, entryIndex, bulletIndex), 'experience-bullet', `data.experience.${entryIndex}.bullets.${bulletIndex}`, order, <div className="resume-bullet"><FormattedPuppetText value={bullet} allowUnderline={allowUnderline} maxUnderline={1} /></div>, { gapBeforeToken: bulletIndex ? '8' : '10' })); });
+        bullets.forEach(({ bullet, bulletIndex }, visibleIndex) => { const allowUnderline = underlinedBullets < 2 && /<u>.*?<\/u>/i.test(bullet); if (allowUnderline) underlinedBullets += 1; add(block(blockId.experienceBullet(entry.id, entryIndex, bulletIndex), 'experience-bullet', `data.experience.${entryIndex}.bullets.${bulletIndex}`, order, <div className="resume-bullet"><FormattedPuppetText value={bullet} allowUnderline={allowUnderline} maxUnderline={1} /></div>, { gapBeforeToken: visibleIndex ? '8' : '10' })); });
       });
     }
     if (section === 'skills' && (data.skills?.categories?.length || text(data.skills?.expertise) || text(data.skills?.tools))) {
