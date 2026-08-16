@@ -48,12 +48,16 @@ try {
       blockCount: blocks.length,
       pageGap: pages.length > 1 ? pages[1].getBoundingClientRect().top - pages[0].getBoundingClientRect().bottom : 0,
       bodyOverflow: getComputedStyle(document.body).overflow,
+      layoutMode: document.documentElement.dataset.layoutMode,
+      layoutAttempts: Number(document.documentElement.dataset.layoutAttempts || 0),
     };
   });
   assert.equal(metrics.pageCount, metrics.declaredPageCount);
   assert.equal(preview.pageCount, metrics.pageCount);
   assert.equal(preview.frameHeight, metrics.pageCount * 1157 - 34);
   assert.equal(metrics.bodyOverflow, 'hidden');
+  assert.equal(metrics.layoutMode, 'fixed-layout');
+  assert.equal(metrics.layoutAttempts, 1);
   if (metrics.pageCount > 1) assert.equal(metrics.pageGap, 34);
   console.log(JSON.stringify(metrics));
 } finally {

@@ -2,18 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { INPUT_LAYOUT_DEBOUNCE_MS, MIN_LOADING_VISIBILITY_MS, RENDERER_PROTOCOL, RENDERER_VERSION, RENDER_TIMEOUT_MS } from '../../resume-renderer/constants';
 import { snapshotHash } from '../../resume-renderer/snapshotHash';
 import type { EditorToRendererMessage, RendererToEditorMessage } from '../../resume-renderer/protocol';
-import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from '../../resume-renderer/types';
+import type { LayoutReportV2, LayoutTuningV2, PagePlanV2, RendererResumeDocument } from '../../resume-renderer/types';
 
 type Status = 'booting' | 'idle' | 'rendering' | 'ready' | 'failed';
-export function useResumeRenderer({ document, revision, iframeRef, onValidPlan, onLayoutFailure }: { document: RendererResumeDocument; revision: number; iframeRef: React.RefObject<HTMLIFrameElement | null>; onValidPlan: (pagePlan: PagePlanV2, report: LayoutReportV2) => void; onLayoutFailure?: (snapshotHash: string, report: LayoutReportV2) => void }) {
+export function useResumeRenderer({ document, revision, autoFit, tuning, iframeRef, onValidPlan, onLayoutFailure }: { document: RendererResumeDocument; revision: number; autoFit: boolean; tuning: LayoutTuningV2; iframeRef: React.RefObject<HTMLIFrameElement | null>; onValidPlan: (pagePlan: PagePlanV2, report: LayoutReportV2) => void; onLayoutFailure?: (snapshotHash: string, report: LayoutReportV2) => void }) {
   const [status, setStatus] = useState<Status>('booting'); const [failureCode, setFailureCode] = useState<string | null>(null); const [pagePlan, setPagePlan] = useState<PagePlanV2 | null>(null);
   const readyRef = useRef(false); const latestRef = useRef<{ requestId: string; revision: number; hash: string } | null>(null); const timerRef = useRef<number | null>(null); const loadingStartedAtRef = useRef(0);
+  const renderOptionsRef = useRef({ autoFit, tuning });
+  renderOptionsRef.current = { autoFit, tuning };
   const postRender = useCallback(async () => {
     const target = iframeRef.current?.contentWindow; if (!target || !readyRef.current) return;
     const immutableDocument = structuredClone(document); const hash = await snapshotHash(immutableDocument); const requestId = crypto.randomUUID();
     const previous = latestRef.current; if (previous) target.postMessage({ protocol: RENDERER_PROTOCOL, kind: 'CANCEL', requestId: previous.requestId, revision: previous.revision } satisfies EditorToRendererMessage, window.location.origin);
     latestRef.current = { requestId, revision, hash }; loadingStartedAtRef.current = performance.now(); setStatus('rendering'); setFailureCode(null); setPagePlan(null);
-    target.postMessage({ protocol: RENDERER_PROTOCOL, kind: 'RENDER', requestId, snapshot: { revision, snapshotHash: hash, rendererVersion: RENDERER_VERSION, document: immutableDocument } } satisfies EditorToRendererMessage, window.location.origin);
+    const options = structuredClone(renderOptionsRef.current);
+    target.postMessage({ protocol: RENDERER_PROTOCOL, kind: 'RENDER', requestId, snapshot: { revision, snapshotHash: hash, rendererVersion: RENDERER_VERSION, document: immutableDocument }, ...options } satisfies EditorToRendererMessage, window.location.origin);
   }, [document, iframeRef, revision]);
   const schedule = useCallback((delay = INPUT_LAYOUT_DEBOUNCE_MS) => { if (timerRef.current !== null) window.clearTimeout(timerRef.current); setStatus((current) => current === 'booting' ? current : 'rendering'); timerRef.current = window.setTimeout(() => void postRender(), delay); }, [postRender]);
   useEffect(() => { schedule(); return () => { if (timerRef.current !== null) window.clearTimeout(timerRef.current); }; }, [schedule]);

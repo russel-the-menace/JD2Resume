@@ -1,5 +1,5 @@
-export const RENDERER_VERSION = 'puppet-renderer-v3';
-export const RENDERER_PROTOCOL = 'jd2resume-puppet-renderer-v2';
+export const RENDERER_VERSION = 'puppet-renderer-v4';
+export const RENDERER_PROTOCOL = 'jd2resume-puppet-renderer-v3';
 export const A4_WIDTH_PX = 794 as const;
 export const A4_HEIGHT_PX = 1123 as const;
 export const PAGE_MARGIN_TOP_PX = 40;
@@ -9,6 +9,9 @@ export const PAGE_MARGIN_LEFT_PX = 50;
 export const PAGE_CONTENT_WIDTH_PX = 694 as const;
 export const PAGE_CONTENT_HEIGHT_PX = 1043 as const;
 export const PREVIEW_PAGE_GAP_PX = 34;
+export const DEFAULT_HEADER_HEIGHT_PX = 125;
+export const MIN_HEADER_HEIGHT_PX = 120;
+export const MAX_HEADER_HEIGHT_PX = 220;
 export const MIN_PAGE_FILL_RATIO = 0.92;
 export const TARGET_BOTTOM_MARGIN_PX = 42;
 export const CALIBRATION_STEPS = 8;

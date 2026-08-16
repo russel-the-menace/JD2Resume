@@ -25,6 +25,9 @@ const skillBlocks = buildRendererBlocks({
 });
 assert.equal(skillBlocks.some((block) => block.kind === 'section-heading' && block.sourcePath === 'data.skills'), true);
 assert.equal(skillBlocks.some((block) => block.kind === 'skill-item' && block.sourcePath === 'data.skills'), true);
+const customHeader = buildRendererBlocks({ ...document, data: { ...document.data, basics: { fullName: 'Contract', headerHeight: 180 } } })[0].content as any;
+assert.equal(customHeader.props.style.height, 180);
+assert.equal(customHeader.props.children[0].props.className, 'resume-header-content');
 const skillFitData = {
   ...document.data,
   experience: [1, 2].map((id) => ({

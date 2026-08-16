@@ -22,7 +22,7 @@ export function PuppetMeasurementDocument({ snapshot, tuning }: Props) {
 }
 export function PuppetPaginatedDocument({ snapshot, tuning, pagePlan }: Required<Props>) {
   const blocks = new Map(buildRendererBlocks(snapshot.document).map((block) => [block.id, block]));
-  return <main className="puppet-document" data-renderer-version={pagePlan.rendererVersion} data-snapshot-hash={pagePlan.snapshotHash} data-page-count={pagePlan.pages.length} style={tuningStyle(tuning, snapshot.document.accent)} lang={snapshot.document.language === 'chinese' ? 'zh-CN' : 'en'}>
+  return <main className="puppet-document" data-renderer-version={pagePlan.rendererVersion} data-snapshot-hash={pagePlan.snapshotHash} data-page-count={pagePlan.pages.length} data-layout-policy={pagePlan.tuning.policy} style={tuningStyle(tuning, snapshot.document.accent)} lang={snapshot.document.language === 'chinese' ? 'zh-CN' : 'en'}>
     {pagePlan.pages.map((page) => <article className="puppet-page" data-page-number={page.pageNumber} key={page.pageNumber}><div className="puppet-page-content">
       {page.blocks.map(({ id, gapBefore }) => { const block = blocks.get(id); return block ? <PuppetBlock key={id} block={block} gapBefore={gapBefore} /> : null; })}
     </div></article>)}

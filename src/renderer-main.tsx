@@ -11,8 +11,9 @@ window.addEventListener('message', async (event) => {
   if (event.origin !== window.location.origin || event.source !== window.parent || !isRenderMessage(event.data)) return;
   if (event.data.kind === 'CANCEL') { if (event.data.requestId === activeRequestId) activeController?.abort(); return; }
   activeController?.abort(); const controller = new AbortController(); activeController = controller; activeRequestId = event.data.requestId; const { requestId, snapshot } = event.data;
+  document.documentElement.dataset.layoutMode = event.data.autoFit ? 'generation-fit' : 'fixed-layout';
   post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_STARTED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash });
-  try { const result = await runCanonicalLayout(snapshot, controller.signal); if (controller.signal.aborted || activeRequestId !== requestId) return; post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_SUCCEEDED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash, ...result }); }
+  try { const result = await runCanonicalLayout(snapshot, controller.signal, { autoFit: event.data.autoFit, tuning: event.data.tuning }); if (controller.signal.aborted || activeRequestId !== requestId) return; document.documentElement.dataset.layoutAttempts = String(result.report.attempts.length); post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_SUCCEEDED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash, ...result }); }
   catch (error) { if (controller.signal.aborted || activeRequestId !== requestId) return; const failureCode = rendererFailureCode(error); const report = failureReport(snapshot.revision, snapshot.snapshotHash, failureCode, error); console.warn(`[Renderer] Layout failed ${JSON.stringify({ failureCode, attempts: report.attempts })}`); post({ protocol: RENDERER_PROTOCOL, kind: 'RENDER_FAILED', requestId, revision: snapshot.revision, snapshotHash: snapshot.snapshotHash, failureCode, report }); }
 });
 async function runExportReplay() {

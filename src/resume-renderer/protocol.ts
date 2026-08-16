@@ -1,7 +1,7 @@
-import type { LayoutReportV2, PagePlanV2, RenderSnapshot } from './types';
+import type { LayoutReportV2, LayoutTuningV2, PagePlanV2, RenderSnapshot } from './types';
 import { RENDERER_PROTOCOL } from './constants';
 export type EditorToRendererMessage =
-  | { protocol: typeof RENDERER_PROTOCOL; kind: 'RENDER'; requestId: string; snapshot: RenderSnapshot }
+  | { protocol: typeof RENDERER_PROTOCOL; kind: 'RENDER'; requestId: string; snapshot: RenderSnapshot; autoFit: boolean; tuning: LayoutTuningV2 }
   | { protocol: typeof RENDERER_PROTOCOL; kind: 'CANCEL'; requestId: string; revision: number };
 export type RendererToEditorMessage =
   | { protocol: typeof RENDERER_PROTOCOL; kind: 'READY'; rendererVersion: string }

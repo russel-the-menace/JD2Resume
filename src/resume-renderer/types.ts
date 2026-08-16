@@ -5,6 +5,7 @@ export interface ResumeBasics {
   fullName?: string; firstName?: string; lastName?: string; role?: string; email?: string;
   phone?: string; location?: string; gender?: string; website?: string; photoUrl?: string;
   wechat?: string; linkedin?: string; whatsapp?: string; telegram?: string;
+  headerHeight?: number;
 }
 export interface ResumeExperience { id: string | number; role?: string; company?: string; location?: string; start?: string; end?: string; current?: boolean; bullets?: string[]; }
 export interface ResumeEducation { id: string | number; school?: string; degree?: string; location?: string; start?: string; end?: string; }

@@ -208,6 +208,25 @@ button:disabled {
   animation: profile-import-spin 900ms linear infinite;
 }
 
+.header-height-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-height-control input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.header-height-control output {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .account-list-avatar {
   display: flex;
   align-items: center;
@@ -2594,6 +2613,10 @@ button:disabled {
   border-bottom: 1px solid #d9ddda;
 }
 
+.resume-header-content {
+  display: contents;
+}
+
 .resume-name-block h2 {
   margin: 0 0 5px;
   color: #202420;
@@ -2899,13 +2922,21 @@ button:disabled {
 
 .template-profile .resume-header {
   position: relative;
-  display: block;
-  padding: 36px 54px 18px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 18px 54px;
   border-bottom: 1px solid #d9ddda;
 }
 
 .resume-page.template-profile.has-profile-photo .resume-header {
-  padding-right: 178px;
+  padding-right: 54px;
+}
+
+.template-profile .resume-header-content {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .template-profile .resume-name-block h2,
@@ -2924,11 +2955,9 @@ button:disabled {
 }
 
 .profile-avatar-slot {
-  position: absolute;
-  top: 36px;
-  bottom: 18px;
-  right: 54px;
   display: flex;
+  position: static;
+  flex: 0 0 80px;
   align-items: center;
   justify-content: center;
   width: 80px;

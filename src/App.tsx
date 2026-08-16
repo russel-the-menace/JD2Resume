@@ -10,7 +10,7 @@ import type { CSSProperties } from 'react';
 import { ResumePreviewFrame } from './components/resume-preview/ResumePreviewFrame';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from './resume-renderer/types';
-import { A4_HEIGHT_PX, A4_WIDTH_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
+import { A4_HEIGHT_PX, A4_WIDTH_PX, DEFAULT_HEADER_HEIGHT_PX, MAX_HEADER_HEIGHT_PX, MIN_HEADER_HEIGHT_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
 import { MAX_SKILL_FIT_REMOVALS, removeOneBulletForSkills, skillsStartOnNewPage } from './resume-renderer/fitSkills';
 import {
   AlignLeft,
@@ -243,11 +243,20 @@ function normalizeRenderState(value) {
   const plan = isRecord(source.pagePlan) && Number(source.pagePlan.schemaVersion) === 2 && Array.isArray(source.pagePlan.pages)
     ? source.pagePlan as PagePlanV2
     : null;
+  const tuningSource = isRecord(source.layoutTuning) ? source.layoutTuning : isRecord(plan?.tuning) ? plan.tuning : {};
+  const allowedPolicies = new Set(['balanced-fit', 'line-fit', 'spacing-fit', 'typography-fit', 'combined-fit']);
+  const layoutTuning = {
+    policy: allowedPolicies.has(tuningSource.policy) ? tuningSource.policy : 'spacing-fit',
+    sectionGapDelta: Number.isFinite(Number(tuningSource.sectionGapDelta)) ? Number(tuningSource.sectionGapDelta) : 0,
+    lineHeightDelta: Number.isFinite(Number(tuningSource.lineHeightDelta)) ? Number(tuningSource.lineHeightDelta) : 0,
+    fontSizeDelta: Number.isFinite(Number(tuningSource.fontSizeDelta)) ? Number(tuningSource.fontSizeDelta) : 0,
+  };
   return {
     status: ['dirty', 'rendering', 'valid', 'failed'].includes(source.status) ? source.status : 'dirty',
     draftRevision: Math.max(0, Number(source.draftRevision) || 0),
     currentSnapshotHash: textValue(source.currentSnapshotHash),
     rendererVersion: textValue(source.rendererVersion),
+    layoutTuning,
     pagePlan: plan,
     layoutReport: isRecord(source.layoutReport) ? source.layoutReport as LayoutReportV2 : null,
     lastValidSnapshotHash: textValue(source.lastValidSnapshotHash),
@@ -735,6 +744,7 @@ function normalizeResumeData(value, language = 'english') {
       whatsapp: textValue(basics.whatsapp),
       telegram: textValue(basics.telegram),
       photoUrl: textValue(basics.photoUrl, initialResume.basics.photoUrl),
+      headerHeight: Math.min(MAX_HEADER_HEIGHT_PX, Math.max(MIN_HEADER_HEIGHT_PX, Number(basics.headerHeight) || DEFAULT_HEADER_HEIGHT_PX)),
     },
     summary: textValue(source.summary, initialResume.summary),
     yearsOfExperience: Number.isFinite(Number(source.yearsOfExperience)) ? Number(source.yearsOfExperience) : 0,
@@ -2343,7 +2353,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, autoFitSk
           documentName={documentName}
           layoutManifest={initialResumeState.legacyLayoutManifest}
           renderState={renderState}
-          allowContentRefinement={autoFitSkills}
+          autoFitLayout={autoFitSkills}
           onLayoutFailure={() => {
             if (autoFitSkills && !skillFitCompletedRef.current) {
               skillFitCompletedRef.current = true;
@@ -2370,6 +2380,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, autoFitSk
                 draftRevision: pagePlan.revision,
                 currentSnapshotHash: pagePlan.snapshotHash,
                 rendererVersion: pagePlan.rendererVersion,
+                layoutTuning: pagePlan.tuning,
                 pagePlan,
                 layoutReport: report,
                 lastValidSnapshotHash: pagePlan.snapshotHash,
@@ -4112,6 +4123,13 @@ function BasicsEditor({ basics, onChange, language }) {
         )}
       </div>
       <Field label={chinese ? '职业标题' : 'Professional title'} value={basics.role} onChange={(value) => onChange('role', value)} />
+      <label className="field header-height-field">
+        <span>{chinese ? '个人信息栏高度' : 'Personal information height'}</span>
+        <span className="header-height-control">
+          <input type="range" min={MIN_HEADER_HEIGHT_PX} max={MAX_HEADER_HEIGHT_PX} step="5" value={basics.headerHeight || DEFAULT_HEADER_HEIGHT_PX} onChange={(event) => onChange('headerHeight', Number(event.target.value))} />
+          <output>{basics.headerHeight || DEFAULT_HEADER_HEIGHT_PX}px</output>
+        </span>
+      </label>
       <div className="form-grid two-columns">
         <Field label="Email" type="email" value={basics.email} onChange={(value) => onChange('email', value)} />
         <Field label={chinese ? '电话' : 'Phone'} value={basics.phone} onChange={(value) => onChange('phone', value)} />
@@ -4463,7 +4481,7 @@ function PreviewPanel({
   layoutManifest,
   renderState,
   onValidPlan,
-  allowContentRefinement,
+  autoFitLayout,
   onLayoutFailure,
 }) {
   const [colorMenu, setColorMenu] = useState(false);
@@ -4595,7 +4613,7 @@ function PreviewPanel({
         onPositionChange={onPreviewPositionChange}
       >
         {template === 'profile' ? (
-          <ResumePreviewFrame document={canonicalDocument} revision={renderState.draftRevision} onValidPlan={acceptCanonicalPlan} allowContentRefinement={allowContentRefinement} onLayoutFailure={onLayoutFailure} />
+          <ResumePreviewFrame document={canonicalDocument} revision={renderState.draftRevision} autoFit={autoFitLayout} tuning={renderState.layoutTuning} onValidPlan={acceptCanonicalPlan} onLayoutFailure={onLayoutFailure} />
         ) : <div className="resume-pages" aria-label={`${pageCount}-page resume preview`}>
           {Array.from({ length: pageCount }, (_, pageIndex) => (
             <div className="resume-sheet" data-page={pageIndex + 1} key={pageIndex}>
@@ -4868,26 +4886,28 @@ function ResumePage({
       } as CssVariables}
       lang={isChineseResume(language) ? 'zh-CN' : 'en'}
     >
-      <header className="resume-header">
+      <header className="resume-header" style={{ height: isProfileTemplate ? basics.headerHeight || DEFAULT_HEADER_HEIGHT_PX : undefined }}>
         {isProfileTemplate && hasProfilePhoto && (
           <div className="profile-avatar-slot">
             <ProfileAvatar photoUrl={basics.photoUrl} initials={initials} className="resume-profile-avatar" />
           </div>
         )}
-        <div className="resume-name-block">
-          <h2>{name}</h2>
-          <p>{basics.role}</p>
-        </div>
-        <div className="resume-contact">
-          {contactItems.map(({ id, icon: Icon, value }, index) => (
-            <span className="resume-contact-item" key={id} data-contact={id}>
-              <Icon size={11} />
-              {['website', 'linkedin'].includes(id) ? <WebsiteLink website={value} /> : value}
-              {isProfileTemplate && index < contactItems.length - 1 && (
-                <i className="contact-separator" aria-hidden="true" />
-              )}
-            </span>
-          ))}
+        <div className="resume-header-content">
+          <div className="resume-name-block">
+            <h2>{name}</h2>
+            <p>{basics.role}</p>
+          </div>
+          <div className="resume-contact">
+            {contactItems.map(({ id, icon: Icon, value }, index) => (
+              <span className="resume-contact-item" key={id} data-contact={id}>
+                <Icon size={11} />
+                {['website', 'linkedin'].includes(id) ? <WebsiteLink website={value} /> : value}
+                {isProfileTemplate && index < contactItems.length - 1 && (
+                  <i className="contact-separator" aria-hidden="true" />
+                )}
+              </span>
+            ))}
+          </div>
         </div>
       </header>
 
