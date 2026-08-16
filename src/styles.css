@@ -196,6 +196,18 @@ button:disabled {
   border-color: var(--line);
 }
 
+.account-list-item:disabled {
+  cursor: default;
+}
+
+.account-list-item.is-current:disabled {
+  opacity: 1;
+}
+
+.account-list-item .is-spinning {
+  animation: profile-import-spin 900ms linear infinite;
+}
+
 .account-list-avatar {
   display: flex;
   align-items: center;

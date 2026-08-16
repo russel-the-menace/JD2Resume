@@ -1077,6 +1077,7 @@ function App() {
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState(rememberedAccounts);
+  const [pendingSkillFitResumeIds, setPendingSkillFitResumeIds] = useState<Set<string>>(() => new Set());
   const [selectedResumeId, setSelectedResumeId] = useState(() => {
     if (typeof window === 'undefined') return null;
     const resume = new URLSearchParams(window.location.search).get('resume');
@@ -1538,6 +1539,7 @@ function App() {
     if (!persistLibrary(nextLibrary)) {
       throw new Error('The generated resume could not be saved to the server.');
     }
+    setPendingSkillFitResumeIds((current) => new Set([...current, ...generatedResumes.map((resume) => resume.id)]));
     openResume(generatedResumes[0].id);
     } finally {
       setGenerationLoading(false);
@@ -1554,12 +1556,20 @@ function App() {
   }
 
   const selectedResume = library.resumes.find((document) => document.id === selectedResumeId);
+  const layoutFitLoading = Boolean(selectedResumeId && pendingSkillFitResumeIds.has(selectedResumeId));
   const appContent = selectedResume ? (
     <ResumeEditor
       key={selectedResume.id}
       resumeId={selectedResume.id}
       initialResumeState={selectedResume}
       accountUsername={currentAccount.username}
+      autoFitSkills={pendingSkillFitResumeIds.has(selectedResume.id)}
+      onSkillFitComplete={(id) => setPendingSkillFitResumeIds((current) => {
+        if (!current.has(id)) return current;
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      })}
       onResumeChange={saveResume}
       onBack={returnHome}
       onEditProfile={() => setEditorProfileOpen(true)}
@@ -1592,16 +1602,18 @@ function App() {
           currentAccount={currentAccount}
           onCancel={() => setAccountSwitcherOpen(false)}
           onSwitch={async (account) => {
+            if (!account.token) return { ok: false, error: 'Saved sign-in is no longer available. Sign in again.' };
             const response = await fetch('/api/auth/activate', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ token: account.token }),
             });
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok || !payload?.account) return;
+            if (!response.ok || !payload?.account) return { ok: false, error: textValue(payload?.error, 'Unable to switch accounts.') };
             libraryRef.current = emptyResumeLibrary();
             setLibrary(emptyResumeLibrary());
             setUserProfile(normalizeUserProfile(null));
+            setPendingSkillFitResumeIds(new Set());
             setRemoteSyncReady(false);
             remoteRevisionRef.current = null;
             lastRemoteSnapshotRef.current = { accountId: '', signature: '' };
@@ -1609,6 +1621,7 @@ function App() {
             setCurrentAccount(payload.account);
             returnHome();
             setAccountSwitcherOpen(false);
+            return { ok: true };
           }}
           onSignIn={() => {
             setAccountSwitcherOpen(false);
@@ -1634,6 +1647,7 @@ function App() {
             libraryRef.current = emptyResumeLibrary();
             setLibrary(emptyResumeLibrary());
             setUserProfile(normalizeUserProfile(null));
+            setPendingSkillFitResumeIds(new Set());
             setRemoteSyncReady(false);
             remoteRevisionRef.current = null;
             lastRemoteSnapshotRef.current = { accountId: '', signature: '' };
@@ -1662,6 +1676,7 @@ function App() {
             libraryRef.current = emptyResumeLibrary();
             setLibrary(emptyResumeLibrary());
             setUserProfile(normalizeUserProfile(null));
+            setPendingSkillFitResumeIds(new Set());
             setRemoteSyncReady(false);
             remoteRevisionRef.current = null;
             lastRemoteSnapshotRef.current = { accountId: '', signature: '' };
@@ -1694,16 +1709,40 @@ function App() {
       )}
       {editorProfileOpen && <PersonalProfileDialog profile={userProfile} onCancel={() => setEditorProfileOpen(false)} onComplete={() => setEditorProfileOpen(false)} onSave={saveUserProfile} onImport={importProfileFromResume} onTranslate={translateImportedProfile} onSearchDirectory={searchProfileDirectory} />}
       {profileImporting && <LoadingOverlay message="Importing personal details" />}
-      {generationLoading && <LoadingOverlay message="Generating resume" />}
+      {(generationLoading || layoutFitLoading) && <LoadingOverlay message={generationLoading ? 'Generating resume' : 'Fitting resume content to pages'} />}
     </>
   );
 }
 
-function AccountSwitcherDialog({ accounts, currentAccount, onCancel, onSwitch, onSignIn, onSignUp }) {
+type RememberedAccount = { id: string; username: string; token?: string };
+
+function AccountSwitcherDialog({ accounts, currentAccount, onCancel, onSwitch, onSignIn, onSignUp }: {
+  accounts: RememberedAccount[];
+  currentAccount: RememberedAccount;
+  onCancel: () => void;
+  onSwitch: (account: RememberedAccount) => Promise<{ ok: boolean; error?: string }>;
+  onSignIn: () => void;
+  onSignUp: () => void;
+}) {
+  const [switchingId, setSwitchingId] = useState('');
+  const [error, setError] = useState('');
   const orderedAccounts = [
     currentAccount,
     ...accounts.filter((account) => account.id !== currentAccount.id),
   ];
+  const switchAccount = async (account: RememberedAccount) => {
+    if (account.id === currentAccount.id || switchingId) return;
+    setSwitchingId(account.id);
+    setError('');
+    try {
+      const result = await onSwitch(account);
+      if (!result.ok) setError(result.error || 'Unable to switch accounts.');
+    } catch {
+      setError('Unable to switch accounts.');
+    } finally {
+      setSwitchingId('');
+    }
+  };
 
   return (
     <div className="modal-backdrop" onMouseDown={onCancel}>
@@ -1715,12 +1754,13 @@ function AccountSwitcherDialog({ accounts, currentAccount, onCancel, onSwitch, o
         <div className="account-switcher-content">
           <div className="account-list">
             {orderedAccounts.map((account) => (
-              <button key={account.id} type="button" className={cx('account-list-item', account.id === currentAccount.id && 'is-current')} onClick={() => { if (account.id !== currentAccount.id) void onSwitch(account.id); }} aria-current={account.id === currentAccount.id ? 'page' : undefined}>
+              <button key={account.id} type="button" className={cx('account-list-item', account.id === currentAccount.id && 'is-current')} onClick={() => void switchAccount(account)} disabled={account.id === currentAccount.id || Boolean(switchingId)} aria-label={account.id === currentAccount.id ? `${account.username}, current account` : `Switch to ${account.username}`} aria-busy={switchingId === account.id} aria-current={account.id === currentAccount.id ? 'page' : undefined}>
                 <span className="account-list-avatar">{account.username.slice(0, 1).toUpperCase()}</span>
                 <span className="account-list-copy"><strong>{account.username}</strong>{account.id === currentAccount.id && <small>Current account</small>}</span>
-                {account.id === currentAccount.id && <Check size={16} />}
+                {switchingId === account.id ? <LoaderCircle className="is-spinning" size={16} /> : account.id === currentAccount.id && <Check size={16} />}
               </button>
             ))}
+            {error && <p className="account-auth-error" role="alert">{error}</p>}
           </div>
         </div>
         <footer className="account-dialog-footer">
@@ -1858,7 +1898,7 @@ function RemoteConnectionGate({ unavailable, onRetry }: { unavailable: boolean; 
   );
 }
 
-function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeChange, onBack, onEditProfile }) {
+function ResumeEditor({ resumeId, initialResumeState, accountUsername, autoFitSkills, onSkillFitComplete, onResumeChange, onBack, onEditProfile }) {
   const initialWorkspaceState = useMemo(
     () => defaultWorkspacePreferences(initialResumeState),
     [initialResumeState],
@@ -1894,6 +1934,7 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
   const [toast, setToast] = useState('');
   const editorTransitionTimerRef = useRef(null);
   const skillFitRemovalCountRef = useRef(0);
+  const skillFitCompletedRef = useRef(false);
 
   const data = history.present;
 
@@ -2302,12 +2343,15 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
           documentName={documentName}
           layoutManifest={initialResumeState.legacyLayoutManifest}
           renderState={renderState}
-          allowContentRefinement={false}
-          onLayoutFailure={undefined}
+          allowContentRefinement={autoFitSkills}
+          onLayoutFailure={() => {
+            if (autoFitSkills && !skillFitCompletedRef.current) {
+              skillFitCompletedRef.current = true;
+              onSkillFitComplete(resumeId);
+            }
+          }}
           onValidPlan={(pagePlan, report) => {
-            const generatedResume = Boolean(initialResumeState.generationEvidence.applicationId);
-            const needsSkillFit = generatedResume && skillsStartOnNewPage(pagePlan);
-            if (!needsSkillFit) skillFitRemovalCountRef.current = 0;
+            const needsSkillFit = autoFitSkills && skillsStartOnNewPage(pagePlan);
             if (needsSkillFit && skillFitRemovalCountRef.current < MAX_SKILL_FIT_REMOVALS) {
               const fittedData = removeOneBulletForSkills(data, pagePlan);
               if (fittedData) {
@@ -2315,6 +2359,10 @@ function ResumeEditor({ resumeId, initialResumeState, accountUsername, onResumeC
                 updateData(fittedData);
                 return;
               }
+            }
+            if (autoFitSkills && !skillFitCompletedRef.current) {
+              skillFitCompletedRef.current = true;
+              onSkillFitComplete(resumeId);
             }
             setRenderState((current) => {
               return {
@@ -4420,12 +4468,13 @@ function PreviewPanel({
 }) {
   const [colorMenu, setColorMenu] = useState(false);
   const [contentHeight, setContentHeight] = useState(A4_HEIGHT_PX);
+  const [renderedPageCount, setRenderedPageCount] = useState(0);
   const zoomPercent = Math.round(zoom * 100);
   const canonicalDocument = useMemo(() => ({
     id: documentId, documentName, language, data, template: 'profile' as const, accent,
     customSections, customContent, sectionOrder, sectionOrderCustomized,
   }) satisfies RendererResumeDocument, [accent, customContent, customSections, data, documentId, documentName, language, sectionOrder, sectionOrderCustomized]);
-  const canonicalPageCount = Math.max(1, Number(renderState?.pagePlan?.pages?.length) || 1);
+  const canonicalPageCount = Math.max(1, renderedPageCount || Number(renderState?.pagePlan?.pages?.length) || 1);
   const serverPageCount = Math.max(1, Number(layoutManifest.pageCount) || 1);
   const hasServerLayout = Boolean(
     layoutManifest.policy && layoutManifest.pageFillRatios.length === serverPageCount,
@@ -4443,6 +4492,11 @@ function PreviewPanel({
   useEffect(() => {
     setContentHeight(A4_HEIGHT_PX);
   }, [template]);
+  useEffect(() => setRenderedPageCount(0), [canonicalDocument]);
+  const acceptCanonicalPlan = useCallback((pagePlan, report) => {
+    setRenderedPageCount(pagePlan.pages.length);
+    onValidPlan(pagePlan, report);
+  }, [onValidPlan]);
 
   const changeZoom = (delta) => {
     setZoom((current) =>
@@ -4541,7 +4595,7 @@ function PreviewPanel({
         onPositionChange={onPreviewPositionChange}
       >
         {template === 'profile' ? (
-          <ResumePreviewFrame document={canonicalDocument} revision={renderState.draftRevision} lastPlan={renderState?.pagePlan || null} onValidPlan={onValidPlan} allowContentRefinement={allowContentRefinement} onLayoutFailure={onLayoutFailure} />
+          <ResumePreviewFrame document={canonicalDocument} revision={renderState.draftRevision} onValidPlan={acceptCanonicalPlan} allowContentRefinement={allowContentRefinement} onLayoutFailure={onLayoutFailure} />
         ) : <div className="resume-pages" aria-label={`${pageCount}-page resume preview`}>
           {Array.from({ length: pageCount }, (_, pageIndex) => (
             <div className="resume-sheet" data-page={pageIndex + 1} key={pageIndex}>

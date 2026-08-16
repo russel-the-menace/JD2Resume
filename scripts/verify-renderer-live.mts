@@ -32,6 +32,10 @@ try {
   await page.waitForFunction(() => ['ready', 'failed'].includes(document.querySelector('.canonical-preview')?.getAttribute('data-render-status') || ''), { timeout: 25_000 });
   const status = await page.$eval('.canonical-preview', (element) => element.getAttribute('data-render-status'));
   assert.equal(status, 'ready');
+  const preview = await page.$eval('.preview-panel', (element) => ({
+    pageCount: Number.parseInt(element.querySelector('.page-count')?.textContent || '', 10),
+    frameHeight: element.querySelector<HTMLIFrameElement>('.canonical-preview-frame')?.clientHeight || 0,
+  }));
   const frame = page.frames().find((candidate) => candidate.url().includes('/renderer.html'));
   if (!frame) throw new Error('Canonical renderer iframe was not found.');
   const metrics = await frame.evaluate(() => {
@@ -47,6 +51,8 @@ try {
     };
   });
   assert.equal(metrics.pageCount, metrics.declaredPageCount);
+  assert.equal(preview.pageCount, metrics.pageCount);
+  assert.equal(preview.frameHeight, metrics.pageCount * 1157 - 34);
   assert.equal(metrics.bodyOverflow, 'hidden');
   if (metrics.pageCount > 1) assert.equal(metrics.pageGap, 34);
   console.log(JSON.stringify(metrics));

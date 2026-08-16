@@ -48,6 +48,7 @@ export async function runCanonicalLayout(snapshot: RenderSnapshot, signal: Abort
     }
   }
   if (bestUsable) {
+    const finalValidation = await renderAndValidate(snapshot, bestUsable.pagePlan, bestUsable.pagePlan.tuning, signal);
     return {
       pagePlan: bestUsable.pagePlan,
       report: {
@@ -56,9 +57,9 @@ export async function runCanonicalLayout(snapshot: RenderSnapshot, signal: Abort
         snapshotHash: snapshot.snapshotHash,
         rendererVersion: RENDERER_VERSION,
         durationMs: performance.now() - startedAt,
-        fontFamily: bestUsable.validation.fontFamily,
+        fontFamily: finalValidation.fontFamily,
         fontReady: true,
-        imageCount: bestUsable.validation.imageCount,
+        imageCount: finalValidation.imageCount,
         attempts,
         acceptedAttempt: bestUsable.attempt,
         failureCode: bestUsable.failureCode,
