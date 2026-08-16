@@ -4378,10 +4378,10 @@ function SkillsEditor({ skills, updateData, language }) {
 
   const addCategory = () => updateCategories([...categories, { title: chinese ? '新技能分类' : 'New skill category', items: [''] }]);
   const removeCategory = (categoryIndex) => updateCategories(categories.filter((_, index) => index !== categoryIndex));
-  const updateCategoryText = (categoryIndex, value) => {
-    const [title = '', ...itemLines] = value.split(/\r?\n/);
+  const updateCategoryItems = (categoryIndex, value) => {
+    const itemLines = value.split(/\r?\n/);
     const items = itemLines.map((line) => line.replace(/^\s*[·•]\s?/, '').trim()).filter(Boolean);
-    updateCategories(categories.map((category, index) => index === categoryIndex ? { ...category, title: title.trim(), items } : category));
+    updateCategories(categories.map((category, index) => index === categoryIndex ? { ...category, items } : category));
   };
 
   return (
@@ -4404,17 +4404,23 @@ function SkillsEditor({ skills, updateData, language }) {
         {categories.map((category, categoryIndex) => (
           <section className="skill-editor-category" key={`${category.title}-${categoryIndex}`}>
             <div className="skill-editor-category-heading">
-              <span className="skill-editor-category-label">{chinese ? '技能分类' : 'Skill category'}</span>
+              <input
+                className="skill-category-title-input"
+                value={category.title}
+                placeholder={chinese ? '分类标题' : 'Category title'}
+                onChange={(event) => updateCategories(categories.map((item, index) => index === categoryIndex ? { ...item, title: event.target.value } : item))}
+                aria-label={chinese ? `技能分类标题 ${categoryIndex + 1}` : `Skill category title ${categoryIndex + 1}`}
+              />
               <button className="icon-button small skill-remove-button" type="button" onClick={() => removeCategory(categoryIndex)} aria-label={chinese ? '删除技能分类' : 'Remove skill category'} title={chinese ? '删除技能分类' : 'Remove category'}>
                 <Trash2 size={15} />
               </button>
             </div>
             <textarea
               className="skill-category-textarea"
-              value={[category.title, ...category.items.map((item) => `· ${item}`)].join('\n')}
-              placeholder={chinese ? '分类标题\n· 技能点\n· 技能点' : 'Category title\n· Skill\n· Skill'}
-              onChange={(event) => updateCategoryText(categoryIndex, event.target.value)}
-              aria-label={chinese ? `技能分类 ${categoryIndex + 1}` : `Skill category ${categoryIndex + 1}`}
+              value={category.items.map((item) => `· ${item}`).join('\n')}
+              placeholder={chinese ? '· 技能点\n· 技能点' : '· Skill\n· Skill'}
+              onChange={(event) => updateCategoryItems(categoryIndex, event.target.value)}
+              aria-label={chinese ? `技能点 ${categoryIndex + 1}` : `Skills ${categoryIndex + 1}`}
             />
           </section>
         ))}

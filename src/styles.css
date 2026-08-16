@@ -1998,13 +1998,23 @@ button:disabled {
   gap: 9px;
 }
 
-.skill-editor-category-label {
+.skill-category-title-input {
   flex: 1;
-  color: var(--muted);
-  font-size: 11px;
+  min-width: 0;
+  padding: 2px 0 5px;
+  color: #30445a;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #8c9891;
+  border-radius: 0;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+}
+
+.skill-category-title-input:focus {
+  border-bottom-color: var(--accent);
+  outline: none;
+  box-shadow: 0 2px 0 rgba(22, 124, 101, 0.16);
 }
 
 .skill-remove-button {
