@@ -10,7 +10,7 @@ import type { CSSProperties } from 'react';
 import { ResumePreviewFrame } from './components/resume-preview/ResumePreviewFrame';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import type { LayoutReportV2, PagePlanV2, RendererResumeDocument } from './resume-renderer/types';
-import { A4_HEIGHT_PX, A4_WIDTH_PX, DEFAULT_HEADER_HEIGHT_PX, DEFAULT_SKILL_TITLE_GAP_PX, MAX_HEADER_HEIGHT_PX, MAX_SKILL_TITLE_GAP_PX, MIN_HEADER_HEIGHT_PX, MIN_SKILL_TITLE_GAP_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
+import { A4_HEIGHT_PX, A4_WIDTH_PX, DEFAULT_HEADER_HEIGHT_PX, DEFAULT_SKILL_TITLE_GAP_PX, DEFAULT_SKILL_TITLE_OFFSET_X_PX, MAX_HEADER_HEIGHT_PX, MAX_SKILL_TITLE_GAP_PX, MAX_SKILL_TITLE_OFFSET_X_PX, MIN_HEADER_HEIGHT_PX, MIN_SKILL_TITLE_GAP_PX, MIN_SKILL_TITLE_OFFSET_X_PX, PREVIEW_PAGE_GAP_PX } from './resume-renderer/constants';
 import { MAX_SKILL_FIT_REMOVALS, removeOneBulletForSkills, skillsStartOnNewPage } from './resume-renderer/fitSkills';
 import {
   AlignLeft,
@@ -757,6 +757,7 @@ function normalizeResumeData(value, language = 'english') {
       tools: textValue(skills.tools, initialResume.skills.tools),
       categories: skillCategories,
       titleItemGap: Math.min(MAX_SKILL_TITLE_GAP_PX, Math.max(MIN_SKILL_TITLE_GAP_PX, Number.isFinite(Number(skills.titleItemGap)) ? Number(skills.titleItemGap) : DEFAULT_SKILL_TITLE_GAP_PX)),
+      titleOffsetX: Math.min(MAX_SKILL_TITLE_OFFSET_X_PX, Math.max(MIN_SKILL_TITLE_OFFSET_X_PX, Number.isFinite(Number(skills.titleOffsetX)) ? Number(skills.titleOffsetX) : DEFAULT_SKILL_TITLE_OFFSET_X_PX)),
     },
     certificates: Array.isArray(source.certificates)
       ? source.certificates.filter(isRecord).map((certificate) => ({
@@ -3781,10 +3782,6 @@ function TopBar({
             <RotateCcw size={16} />
           </button>
         </div>
-        <button className="secondary-button ai-button" onClick={onAi}>
-          <Sparkles size={16} />
-          <span>Improve with AI</span>
-        </button>
         <button className="primary-button export-button" onClick={onExport} disabled={!canExport} title={canExport ? 'Export PDF' : 'Wait for the verified page layout'}>
           <Download size={16} />
           <span>Export PDF</span>
@@ -3853,11 +3850,6 @@ function OutlineSidebar({
         <div className="progress-track" aria-label={`Resume score ${score} out of 100`}>
           <span style={{ width: `${score}%` }} />
         </div>
-        <button className="score-action">
-          <WandSparkles size={15} />
-          View recommendations
-          <ChevronRight size={15} />
-        </button>
       </div>
 
       <div className="sidebar-section-heading">
@@ -4365,6 +4357,13 @@ function SkillsEditor({ skills, updateData, language }) {
         <span className="skill-title-gap-control">
           <input type="range" min={MIN_SKILL_TITLE_GAP_PX} max={MAX_SKILL_TITLE_GAP_PX} step="1" value={skills.titleItemGap ?? DEFAULT_SKILL_TITLE_GAP_PX} onChange={(event) => updateData((current) => ({ ...current, skills: { ...current.skills, titleItemGap: Number(event.target.value) } }))} />
           <output>{skills.titleItemGap ?? DEFAULT_SKILL_TITLE_GAP_PX}px</output>
+        </span>
+      </label>
+      <label className="field skill-title-offset-field">
+        <span>{chinese ? '小标题水平偏移' : 'Category title horizontal offset'}</span>
+        <span className="skill-title-gap-control">
+          <input type="range" min={MIN_SKILL_TITLE_OFFSET_X_PX} max={MAX_SKILL_TITLE_OFFSET_X_PX} step="1" value={skills.titleOffsetX ?? DEFAULT_SKILL_TITLE_OFFSET_X_PX} onChange={(event) => updateData((current) => ({ ...current, skills: { ...current.skills, titleOffsetX: Number(event.target.value) } }))} />
+          <output>{skills.titleOffsetX ?? DEFAULT_SKILL_TITLE_OFFSET_X_PX}px</output>
         </span>
       </label>
       <div className="skills-editor-list">
@@ -5081,7 +5080,7 @@ function ProfileSkills({ skills, language }) {
     <div className="profile-skills-grid">
       {categories.map((category) => (
         <div className="profile-skill-category" key={category.title}>
-          <strong>{category.title}</strong>
+          <strong style={{ transform: `translateX(${skills.titleOffsetX ?? DEFAULT_SKILL_TITLE_OFFSET_X_PX}px)` }}>{category.title}</strong>
           <ul style={{ marginTop: skills.titleItemGap ?? DEFAULT_SKILL_TITLE_GAP_PX }}>{category.items.map((item) => <li key={item}><FormattedPuppetText value={item} /></li>)}</ul>
         </div>
       ))}
