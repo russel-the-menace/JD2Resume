@@ -1449,6 +1449,7 @@ function App() {
 
   const generateResumeFromJobDescription = useCallback(async ({
     jobDescription,
+    aiMessage,
     outputLanguage,
     sourceType = 'text',
     sourceFile,
@@ -1518,7 +1519,10 @@ function App() {
             ...evidence,
             jobDescription: normalizedJobDescription,
           },
-          profile: userProfile[language],
+          profile: {
+            ...userProfile[language],
+            ...(typeof aiMessage === 'string' ? { aiMessage: aiMessage.trim().slice(0, 500) } : {}),
+          },
           baseResume: baseResume?.data || null,
         }),
       });
@@ -3229,11 +3233,6 @@ function PersonalProfileDialog({ profile, onCancel, onSave, onComplete, onImport
             <div className="profile-list-editor">{fields.certificates.length === 0 && <p className="profile-empty-state">{chinese ? '暂无证书' : 'No certificates added yet.'}</p>}{fields.certificates.map((certificate, index) => <div className="profile-list-editor-row" key={`certificate-${index}`}><input aria-label={`${chinese ? '证书' : 'Certificate'} ${index + 1}`} value={certificate} placeholder={chinese ? '如：CET-6' : 'e.g. CET-6'} onChange={(event) => updateListItem('certificates', index, event.target.value)} /><button className="icon-button small" type="button" onClick={() => removeListItem('certificates', index)} aria-label={`${chinese ? '删除证书' : 'Delete certificate'} ${index + 1}`} title="Delete"><Trash2 size={14} /></button></div>)}</div>
           </section>
 
-          <section className="profile-section-block">
-            <ProfileSectionHeader title={chinese ? '想对 AI 说的话' : 'Message to AI'} />
-            <label className="field"><span>{chinese ? 'AI 生成要求' : 'AI generation instructions'}</span><textarea rows={5} maxLength={500} value={fields.aiMessage} onChange={(event) => updateField('aiMessage', event.target.value)} placeholder={chinese ? '给 AI 的提示词，例如：工作经验不足时补充合理内容，但不要虚构事实。' : 'Tell the AI how to tailor your resume without inventing facts.'} /><small className="profile-character-count">{fields.aiMessage.length} / 500</small></label>
-          </section>
-
         </div>
         <footer className="resume-dialog-actions profile-save-actions">
           {profileError && <p className="account-auth-error profile-save-error" role="alert">{profileError}</p>}
@@ -3401,6 +3400,7 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
   const [inputMode, setInputMode] = useState('text');
   const [outputLanguage, setOutputLanguage] = useState(profile.chinese.fullName ? 'chinese' : 'english');
   const [jobDescription, setJobDescription] = useState('');
+  const [aiMessage, setAiMessage] = useState(profile.chinese.fullName ? (profile.chinese.aiMessage || '') : (profile.english.aiMessage || ''));
   const [sourceFile, setSourceFile] = useState(null);
   const [error, setError] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -3445,6 +3445,7 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
     try {
       await onGenerate({
         jobDescription: jobDescription.trim(),
+        aiMessage: aiMessage.trim(),
         outputLanguage,
         sourceType: inputMode,
         sourceFile,
@@ -3525,6 +3526,19 @@ function JobDescriptionDialog({ profile, onCancel, onGenerate }) {
               />
             </label>
           )}
+          <label className="field">
+            <span>Message to AI <small>(Optional)</small></span>
+            <textarea
+              rows={5}
+              maxLength={500}
+              value={aiMessage}
+              onChange={(event) => setAiMessage(event.target.value)}
+              placeholder="Tell the AI how to tailor your resume without inventing facts."
+              disabled={isGenerating}
+              aria-label="Message to AI"
+            />
+            <small className="profile-character-count">{aiMessage.length} / 500</small>
+          </label>
           <div className="generator-output-group">
             <span>Resume language</span>
             <div className="generator-output-selector" role="group" aria-label="Output language">

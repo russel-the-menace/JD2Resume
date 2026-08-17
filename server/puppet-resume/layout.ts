@@ -48,20 +48,22 @@ const strategies = [
   { id: 'line-fit', sectionGapDelta: 0, lineHeightDelta: 6, fontSizeDelta: 0 },
 ] as const;
 
-function executablePath() {
+export function executablePath() {
   return [
+    process.env.CHROME_PATH,
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',
     '/usr/bin/chromium',
-  ].find(existsSync);
+  ].filter(Boolean).find(existsSync);
 }
 
 async function openBrowser(): Promise<Browser> {
+  const chromePath = executablePath();
   return puppeteer.launch({
     headless: true,
-    executablePath: executablePath(),
+    executablePath: chromePath,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   });
 }

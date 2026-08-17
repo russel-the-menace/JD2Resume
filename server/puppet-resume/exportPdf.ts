@@ -1,9 +1,10 @@
 import puppeteer from 'puppeteer';
 import type { PagePlanV2 } from '../../src/resume-renderer/types';
 import { assertReplayMatchesPlan, type ReplayResult } from './replayValidation';
+import { executablePath } from './layout';
 
 export async function renderPdfFromPagePlan(origin: string, sessionToken: string, plan: PagePlanV2, snapshotHash: string, rendererVersion: string): Promise<Buffer> {
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] }); const page = await browser.newPage();
+  const browser = await puppeteer.launch({ executablePath: executablePath(), headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] }); const page = await browser.newPage();
   try {
     await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
     await page.goto(`${origin}/renderer.html?mode=export&session=${encodeURIComponent(sessionToken)}`, { waitUntil: 'networkidle0', timeout: 20_000 });
