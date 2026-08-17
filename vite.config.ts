@@ -24,7 +24,7 @@ const MAX_REQUEST_BYTES = 16_000_000;
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCE_TEXT_CHARS = 20_000;
 const MIN_TEXT_LENGTH = 20;
-const GENERATION_DEADLINE_MS = 55_000;
+const GENERATION_DEADLINE_MS = 120_000;
 const PROVIDER_RETRY_DELAY_MS = 700;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
